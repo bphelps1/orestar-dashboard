@@ -276,10 +276,17 @@ def _fetch_range(start: date, end: date) -> None:
     total   = len(tasks)
     log.info("Fetching %d windows × %d types = %d downloads", len(windows), len(TRAN_TYPES), total)
 
+    # After 3 consecutive blocked restarts, sleep this long before retrying.
+    # F5/ORESTAR appears to rate-limit by runner IP; a fresh browser alone won't
+    # help — we need to wait for the rate limiter to reset.
+    RATE_LIMIT_SLEEP_SEC = 600   # 10 minutes
+    MAX_SLEEP_CYCLES     = 3     # abort if we need more than this many long sleeps
+
     with sync_playwright() as p:
         browser, context, page = setup_browser(p)
         i = 0
         consecutive_restarts = 0
+        sleep_cycles = 0
         while i < total:
             tran_type, w_start, w_end = tasks[i]
             log.info("[%d/%d] %s  %s → %s", i + 1, total, tran_type, w_start, w_end)
@@ -290,7 +297,7 @@ def _fetch_range(start: date, end: date) -> None:
             except SessionExpiredError as exc:
                 consecutive_restarts += 1
                 log.warning(
-                    "Session expired (restart %d/3) at [%d/%d] %s %s→%s: %s — restarting browser",
+                    "Blocked (attempt %d) at [%d/%d] %s %s→%s: %s — restarting browser",
                     consecutive_restarts, i + 1, total, tran_type, w_start, w_end, exc,
                 )
                 try:
@@ -298,8 +305,18 @@ def _fetch_range(start: date, end: date) -> None:
                 except Exception:
                     pass
                 if consecutive_restarts >= 3:
-                    log.error("Too many consecutive session expiry restarts; aborting.")
-                    raise
+                    # Three quick restarts all failed — likely IP-level rate limiting.
+                    # Sleep to let the rate limiter reset, then try again.
+                    sleep_cycles += 1
+                    if sleep_cycles > MAX_SLEEP_CYCLES:
+                        log.error("Exceeded %d rate-limit sleep cycles; aborting.", MAX_SLEEP_CYCLES)
+                        raise
+                    log.warning(
+                        "Rate limit suspected — sleeping %d min before retry (sleep cycle %d/%d)...",
+                        RATE_LIMIT_SLEEP_SEC // 60, sleep_cycles, MAX_SLEEP_CYCLES,
+                    )
+                    time.sleep(RATE_LIMIT_SLEEP_SEC)
+                    consecutive_restarts = 0
                 browser, context, page = setup_browser(p)
                 # Don't increment i — retry the same window with the fresh session
         browser.close()
