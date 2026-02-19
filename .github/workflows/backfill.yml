@@ -15,7 +15,7 @@ permissions:
 jobs:
   backfill:
     runs-on: ubuntu-latest
-    timeout-minutes: 180   # ~954 windows × ~10s each ≈ 2.5 hours
+    timeout-minutes: 300   # ~954 windows × ~10s each ≈ 2.5-3 hours
 
     steps:
       - name: Check out repository

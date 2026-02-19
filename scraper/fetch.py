@@ -100,9 +100,20 @@ def _load_search_form(page) -> None:
 
 
 def _return_to_search(page) -> None:
-    """Go back to the search form for the next iteration."""
-    if "gotoPublicTransactionSearch.do" not in page.url:
-        _load_search_form(page)
+    """
+    Reset the form for the next search.
+    Clicks the Reset button if already on the search form (fast),
+    otherwise does a full page reload (slow, only needed after errors).
+    """
+    if "gotoPublicTransactionSearch.do" in page.url:
+        # Already on search form — just click Reset to clear fields
+        reset = page.locator('input[type="button"][value="Reset"]')
+        if reset.count() > 0:
+            reset.first.click()
+            page.wait_for_timeout(300)
+            return
+    # Not on search form (e.g. after a results page or error) — full reload
+    _load_search_form(page)
 
 
 # ---------------------------------------------------------------------------
