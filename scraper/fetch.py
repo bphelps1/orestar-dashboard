@@ -241,6 +241,14 @@ def download_week(
     except SessionExpiredError:
         raise  # propagate up to _fetch_range for browser restart
     except Exception as exc:
+        # If the page redirected off ORESTAR during a form interaction, the session
+        # is broken — raise SessionExpiredError so _fetch_range can restart the browser.
+        # (goto(SEARCH_URL) can succeed with an expired session, so we can't rely solely
+        # on the _load_search_form URL check — we must catch it here too.)
+        if "secure.sos.state.or.us/orestar" not in page.url:
+            raise SessionExpiredError(
+                f"Session expired during interaction — redirected to {page.url}"
+            ) from exc
         log.warning("Failed %s %s→%s: %s", tran_type, start, end, exc)
         try:
             _return_to_search(page)
