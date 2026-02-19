@@ -52,19 +52,14 @@ AGG_DIR.mkdir(parents=True, exist_ok=True)
 # ---------------------------------------------------------------------------
 
 COL_MAP = {
-    # Possible ORESTAR column names → our internal name
+    # Actual ORESTAR XLS column names (lowercased) → internal name
     "tran id":                  "tran_id",
     "transaction id":           "tran_id",
-    "id":                       "tran_id",
     "filed date":               "filed_date",
+    "tran date":                "tran_date",   # transaction date (kept for reference)
     "date":                     "filed_date",
-    "transaction date":         "filed_date",
     "amount":                   "amount",
     "tran amount":              "amount",
-    "transaction amount":       "amount",
-    "type":                     "tran_type",
-    "transaction type":         "tran_type",
-    "tran type":                "tran_type",
     "sub type":                 "sub_type",
     "subtype":                  "sub_type",
     "contributor/payee":        "contributor_payee",
@@ -80,6 +75,13 @@ COL_MAP = {
     "office sought":            "office",
     "party":                    "party",
     "purpose":                  "purpose",
+    "purp desc":                "purpose",     # ORESTAR actual column name
+    "purpose codes":            "purpose_codes",
+    "occptn txt":               "occupation",
+    "emp name":                 "employer",
+    "city":                     "city",
+    "state":                    "state",
+    "zip":                      "zip",
 }
 
 CONTRIBUTOR_TYPE_LABELS = {
@@ -251,9 +253,29 @@ def fuzzy_deduplicate(
 # Excel loading
 # ---------------------------------------------------------------------------
 
+XLS_MAGIC  = b"\xd0\xcf\x11\xe0"   # OLE2 Compound Document (old .xls)
+XLSX_MAGIC = b"PK\x03\x04"         # ZIP archive (new .xlsx)
+
+
+def _detect_engine(path: Path) -> str | None:
+    """
+    Peek at the first 4 bytes to determine the Excel engine to use.
+    Returns 'xlrd' (old .xls), 'openpyxl' (new .xlsx), or None if HTML/unknown.
+    """
+    header = path.read_bytes()[:8]
+    if header[:4] == XLS_MAGIC:
+        return "xlrd"
+    if header[:4] == XLSX_MAGIC:
+        return "openpyxl"
+    if header[:5].lower() in (b"<!doc", b"<html"):
+        return None  # HTML error page — skip
+    # Unknown: let openpyxl try and fail with a useful error
+    return "openpyxl"
+
+
 def load_excel_files(raw_dir: Path) -> pd.DataFrame:
-    """Read all .xlsx files in raw_dir, returning a combined DataFrame."""
-    files = sorted(raw_dir.glob("*.xlsx"))
+    """Read all Excel files in raw_dir, returning a combined DataFrame."""
+    files = sorted(raw_dir.glob("*.xls*"))
     if not files:
         log.warning("No Excel files found in %s", raw_dir)
         return pd.DataFrame()
@@ -262,12 +284,20 @@ def load_excel_files(raw_dir: Path) -> pd.DataFrame:
     frames = []
     for f in files:
         try:
-            df = pd.read_excel(f, engine="openpyxl", dtype=str)
+            engine = _detect_engine(f)
+            if engine is None:
+                log.warning("Skipping %s — appears to be an HTML page, not Excel", f.name)
+                continue
+            df = pd.read_excel(f, engine=engine, dtype=str)
             # Normalize column names
             df.columns = [c.strip().lower() for c in df.columns]
             # Rename to internal names
             df = df.rename(columns={k: v for k, v in COL_MAP.items() if k in df.columns})
             df["_source_file"] = f.name
+            # Derive tran_type from filename: C_2026-... → "C", E_2026-... → "E"
+            # ORESTAR does not include a transaction type column in the export.
+            first_char = f.stem[0].upper()
+            df["tran_type"] = first_char if first_char in ("C", "E") else ""
             frames.append(df)
         except Exception as exc:
             log.warning("Failed to read %s: %s", f.name, exc)

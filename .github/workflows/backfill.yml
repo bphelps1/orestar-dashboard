@@ -15,7 +15,7 @@ permissions:
 jobs:
   backfill:
     runs-on: ubuntu-latest
-    timeout-minutes: 120   # backfill can take up to 2 hours for 2017-present
+    timeout-minutes: 180   # ~954 windows × ~10s each ≈ 2.5 hours
 
     steps:
       - name: Check out repository
@@ -30,11 +30,17 @@ jobs:
           cache: pip
           cache-dependency-path: scraper/requirements.txt
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: pip install -r scraper/requirements.txt
 
+      - name: Install Playwright browser + system dependencies
+        run: python -m playwright install chromium --with-deps
+
+      - name: Install Xvfb (virtual display for headed browser)
+        run: sudo apt-get install -y xvfb
+
       - name: Backfill ORESTAR data from ${{ inputs.start_year }}
-        run: python scraper/fetch.py --mode=backfill --start-year=${{ inputs.start_year }}
+        run: xvfb-run --auto-servernum python scraper/fetch.py --mode=backfill --start-year=${{ inputs.start_year }}
 
       - name: Process and aggregate data
         run: python scraper/process.py

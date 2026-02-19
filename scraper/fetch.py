@@ -1,42 +1,56 @@
 """
 fetch.py — Download campaign finance data from Oregon ORESTAR system.
 
-ORESTAR offers a session-based "Export to Excel" on its public search pages.
-No API key required; works in headless environments (GitHub Actions).
+ORESTAR uses F5 bot defense that requires JavaScript execution, so we use
+Playwright with a real (headed) browser. In GitHub Actions, xvfb-run provides
+a virtual display so headed mode works without a physical screen.
 
 Usage:
     python fetch.py --mode=incremental          # last 14 days (default)
     python fetch.py --mode=backfill             # 2017-01-01 to today
     python fetch.py --mode=backfill --start-year=2020
     python fetch.py --mode=test --days=7        # single week, verify connectivity
+
+Local:    python3 fetch.py --mode=test
+CI:       xvfb-run --auto-servernum python fetch.py --mode=incremental
 """
 
 import argparse
 import logging
-import os
+import re
 import time
 from datetime import date, timedelta
 from pathlib import Path
 
 import requests
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
-BASE_URL = "https://secure.sos.state.or.us/orestar"
+BASE_URL   = "https://secure.sos.state.or.us/orestar"
 SEARCH_URL = f"{BASE_URL}/gotoPublicTransactionSearch.do"
-EXPORT_URL = f"{BASE_URL}/XcelCNESearch.do"
+EXPORT_URL = f"{BASE_URL}/XcelCNESearch"
+
+RESULTS_URL_PATTERN = "**/gotoPublicTransactionSearchResults**"
 
 # Raw Excel files land here temporarily (never committed to git)
 RAW_DIR = Path(__file__).parent.parent / "data" / "_raw"
 
-# Transaction types to pull
 TRAN_TYPES = ["C", "E"]   # C = Contribution, E = Expenditure
-SUBTYPES   = ["CA"]       # CA = Cash
 
-# Seconds to sleep between requests — be a polite scraper
-REQUEST_DELAY = 2.0
+# Time (seconds) to wait after page.goto() for F5 JS challenge + app to render
+PAGE_RENDER_WAIT = 7
+
+# Polite pause between downloads
+REQUEST_DELAY = 1.5
+
+USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/120.0.0.0 Safari/537.36"
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -47,48 +61,48 @@ log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Session helpers
+# Browser helpers
 # ---------------------------------------------------------------------------
 
-def build_session() -> requests.Session:
-    """Create a session, hit the search page to seed cookies, return session."""
-    session = requests.Session()
-    session.headers.update({
-        "User-Agent": (
-            "Mozilla/5.0 (compatible; ORESTAR-Dashboard-Bot/1.0; "
-            "+https://github.com/orestar-dashboard)"
-        ),
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
-    })
-
-    log.info("Establishing session with ORESTAR…")
-    resp = session.get(SEARCH_URL, timeout=30)
-    resp.raise_for_status()
-    log.info("Session established (cookies: %s)", list(session.cookies.keys()))
-    return session
-
-
-def get_csrf_token(session: requests.Session) -> str | None:
+def setup_browser(playwright):
     """
-    Fetch the search form and extract any hidden CSRF / struts token.
-    ORESTAR uses Struts 1.x; the token field is named 'org.apache.struts.taglib.html.TOKEN'.
-    Returns the token value, or None if not found (request still works without it on public pages).
+    Launch a headed Chromium browser and load the ORESTAR search form.
+    headed=True is required — F5 bot defense blocks headless browsers.
+    In GitHub Actions, use:  xvfb-run --auto-servernum python fetch.py ...
     """
-    resp = session.get(SEARCH_URL, timeout=30)
-    resp.raise_for_status()
+    log.info("Launching browser (headed mode)...")
+    browser = playwright.chromium.launch(
+        headless=False,
+        args=["--no-sandbox", "--disable-dev-shm-usage", "--start-maximized"],
+    )
+    context = browser.new_context(
+        user_agent=USER_AGENT,
+        accept_downloads=True,
+        no_viewport=True,
+    )
+    page = context.new_page()
+    _load_search_form(page)
+    return browser, context, page
 
-    # Simple scan for the hidden input — avoids a BeautifulSoup dependency
-    for line in resp.text.splitlines():
-        if "org.apache.struts.taglib.html.TOKEN" in line:
-            # e.g. <input type="hidden" name="..." value="abc123">
-            parts = line.split('value="')
-            if len(parts) > 1:
-                token = parts[1].split('"')[0]
-                log.debug("CSRF token: %s", token)
-                return token
-    log.debug("No CSRF token found in form (may not be required)")
-    return None
+
+def _load_search_form(page) -> None:
+    """Navigate to ORESTAR search form and wait for JS to render it."""
+    log.info("Loading ORESTAR search form...")
+    page.goto(SEARCH_URL, timeout=60_000)
+    time.sleep(PAGE_RENDER_WAIT)
+
+    if page.locator('input[name="OWASP_CSRFTOKEN"]').count() == 0:
+        raise RuntimeError(
+            "ORESTAR search form did not load. "
+            "F5 may have blocked the browser, or the site is down."
+        )
+    log.info("Search form ready.")
+
+
+def _return_to_search(page) -> None:
+    """Go back to the search form for the next iteration."""
+    if "gotoPublicTransactionSearch.do" not in page.url:
+        _load_search_form(page)
 
 
 # ---------------------------------------------------------------------------
@@ -96,88 +110,119 @@ def get_csrf_token(session: requests.Session) -> str | None:
 # ---------------------------------------------------------------------------
 
 def download_week(
-    session: requests.Session,
+    page,
+    context,
     start: date,
     end: date,
     tran_type: str,
     raw_dir: Path,
-    retries: int = 3,
 ) -> Path | None:
     """
-    Download one week of data for a given transaction type.
-    Returns the path to the saved Excel file, or None on failure.
+    Fill the ORESTAR search form for one week + transaction type,
+    submit, then download the Excel export.
 
-    ORESTAR search form fields (reverse-engineered from browser traffic):
-      tranFiledDate       — start date  (MM/DD/YYYY)
-      tranFiledDateTo     — end date    (MM/DD/YYYY)
-      tranTypeCode        — C or E
-      tranSubTypeCd       — CA (cash)
-      currentPageNo       — 1
-      pageSize            — 200 (irrelevant; export ignores it)
-      submitAction        — search
+    Returns the path to the saved .xlsx file, or None on failure.
     """
     filename = raw_dir / f"{tran_type}_{start.isoformat()}_{end.isoformat()}.xlsx"
     if filename.exists():
         log.debug("Already downloaded: %s", filename.name)
         return filename
 
-    form_data = {
-        "tranFiledDate":   start.strftime("%m/%d/%Y"),
-        "tranFiledDateTo": end.strftime("%m/%d/%Y"),
-        "tranTypeCode":    tran_type,
-        "tranSubTypeCd":   "CA",
-        "currentPageNo":   "1",
-        "pageSize":        "200",
-        "submitAction":    "search",
-    }
+    try:
+        # Ensure we're on the search form
+        _return_to_search(page)
 
-    for attempt in range(1, retries + 1):
+        # ── Fill the form ────────────────────────────────────────────────────
+        # Transaction type
+        page.select_option('select[name="cneSearchTranType"]', tran_type)
+        page.wait_for_timeout(600)  # brief wait for any dynamic field updates
+
+        # Filed date range (MM/DD/YYYY)
+        page.fill(
+            'input[name="cneSearchTranFiledStartDate"]',
+            start.strftime("%m/%d/%Y"),
+        )
+        page.fill(
+            'input[name="cneSearchTranFiledEndDate"]',
+            end.strftime("%m/%d/%Y"),
+        )
+
+        # ── Submit search ─────────────────────────────────────────────────────
+        page.click('input[name="search"]')
         try:
-            # Step 1: POST the search to establish result set in session
-            log.debug(
-                "Search POST %s %s→%s (attempt %d)",
-                tran_type, start, end, attempt,
-            )
-            resp = session.post(
-                f"{BASE_URL}/publicTransactionSearch.do",
-                data=form_data,
-                timeout=60,
-            )
-            resp.raise_for_status()
+            page.wait_for_url(RESULTS_URL_PATTERN, timeout=30_000)
+        except PlaywrightTimeout:
+            log.warning("Timed out waiting for results: %s %s→%s", tran_type, start, end)
+            _return_to_search(page)
+            return None
 
-            # Step 2: GET the Excel export
-            log.debug("Fetching Excel export…")
-            export_resp = session.get(
-                EXPORT_URL,
-                params={"tranTypeCode": tran_type},
-                timeout=120,
-            )
-            export_resp.raise_for_status()
+        # ── Extract session info from results page ────────────────────────────
+        results_url = page.url
 
-            content_type = export_resp.headers.get("Content-Type", "")
-            if "spreadsheet" not in content_type and "excel" not in content_type and "octet" not in content_type:
-                # Might have gotten an HTML error page
-                log.warning(
-                    "Unexpected Content-Type '%s' for %s %s→%s; "
-                    "saving anyway for inspection.",
-                    content_type, tran_type, start, end,
+        # CSRF token from the Export link on the results page
+        csrf = page.evaluate("""() => {
+            const links = [...document.querySelectorAll('a[href*="OWASP_CSRFTOKEN"]')];
+            if (!links.length) return null;
+            const m = links[0].href.match(/OWASP_CSRFTOKEN=([^&"'\\s]+)/);
+            return m ? m[1] : null;
+        }""")
+
+        if not csrf:
+            log.warning("No CSRF token on results page for %s %s→%s", tran_type, start, end)
+            _return_to_search(page)
+            return None
+
+        # JSESSIONID is embedded in the URL path (not a cookie) — must be included
+        session_match = re.search(r";(JSESSIONID_ORESTAR=[^?&\s]+)", results_url)
+        session_path  = f";{session_match.group(1)}" if session_match else ""
+
+        # ── Download via requests (faster than browser download) ──────────────
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        cookies = {c["name"]: c["value"] for c in context.cookies()}
+
+        export_url = f"{EXPORT_URL}{session_path}?OWASP_CSRFTOKEN={csrf}"
+        resp = requests.get(
+            export_url,
+            cookies=cookies,
+            headers={"User-Agent": USER_AGENT, "Referer": results_url},
+            timeout=120,
+        )
+
+        ct = resp.headers.get("Content-Type", "")
+        if "html" in ct.lower():
+            # Fallback: navigate to the export URL directly in the browser
+            log.debug("requests returned HTML; falling back to browser download...")
+            with page.expect_download(timeout=60_000) as dl_info:
+                page.goto(
+                    f"{EXPORT_URL}?OWASP_CSRFTOKEN={csrf}",
+                    wait_until="commit",
+                    timeout=60_000,
                 )
-
-            raw_dir.mkdir(parents=True, exist_ok=True)
-            filename.write_bytes(export_resp.content)
+            dl = dl_info.value
+            dl.save_as(filename)
             log.info(
-                "Saved %s  (%s → %s, %d bytes)",
-                filename.name, start, end, len(export_resp.content),
+                "Saved (browser) %s  (%s → %s, %d bytes)",
+                filename.name, start, end, filename.stat().st_size,
             )
-            return filename
+        else:
+            filename.write_bytes(resp.content)
+            log.info(
+                "Saved (requests) %s  (%s → %s, %d bytes)",
+                filename.name, start, end, len(resp.content),
+            )
 
-        except requests.RequestException as exc:
-            log.warning("Attempt %d failed for %s %s→%s: %s", attempt, tran_type, start, end, exc)
-            if attempt < retries:
-                time.sleep(REQUEST_DELAY * attempt * 3)
+        # Return to search form for next iteration
+        _return_to_search(page)
+        time.sleep(REQUEST_DELAY)
+        return filename
 
-    log.error("All %d attempts failed for %s %s→%s", retries, tran_type, start, end)
-    return None
+    except Exception as exc:
+        log.warning("Failed %s %s→%s: %s", tran_type, start, end, exc)
+        try:
+            _return_to_search(page)
+        except Exception:
+            pass
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -185,16 +230,33 @@ def download_week(
 # ---------------------------------------------------------------------------
 
 def week_windows(start: date, end: date):
-    """Yield (week_start, week_end) tuples covering [start, end] in 7-day chunks."""
-    current = start
-    while current <= end:
-        week_end = min(current + timedelta(days=6), end)
-        yield current, week_end
-        current = week_end + timedelta(days=1)
+    """Yield (week_start, week_end) 7-day chunks covering [start, end]."""
+    cur = start
+    while cur <= end:
+        yield cur, min(cur + timedelta(days=6), end)
+        cur += timedelta(days=7)
+
+
+def _fetch_range(start: date, end: date) -> None:
+    RAW_DIR.mkdir(parents=True, exist_ok=True)
+    windows = list(week_windows(start, end))
+    total   = len(windows) * len(TRAN_TYPES)
+    log.info("Fetching %d windows × %d types = %d downloads", len(windows), len(TRAN_TYPES), total)
+
+    with sync_playwright() as p:
+        browser, context, page = setup_browser(p)
+        count = 0
+        for tran_type in TRAN_TYPES:
+            for w_start, w_end in windows:
+                count += 1
+                log.info("[%d/%d] %s  %s → %s", count, total, tran_type, w_start, w_end)
+                download_week(page, context, w_start, w_end, tran_type, RAW_DIR)
+        browser.close()
+
+    log.info("Fetch complete. Raw files in: %s", RAW_DIR)
 
 
 def run_incremental(days: int = 14) -> None:
-    """Pull the last `days` days (default 14 for overlap/amendment coverage)."""
     today = date.today()
     start = today - timedelta(days=days)
     log.info("Incremental mode: %s → %s", start, today)
@@ -202,7 +264,6 @@ def run_incremental(days: int = 14) -> None:
 
 
 def run_backfill(start_year: int = 2017) -> None:
-    """Pull everything from Jan 1 of start_year through today."""
     start = date(start_year, 1, 1)
     today = date.today()
     log.info("Backfill mode: %s → %s", start, today)
@@ -210,32 +271,10 @@ def run_backfill(start_year: int = 2017) -> None:
 
 
 def run_test(days: int = 7) -> None:
-    """Pull a single short window — used to verify ORESTAR connectivity."""
     today = date.today()
     start = today - timedelta(days=days)
     log.info("Test mode: %s → %s", start, today)
     _fetch_range(start, today)
-
-
-def _fetch_range(start: date, end: date) -> None:
-    RAW_DIR.mkdir(parents=True, exist_ok=True)
-    session = build_session()
-
-    total_windows = sum(1 for _ in week_windows(start, end))
-    log.info(
-        "Fetching %d weekly windows × %d transaction types = ~%d requests",
-        total_windows, len(TRAN_TYPES), total_windows * len(TRAN_TYPES),
-    )
-
-    for tran_type in TRAN_TYPES:
-        # Refresh session token between transaction types
-        get_csrf_token(session)
-
-        for w_start, w_end in week_windows(start, end):
-            download_week(session, w_start, w_end, tran_type, RAW_DIR)
-            time.sleep(REQUEST_DELAY)
-
-    log.info("Fetch complete. Raw files in: %s", RAW_DIR)
 
 
 # ---------------------------------------------------------------------------
@@ -250,24 +289,11 @@ def main() -> None:
         "--mode",
         choices=["incremental", "backfill", "test"],
         default="incremental",
-        help="incremental=last 14 days, backfill=2017-present, test=short verify",
     )
-    parser.add_argument(
-        "--days",
-        type=int,
-        default=14,
-        help="Days to look back in incremental/test mode (default: 14)",
-    )
-    parser.add_argument(
-        "--start-year",
-        type=int,
-        default=2017,
-        dest="start_year",
-        help="Start year for backfill mode (default: 2017)",
-    )
+    parser.add_argument("--days",       type=int, default=14,   dest="days")
+    parser.add_argument("--start-year", type=int, default=2017, dest="start_year")
 
     args = parser.parse_args()
-
     if args.mode == "incremental":
         run_incremental(days=args.days)
     elif args.mode == "backfill":
