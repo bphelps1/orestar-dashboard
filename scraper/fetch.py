@@ -52,6 +52,11 @@ USER_AGENT = (
     "Chrome/120.0.0.0 Safari/537.36"
 )
 
+class SessionExpiredError(Exception):
+    """Raised when the ORESTAR session has expired and the browser was redirected away."""
+    pass
+
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-8s  %(message)s",
@@ -90,6 +95,12 @@ def _load_search_form(page) -> None:
     log.info("Loading ORESTAR search form...")
     page.goto(SEARCH_URL, timeout=60_000)
     time.sleep(PAGE_RENDER_WAIT)
+
+    # Session expiry redirects to sos.oregon.gov — detect and raise
+    if "secure.sos.state.or.us/orestar" not in page.url:
+        raise SessionExpiredError(
+            f"Session expired — redirected to {page.url}"
+        )
 
     if page.locator('input[name="OWASP_CSRFTOKEN"]').count() == 0:
         raise RuntimeError(
@@ -227,6 +238,8 @@ def download_week(
         time.sleep(REQUEST_DELAY)
         return filename
 
+    except SessionExpiredError:
+        raise  # propagate up to _fetch_range for browser restart
     except Exception as exc:
         log.warning("Failed %s %s→%s: %s", tran_type, start, end, exc)
         try:
@@ -251,17 +264,36 @@ def week_windows(start: date, end: date):
 def _fetch_range(start: date, end: date) -> None:
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     windows = list(week_windows(start, end))
-    total   = len(windows) * len(TRAN_TYPES)
+    tasks   = [(tt, ws, we) for tt in TRAN_TYPES for ws, we in windows]
+    total   = len(tasks)
     log.info("Fetching %d windows × %d types = %d downloads", len(windows), len(TRAN_TYPES), total)
 
     with sync_playwright() as p:
         browser, context, page = setup_browser(p)
-        count = 0
-        for tran_type in TRAN_TYPES:
-            for w_start, w_end in windows:
-                count += 1
-                log.info("[%d/%d] %s  %s → %s", count, total, tran_type, w_start, w_end)
+        i = 0
+        consecutive_restarts = 0
+        while i < total:
+            tran_type, w_start, w_end = tasks[i]
+            log.info("[%d/%d] %s  %s → %s", i + 1, total, tran_type, w_start, w_end)
+            try:
                 download_week(page, context, w_start, w_end, tran_type, RAW_DIR)
+                i += 1
+                consecutive_restarts = 0
+            except SessionExpiredError as exc:
+                consecutive_restarts += 1
+                log.warning(
+                    "Session expired (restart %d/3) at [%d/%d] %s %s→%s: %s — restarting browser",
+                    consecutive_restarts, i + 1, total, tran_type, w_start, w_end, exc,
+                )
+                try:
+                    browser.close()
+                except Exception:
+                    pass
+                if consecutive_restarts >= 3:
+                    log.error("Too many consecutive session expiry restarts; aborting.")
+                    raise
+                browser, context, page = setup_browser(p)
+                # Don't increment i — retry the same window with the fresh session
         browser.close()
 
     log.info("Fetch complete. Raw files in: %s", RAW_DIR)
