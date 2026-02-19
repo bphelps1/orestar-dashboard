@@ -1,0 +1,10 @@
+{
+  "_comment": "Manual name correction overrides. Format: { 'raw name variant': 'canonical name' }. These take precedence over fuzzy matching.",
+  "NIKE INC": "Nike Inc",
+  "Nike Inc.": "Nike Inc",
+  "NIKE, INC": "Nike Inc",
+  "Oregon Education Assn": "Oregon Education Association",
+  "OR Education Assn": "Oregon Education Association",
+  "SEIU Local 503": "SEIU Local 503",
+  "Service Employees Intl Union Local 503": "SEIU Local 503"
+}

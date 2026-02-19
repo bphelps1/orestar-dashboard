@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Oregon Campaign Finance Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <!-- Fuse.js for client-side fuzzy search -->
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <h1>Oregon Campaign Finance</h1>
+    <p class="subtitle">
+      Data sourced from <a href="https://secure.sos.state.or.us/orestar/" target="_blank" rel="noopener">ORESTAR</a>
+      &mdash; updated daily &mdash; cash contributions &amp; expenditures, 2017&ndash;present
+    </p>
+  </div>
+</header>
+
+<nav class="tab-nav" role="tablist">
+  <button class="tab-btn active" data-tab="overview"    role="tab" aria-selected="true">Overview</button>
+  <button class="tab-btn"        data-tab="donors"      role="tab">Donors</button>
+  <button class="tab-btn"        data-tab="recipients"  role="tab">Recipients</button>
+  <button class="tab-btn"        data-tab="timeline"    role="tab">Timeline</button>
+  <button class="tab-btn"        data-tab="search"      role="tab">Search</button>
+</nav>
+
+<main>
+
+  <!-- ══════════════════════════ OVERVIEW ══════════════════════════ -->
+  <section id="tab-overview" class="tab-panel active">
+    <div class="stat-cards" id="stat-cards">
+      <div class="card">
+        <div class="card-label">Total Contributions</div>
+        <div class="card-value" id="stat-contributions">—</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Total Expenditures</div>
+        <div class="card-value" id="stat-expenditures">—</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Total Transactions</div>
+        <div class="card-value" id="stat-transactions">—</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Date Range</div>
+        <div class="card-value" id="stat-range">—</div>
+      </div>
+    </div>
+
+    <div class="chart-row">
+      <div class="chart-box">
+        <h2>Contributions by Donor Type</h2>
+        <canvas id="chart-contributor-type"></canvas>
+      </div>
+      <div class="chart-box">
+        <h2>Contributions by Party</h2>
+        <canvas id="chart-party"></canvas>
+      </div>
+    </div>
+
+    <div class="chart-box full-width">
+      <h2>Contributions by Office Type</h2>
+      <canvas id="chart-office-type"></canvas>
+    </div>
+
+    <p class="last-updated">Last updated: <span id="last-updated">—</span></p>
+  </section>
+
+  <!-- ══════════════════════════ DONORS ══════════════════════════ -->
+  <section id="tab-donors" class="tab-panel" hidden>
+    <div class="controls-bar">
+      <label for="donor-year">Year:</label>
+      <select id="donor-year"><option value="all">All time</option></select>
+    </div>
+
+    <div class="chart-box full-width">
+      <h2>Top 20 Donors</h2>
+      <canvas id="chart-top-donors"></canvas>
+    </div>
+
+    <div class="table-wrapper">
+      <h2>Top 100 Donors</h2>
+      <table id="table-donors" class="data-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th class="sortable" data-col="name">Donor</th>
+            <th class="sortable" data-col="total">Total ($)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════ RECIPIENTS ══════════════════════════ -->
+  <section id="tab-recipients" class="tab-panel" hidden>
+    <div class="controls-bar">
+      <label for="recipient-year">Year:</label>
+      <select id="recipient-year"><option value="all">All time</option></select>
+    </div>
+
+    <div class="chart-box full-width">
+      <h2>Top 20 Recipients (by Contributions Received)</h2>
+      <canvas id="chart-top-recipients"></canvas>
+    </div>
+
+    <div class="table-wrapper">
+      <h2>Top 100 Recipients</h2>
+      <table id="table-recipients" class="data-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th class="sortable" data-col="name">Committee / Candidate</th>
+            <th class="sortable" data-col="total">Total Received ($)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════ TIMELINE ══════════════════════════ -->
+  <section id="tab-timeline" class="tab-panel" hidden>
+    <div class="controls-bar">
+      <label for="timeline-year">Filter year:</label>
+      <select id="timeline-year"><option value="all">All years</option></select>
+    </div>
+
+    <div class="chart-box full-width">
+      <h2>Monthly Cash Flow (Contributions vs. Expenditures)</h2>
+      <canvas id="chart-timeline"></canvas>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════ SEARCH ══════════════════════════ -->
+  <section id="tab-search" class="tab-panel" hidden>
+    <div class="controls-bar search-bar">
+      <input
+        type="search"
+        id="search-input"
+        placeholder="Search name, committee, amount…"
+        aria-label="Search transactions"
+      />
+      <select id="search-type">
+        <option value="">All types</option>
+        <option value="C">Contributions</option>
+        <option value="E">Expenditures</option>
+      </select>
+      <button id="search-clear">Clear</button>
+    </div>
+
+    <p class="search-info">
+      Showing last 12 months of transactions (<span id="search-count">0</span> results).
+    </p>
+
+    <div class="table-wrapper">
+      <table id="table-search" class="data-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Type</th>
+            <th>Donor / Payee</th>
+            <th>Committee</th>
+            <th class="num">Amount ($)</th>
+            <th>Purpose</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p>
+    Built with <a href="https://www.chartjs.org/" target="_blank" rel="noopener">Chart.js</a>
+    and <a href="https://www.fusejs.io/" target="_blank" rel="noopener">Fuse.js</a>.
+    Data from <a href="https://secure.sos.state.or.us/orestar/" target="_blank" rel="noopener">Oregon ORESTAR</a>.
+    Source code on <a href="https://github.com" target="_blank" rel="noopener">GitHub</a>.
+  </p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

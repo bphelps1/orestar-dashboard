@@ -1,0 +1,48 @@
+name: Historical Backfill (one-time)
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_year:
+        description: "Start year for backfill (e.g. 2017)"
+        required: false
+        default: "2017"
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120   # backfill can take up to 2 hours for 2017-present
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: scraper/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r scraper/requirements.txt
+
+      - name: Backfill ORESTAR data from ${{ inputs.start_year }}
+        run: python scraper/fetch.py --mode=backfill --start-year=${{ inputs.start_year }}
+
+      - name: Process and aggregate data
+        run: python scraper/process.py
+
+      - name: Commit and push backfill data
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/
+          git diff --cached --quiet || git commit -m "chore: historical backfill from ${{ inputs.start_year }}"
+          git push

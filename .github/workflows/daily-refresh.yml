@@ -1,0 +1,46 @@
+name: Daily Data Refresh
+
+on:
+  schedule:
+    # 15:00 UTC = 8:00 AM PST (UTC-7 in summer / UTC-8 in winter)
+    - cron: "0 15 * * *"
+  workflow_dispatch:  # allow manual trigger from GitHub UI
+
+permissions:
+  contents: write   # needed to git push data updates
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: scraper/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r scraper/requirements.txt
+
+      - name: Fetch last 14 days from ORESTAR
+        run: python scraper/fetch.py --mode=incremental --days=14
+
+      - name: Process and aggregate data
+        run: python scraper/process.py
+
+      - name: Commit and push updated data
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/
+          # Only commit if something changed
+          git diff --cached --quiet || git commit -m "chore: daily data refresh $(date -u +%Y-%m-%d)"
+          git push
