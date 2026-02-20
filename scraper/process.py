@@ -389,6 +389,7 @@ def process() -> None:
         )
 
         # ── 6. Map contributor type codes to labels ───────────────────────────
+        df["contributor_type"] = df["contributor_type"].fillna("").astype(str)
         df["contributor_type_label"] = df["contributor_type"].map(
             lambda x: CONTRIBUTOR_TYPE_LABELS.get(x.strip().upper(), x)
         )
