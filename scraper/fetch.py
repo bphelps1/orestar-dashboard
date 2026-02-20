@@ -16,6 +16,7 @@ CI:       xvfb-run --auto-servernum python fetch.py --mode=incremental
 """
 
 import argparse
+import json
 import logging
 import re
 import time
@@ -37,6 +38,9 @@ RESULTS_URL_PATTERN = "**/gotoPublicTransactionSearchResults**"
 
 # Raw Excel files land here temporarily (never committed to git)
 RAW_DIR = Path(__file__).parent.parent / "data" / "_raw"
+
+# Tracks which windows have been successfully fetched across runs (committed to git)
+FETCHED_LOG = RAW_DIR.parent / "fetched_windows.json"
 
 TRAN_TYPES = ["C", "E"]   # C = Contribution, E = Expenditure
 
@@ -269,6 +273,24 @@ def week_windows(start: date, end: date):
         cur += timedelta(days=7)
 
 
+def _load_fetched() -> set:
+    """Load the set of already-fetched (tran_type, start, end) keys from disk."""
+    if FETCHED_LOG.exists():
+        try:
+            with open(FETCHED_LOG) as f:
+                return {tuple(x) for x in json.load(f)}
+        except Exception:
+            return set()
+    return set()
+
+
+def _save_fetched(fetched: set) -> None:
+    """Persist the fetched-windows set to disk immediately."""
+    FETCHED_LOG.parent.mkdir(parents=True, exist_ok=True)
+    with open(FETCHED_LOG, "w") as f:
+        json.dump(sorted([list(x) for x in fetched]), f, indent=2)
+
+
 def _fetch_range(start: date, end: date) -> None:
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     windows = list(week_windows(start, end))
@@ -276,28 +298,40 @@ def _fetch_range(start: date, end: date) -> None:
     total   = len(tasks)
     log.info("Fetching %d windows × %d types = %d downloads", len(windows), len(TRAN_TYPES), total)
 
-    # After 3 consecutive blocked restarts, sleep this long before retrying.
-    # F5/ORESTAR appears to rate-limit by runner IP; a fresh browser alone won't
-    # help — we need to wait for the rate limiter to reset.
-    RATE_LIMIT_SLEEP_SEC = 600   # 10 minutes
-    MAX_SLEEP_CYCLES     = 3     # abort if we need more than this many long sleeps
+    # Windows recorded here are skipped on every run — they have already been
+    # fetched, processed, and committed to git in a previous run.  This is the
+    # key mechanism that lets us make progress across runs despite F5 rate-limiting
+    # each runner IP after ~25 requests.
+    fetched = _load_fetched()
+    skipped = sum(1 for tt, ws, we in tasks if (tt, str(ws), str(we)) in fetched)
+    if skipped:
+        log.info("Skipping %d already-fetched windows (recorded in %s)", skipped, FETCHED_LOG.name)
 
     with sync_playwright() as p:
         browser, context, page = setup_browser(p)
         i = 0
         consecutive_restarts = 0
-        sleep_cycles = 0
         while i < total:
             tran_type, w_start, w_end = tasks[i]
+            key = (tran_type, str(w_start), str(w_end))
+
+            # Skip windows already processed in a previous run
+            if key in fetched:
+                i += 1
+                continue
+
             log.info("[%d/%d] %s  %s → %s", i + 1, total, tran_type, w_start, w_end)
             try:
                 download_week(page, context, w_start, w_end, tran_type, RAW_DIR)
                 i += 1
                 consecutive_restarts = 0
+                # Record as fetched (file saved OR empty results — both are "done")
+                fetched.add(key)
+                _save_fetched(fetched)
             except SessionExpiredError as exc:
                 consecutive_restarts += 1
                 log.warning(
-                    "Blocked (attempt %d) at [%d/%d] %s %s→%s: %s — restarting browser",
+                    "Blocked (attempt %d/3) at [%d/%d] %s %s→%s: %s — restarting browser",
                     consecutive_restarts, i + 1, total, tran_type, w_start, w_end, exc,
                 )
                 try:
@@ -305,18 +339,15 @@ def _fetch_range(start: date, end: date) -> None:
                 except Exception:
                     pass
                 if consecutive_restarts >= 3:
-                    # Three quick restarts all failed — likely IP-level rate limiting.
-                    # Sleep to let the rate limiter reset, then try again.
-                    sleep_cycles += 1
-                    if sleep_cycles > MAX_SLEEP_CYCLES:
-                        log.error("Exceeded %d rate-limit sleep cycles; aborting.", MAX_SLEEP_CYCLES)
-                        raise
+                    # Persistent IP-level block — stop now so process.py and the
+                    # git commit still run.  Next run will skip already-fetched windows
+                    # and get a fresh runner IP, so the next batch will succeed.
                     log.warning(
-                        "Rate limit suspected — sleeping %d min before retry (sleep cycle %d/%d)...",
-                        RATE_LIMIT_SLEEP_SEC // 60, sleep_cycles, MAX_SLEEP_CYCLES,
+                        "Rate-limited after 3 attempts at [%d/%d] — stopping fetch to "
+                        "preserve partial results. Re-run the workflow to continue.",
+                        i + 1, total,
                     )
-                    time.sleep(RATE_LIMIT_SLEEP_SEC)
-                    consecutive_restarts = 0
+                    break
                 browser, context, page = setup_browser(p)
                 # Don't increment i — retry the same window with the fresh session
         browser.close()
