@@ -13,8 +13,8 @@
 
 "use strict";
 
-// ── Data base path (relative to docs/) ───────────────────────────────────────
-const DATA = "../data/aggregated";
+// ── Data base path (relative to GitHub Pages root) ───────────────────────────
+const DATA = "data/aggregated";
 
 // ── Chart.js default theme ───────────────────────────────────────────────────
 Chart.defaults.font.family = "system-ui, -apple-system, 'Segoe UI', sans-serif";
