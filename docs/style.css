@@ -249,3 +249,218 @@ footer {
   color: var(--color-text-muted);
   margin-top: 8px;
 }
+
+/* ── Global filter bar ──────────────────────────────────────────────────── */
+.global-filter-bar {
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  padding: 12px 32px;
+}
+.filter-inner {
+  max-width: 1200px;
+  margin: auto;
+  display: flex;
+  align-items: flex-end;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.filter-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  margin-bottom: 5px;
+}
+
+/* ── Filer combobox ─────────────────────────────────────────────────────── */
+.filer-selector { flex: 1; min-width: 260px; }
+.filer-combobox {
+  position: relative;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  transition: border-color 0.15s;
+}
+.filer-combobox:focus-within {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(43,108,176,0.15);
+}
+.chip-input-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  min-height: 38px;
+}
+.filer-search-input {
+  border: none;
+  outline: none;
+  background: transparent;
+  flex: 1;
+  min-width: 140px;
+  padding: 4px 4px;
+  font-size: 0.9rem;
+  color: var(--color-text);
+}
+
+/* ── Chips ──────────────────────────────────────────────────────────────── */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #ebf4ff;
+  border: 1px solid #bee3f8;
+  color: #1a365d;
+  border-radius: 999px;
+  padding: 2px 8px 2px 10px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chip-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #2b6cb0;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+.chip-remove:hover { color: #e53e3e; }
+
+/* ── Filer dropdown ─────────────────────────────────────────────────────── */
+.filer-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0,0,0,.12);
+  z-index: 100;
+  max-height: 260px;
+  overflow-y: auto;
+  list-style: none;
+  padding: 4px 0;
+  margin: 0;
+}
+.filer-dropdown li {
+  padding: 8px 14px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.filer-dropdown li:hover,
+.filer-dropdown li.selected { background: #ebf4ff; color: var(--color-accent); }
+.filer-dropdown li.no-results {
+  cursor: default;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+/* ── Date range selector ────────────────────────────────────────────────── */
+.date-range-selector { flex-shrink: 0; }
+.date-inputs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.date-sep {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+input[type="date"] {
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+input[type="date"]:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(43,108,176,0.15);
+}
+
+/* ── Clear filters button ───────────────────────────────────────────────── */
+.filter-clear-btn {
+  padding: 7px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  align-self: flex-end;
+  transition: border-color 0.15s, color 0.15s;
+}
+.filter-clear-btn:hover {
+  border-color: #e53e3e;
+  color: #e53e3e;
+}
+
+/* ── Filer comparison grid ──────────────────────────────────────────────── */
+.filer-comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.filer-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  box-shadow: var(--shadow);
+}
+.filer-card-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-accent);
+  margin-bottom: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.filer-card-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
+}
+.filer-card-stat-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+.filer-card-stat-value {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-text);
+  text-align: right;
+}
+
+/* ── Section desc ───────────────────────────────────────────────────────── */
+.section-desc {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  padding: 0 20px 10px;
+}

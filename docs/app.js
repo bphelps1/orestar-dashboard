@@ -1,12 +1,12 @@
 /**
  * app.js — ORESTAR Campaign Finance Dashboard
  *
- * Reads JSON data files from ../data/aggregated/ and renders:
- *   - Overview: stat cards + donut charts
- *   - Donors: top donors bar chart + sortable table
- *   - Recipients: top recipients bar chart + sortable table
- *   - Timeline: monthly line chart
- *   - Search: fuzzy-searchable recent transactions table
+ * Reads JSON data files from data/aggregated/ and renders:
+ *   - Overview: stat cards + donut chart; per-filer or comparison views
+ *   - Donors: top donors bar chart + sortable table; filer detail + untapped; pivot compare
+ *   - Recipients: top recipients; per-filer top payees
+ *   - Timeline: monthly line chart; multi-filer overlay
+ *   - Search: fuzzy-searchable recent transactions with filer + date filters
  *
  * No build step. No framework. Works in any modern browser.
  */
@@ -23,9 +23,26 @@ Chart.defaults.color       = "#4a5568";
 
 const PALETTE = [
   "#3182ce", "#e53e3e", "#38a169", "#d69e2e", "#805ad5",
-  "#dd6b20", "#319795", "#e53e3e", "#667eea", "#f6ad55",
+  "#dd6b20", "#319795", "#667eea", "#f6ad55",
   "#68d391", "#63b3ed", "#fc8181", "#d6bcfa", "#fbd38d",
 ];
+
+// ── Global state ─────────────────────────────────────────────────────────────
+const state = { selectedFilers: [], dateStart: "", dateEnd: "" };
+const filerCache = {};   // slug → Promise<filerDetail>
+let filerIndex = [];
+
+// ── Cached static data (fetched once) ────────────────────────────────────────
+let summaryData      = null;
+let byTypeDataGlobal = null;
+let donorsData       = null;
+let recipientsData   = null;
+let timelineData     = null;
+let fuseIndex        = null;
+let allRecent        = [];
+
+// ── Active tab ───────────────────────────────────────────────────────────────
+let activeTab = "overview";
 
 // ── Utility helpers ───────────────────────────────────────────────────────────
 
@@ -51,6 +68,21 @@ function showError(msg) {
   document.querySelector("main").prepend(el);
 }
 
+function esc(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function loadFilerProfile(slug) {
+  if (!filerCache[slug]) {
+    filerCache[slug] = fetchJSON(`${DATA}/filers/${slug}.json`);
+  }
+  return filerCache[slug];
+}
+
 // ── Tab switching ─────────────────────────────────────────────────────────────
 
 document.querySelectorAll(".tab-btn").forEach(btn => {
@@ -65,11 +97,26 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
     });
     btn.classList.add("active");
     btn.setAttribute("aria-selected", "true");
-    const panel = document.getElementById("tab-" + btn.dataset.tab);
+    activeTab = btn.dataset.tab;
+    const panel = document.getElementById("tab-" + activeTab);
     panel.classList.add("active");
     panel.hidden = false;
+    renderActiveTab();
   });
 });
+
+async function renderActiveTab() {
+  try {
+    await loaders[activeTab]();
+  } catch (err) {
+    console.error(`Error loading ${activeTab}:`, err);
+    showError(`Could not load data for "${activeTab}" tab. ${err.message}`);
+  }
+}
+
+function onStateChange() {
+  renderActiveTab();
+}
 
 // ── Chart helpers ─────────────────────────────────────────────────────────────
 
@@ -214,73 +261,384 @@ function buildSortableTable(tableId, rows, columns) {
   render();
 }
 
+// ── Filer selector ────────────────────────────────────────────────────────────
+
+function initFilerSelector() {
+  const input    = document.getElementById("filer-search-input");
+  const dropdown = document.getElementById("filer-dropdown");
+  const chipRow  = document.getElementById("chip-input-row");
+  const clearBtn = document.getElementById("filter-clear-btn");
+  const dateStartEl = document.getElementById("date-start");
+  const dateEndEl   = document.getElementById("date-end");
+
+  const fuse = new Fuse(filerIndex, { keys: ["name"], threshold: 0.3 });
+
+  let dropdownItems = [];
+  let highlightIdx  = -1;
+
+  function renderChips() {
+    chipRow.querySelectorAll(".chip").forEach(c => c.remove());
+    state.selectedFilers.forEach(entry => {
+      const chip = document.createElement("div");
+      chip.className = "chip";
+      chip.innerHTML =
+        `<span class="chip-label">${esc(entry.name)}</span>` +
+        `<button class="chip-remove" data-slug="${esc(entry.slug)}" aria-label="Remove ${esc(entry.name)}">×</button>`;
+      chipRow.insertBefore(chip, input);
+    });
+  }
+
+  function addFiler(entry) {
+    if (state.selectedFilers.find(f => f.slug === entry.slug)) return;
+    state.selectedFilers.push(entry);
+    renderChips();
+    input.value = "";
+    closeDropdown();
+    updateClearBtn();
+    onStateChange();
+  }
+
+  function removeFiler(slug) {
+    state.selectedFilers = state.selectedFilers.filter(f => f.slug !== slug);
+    renderChips();
+    updateClearBtn();
+    onStateChange();
+  }
+
+  function openDropdown(items) {
+    dropdownItems = items;
+    highlightIdx  = -1;
+    if (items.length) {
+      dropdown.innerHTML = items.map((item, i) =>
+        `<li role="option" data-slug="${esc(item.slug)}" data-idx="${i}">${esc(item.name)}</li>`
+      ).join("");
+    } else {
+      dropdown.innerHTML = `<li class="no-results">No results</li>`;
+    }
+    dropdown.hidden = false;
+    document.getElementById("filer-combobox").setAttribute("aria-expanded", "true");
+  }
+
+  function closeDropdown() {
+    dropdown.hidden = true;
+    document.getElementById("filer-combobox").setAttribute("aria-expanded", "false");
+    highlightIdx = -1;
+  }
+
+  function updateHighlight() {
+    dropdown.querySelectorAll("li[data-slug]").forEach((li, i) => {
+      li.classList.toggle("selected", i === highlightIdx);
+    });
+  }
+
+  function updateClearBtn() {
+    clearBtn.hidden = !(state.selectedFilers.length > 0 || state.dateStart || state.dateEnd);
+  }
+
+  input.addEventListener("focus", () => {
+    const q = input.value.trim();
+    const results = q
+      ? fuse.search(q).map(r => r.item).slice(0, 20)
+      : filerIndex.slice(0, 20);
+    openDropdown(results);
+  });
+
+  input.addEventListener("input", () => {
+    const q = input.value.trim();
+    const results = q
+      ? fuse.search(q).map(r => r.item).slice(0, 20)
+      : filerIndex.slice(0, 20);
+    openDropdown(results);
+  });
+
+  input.addEventListener("blur", () => {
+    setTimeout(closeDropdown, 150);
+  });
+
+  input.addEventListener("keydown", e => {
+    const items = dropdown.querySelectorAll("li[data-slug]");
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      highlightIdx = Math.min(highlightIdx + 1, items.length - 1);
+      updateHighlight();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      highlightIdx = Math.max(highlightIdx - 1, 0);
+      updateHighlight();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (highlightIdx >= 0 && dropdownItems[highlightIdx]) {
+        addFiler(dropdownItems[highlightIdx]);
+      }
+    } else if (e.key === "Escape") {
+      closeDropdown();
+    } else if (e.key === "Backspace" && input.value === "" && state.selectedFilers.length > 0) {
+      const last = state.selectedFilers[state.selectedFilers.length - 1];
+      removeFiler(last.slug);
+    }
+  });
+
+  dropdown.addEventListener("mousedown", e => {
+    const li = e.target.closest("li[data-slug]");
+    if (!li) return;
+    e.preventDefault();
+    const idx = parseInt(li.dataset.idx);
+    if (!isNaN(idx) && dropdownItems[idx]) {
+      addFiler(dropdownItems[idx]);
+    }
+  });
+
+  chipRow.addEventListener("click", e => {
+    const btn = e.target.closest(".chip-remove");
+    if (!btn) return;
+    removeFiler(btn.dataset.slug);
+  });
+
+  dateStartEl.addEventListener("change", () => {
+    state.dateStart = dateStartEl.value;
+    updateClearBtn();
+    onStateChange();
+  });
+
+  dateEndEl.addEventListener("change", () => {
+    state.dateEnd = dateEndEl.value;
+    updateClearBtn();
+    onStateChange();
+  });
+
+  clearBtn.addEventListener("click", () => {
+    state.selectedFilers = [];
+    state.dateStart = "";
+    state.dateEnd   = "";
+    dateStartEl.value = "";
+    dateEndEl.value   = "";
+    renderChips();
+    updateClearBtn();
+    onStateChange();
+  });
+}
+
 // ── Overview ──────────────────────────────────────────────────────────────────
 
 async function loadOverview() {
-  const [summary, byType, byParty, byOffice] = await Promise.all([
-    fetchJSON(`${DATA}/summary.json`),
-    fetchJSON(`${DATA}/by_contributor_type.json`),
-    fetchJSON(`${DATA}/by_party.json`),
-    fetchJSON(`${DATA}/by_office_type.json`),
-  ]);
+  if (!summaryData) {
+    [summaryData, byTypeDataGlobal] = await Promise.all([
+      fetchJSON(`${DATA}/summary.json`),
+      fetchJSON(`${DATA}/by_contributor_type.json`),
+    ]);
+  }
 
-  document.getElementById("stat-contributions").textContent = fmt$(summary.total_contributions);
-  document.getElementById("stat-expenditures").textContent  = fmt$(summary.total_expenditures);
-  document.getElementById("stat-transactions").textContent  = fmtNum(summary.total_transactions);
+  document.getElementById("last-updated").textContent = summaryData.last_updated
+    ? new Date(summaryData.last_updated).toLocaleString() : "—";
+
+  const n = state.selectedFilers.length;
+
+  if (n === 0) {
+    renderOverviewGlobal();
+  } else if (n === 1) {
+    const profile = await loadFilerProfile(state.selectedFilers[0].slug);
+    renderOverviewSingleFiler(profile);
+  } else {
+    const profiles = await Promise.all(state.selectedFilers.map(f => loadFilerProfile(f.slug)));
+    renderOverviewMultiFiler(profiles);
+  }
+}
+
+function renderOverviewGlobal() {
+  document.getElementById("stat-contributions").textContent = fmt$(summaryData.total_contributions);
+  document.getElementById("stat-expenditures").textContent  = fmt$(summaryData.total_expenditures);
+  const coh = summaryData.total_contributions - summaryData.total_expenditures;
+  document.getElementById("stat-cash-on-hand").textContent  = fmt$(coh);
+  document.getElementById("stat-transactions").textContent  = fmtNum(summaryData.total_transactions);
   document.getElementById("stat-range").textContent =
-    `${summary.date_range_start} – ${summary.date_range_end}`;
-  document.getElementById("last-updated").textContent = summary.last_updated
-    ? new Date(summary.last_updated).toLocaleString() : "—";
+    `${summaryData.date_range_start} – ${summaryData.date_range_end}`;
 
-  // Contributor type donut
-  if (byType.length) {
+  document.getElementById("overview-donut-title").textContent = "Contributions by Donor Type";
+
+  if (byTypeDataGlobal && byTypeDataGlobal.length) {
     makeDonutChart(
       "chart-contributor-type",
-      byType.map(r => r.type),
-      byType.map(r => r.total),
+      byTypeDataGlobal.map(r => r.type),
+      byTypeDataGlobal.map(r => r.total),
       "Contributor Type",
     );
   }
 
-  // Party donut
-  if (Array.isArray(byParty) && byParty.length) {
+  document.getElementById("filer-comparison-grid").hidden = true;
+}
+
+function renderOverviewSingleFiler(profile) {
+  document.getElementById("stat-contributions").textContent = fmt$(profile.total_in);
+  document.getElementById("stat-expenditures").textContent  = fmt$(profile.total_out);
+  document.getElementById("stat-cash-on-hand").textContent  = fmt$(profile.cash_on_hand);
+  document.getElementById("stat-transactions").textContent  = fmtNum(profile.tran_count);
+  document.getElementById("stat-range").textContent         = profile.name;
+
+  document.getElementById("overview-donut-title").textContent =
+    `Contributions by Donor Type — ${profile.name}`;
+
+  if (profile.by_contributor_type && profile.by_contributor_type.length) {
     makeDonutChart(
-      "chart-party",
-      byParty.map(r => r.party),
-      byParty.map(r => r.total),
-      "Party",
+      "chart-contributor-type",
+      profile.by_contributor_type.map(r => r.type),
+      profile.by_contributor_type.map(r => r.total),
+      "Contributor Type",
     );
-  } else {
-    document.getElementById("chart-party")?.closest(".chart-box")
-      ?.insertAdjacentHTML("beforeend", '<p class="loading-msg" style="font-size:.85rem;padding:16px">No party data available</p>');
   }
 
-  // Office type bar
-  if (Array.isArray(byOffice) && byOffice.length) {
-    makeBarChart(
-      "chart-office-type",
-      byOffice.map(r => r.office_type),
-      byOffice.map(r => r.total),
-      "Contributions",
-      "#3182ce",
+  document.getElementById("filer-comparison-grid").hidden = true;
+}
+
+function renderOverviewMultiFiler(profiles) {
+  document.getElementById("stat-contributions").textContent = "—";
+  document.getElementById("stat-expenditures").textContent  = "—";
+  document.getElementById("stat-cash-on-hand").textContent  = "—";
+  document.getElementById("stat-transactions").textContent  = "—";
+  document.getElementById("stat-range").textContent         = "—";
+
+  document.getElementById("overview-donut-title").textContent =
+    "Contributions by Donor Type (Combined)";
+
+  // Merge by_contributor_type across all selected filers
+  const typeMap = new Map();
+  profiles.forEach(p => {
+    (p.by_contributor_type || []).forEach(t => {
+      typeMap.set(t.type, (typeMap.get(t.type) || 0) + t.total);
+    });
+  });
+  const merged = Array.from(typeMap.entries())
+    .map(([type, total]) => ({ type, total }))
+    .sort((a, b) => b.total - a.total);
+
+  if (merged.length) {
+    makeDonutChart(
+      "chart-contributor-type",
+      merged.map(r => r.type),
+      merged.map(r => r.total),
+      "Contributor Type",
     );
   }
+
+  // Per-filer comparison cards
+  const grid = document.getElementById("filer-comparison-grid");
+  grid.hidden = false;
+  grid.innerHTML = profiles.map(p => `
+    <div class="filer-card">
+      <div class="filer-card-name">${esc(p.name)}</div>
+      <div class="filer-card-stats">
+        <div class="filer-card-stat-label">Contributions</div>
+        <div class="filer-card-stat-value">${fmt$(p.total_in)}</div>
+        <div class="filer-card-stat-label">Expenditures</div>
+        <div class="filer-card-stat-value">${fmt$(p.total_out)}</div>
+        <div class="filer-card-stat-label">Cash on Hand</div>
+        <div class="filer-card-stat-value">${fmt$(p.cash_on_hand)}</div>
+        <div class="filer-card-stat-label">Transactions</div>
+        <div class="filer-card-stat-value">${fmtNum(p.tran_count)}</div>
+      </div>
+    </div>
+  `).join("");
 }
 
 // ── Donors ────────────────────────────────────────────────────────────────────
 
-let donorsData = null;
-
 async function loadDonors() {
-  donorsData = await fetchJSON(`${DATA}/top_donors.json`);
+  if (!donorsData) {
+    donorsData = await fetchJSON(`${DATA}/top_donors.json`);
+  }
 
-  // Populate year selector
-  const sel = document.getElementById("donor-year");
-  Object.keys(donorsData.by_year || {}).sort().reverse().forEach(yr => {
-    sel.insertAdjacentHTML("beforeend", `<option value="${yr}">${yr}</option>`);
-  });
-  sel.addEventListener("change", () => renderDonors(sel.value));
-  renderDonors("all");
+  const n = state.selectedFilers.length;
+
+  if (n === 0) {
+    document.getElementById("donors-global-view").hidden     = false;
+    document.getElementById("donors-multi-view").hidden      = true;
+    document.getElementById("untapped-donors-section").hidden = true;
+
+    const sel = document.getElementById("donor-year");
+    if (!sel._listenerAttached) {
+      Object.keys(donorsData.by_year || {}).sort().reverse().forEach(yr => {
+        sel.insertAdjacentHTML("beforeend", `<option value="${yr}">${yr}</option>`);
+      });
+      sel.addEventListener("change", () => renderDonors(sel.value));
+      sel._listenerAttached = true;
+    }
+    renderDonors(sel.value || "all");
+
+  } else if (n === 1) {
+    const profile = await loadFilerProfile(state.selectedFilers[0].slug);
+    document.getElementById("donors-global-view").hidden     = false;
+    document.getElementById("donors-multi-view").hidden      = true;
+    document.getElementById("untapped-donors-section").hidden = false;
+
+    // Chart and table from filer profile
+    const rows  = profile.top_donors || [];
+    const top20 = rows.slice(0, 20);
+    makeBarChart(
+      "chart-top-donors",
+      top20.map(r => r.name),
+      top20.map(r => r.total),
+      "Total Contributions",
+      "#3182ce",
+    );
+    buildSortableTable("table-donors", rows, [
+      { key: "name",  label: "Donor" },
+      { key: "total", label: "Total ($)", fmt: fmt$, cls: "num" },
+    ]);
+
+    // Untapped donors: global top donors NOT in filer's donor list
+    const filerDonorNames = new Set(rows.map(r => r.name.toLowerCase()));
+    const untapped = (donorsData.all_time || []).filter(
+      r => !filerDonorNames.has(r.name.toLowerCase())
+    );
+    buildSortableTable("table-untapped", untapped, [
+      { key: "name",  label: "Donor" },
+      { key: "total", label: "Global Total ($)", fmt: fmt$, cls: "num" },
+    ]);
+
+  } else {
+    // Multi-filer: pivot table
+    document.getElementById("donors-global-view").hidden     = true;
+    document.getElementById("donors-multi-view").hidden      = false;
+    document.getElementById("untapped-donors-section").hidden = true;
+
+    const profiles = await Promise.all(state.selectedFilers.map(f => loadFilerProfile(f.slug)));
+
+    // Build pivot: donor name → { [filerName]: total }
+    const donorMap = new Map();
+    profiles.forEach(profile => {
+      (profile.top_donors || []).forEach(d => {
+        if (!donorMap.has(d.name)) donorMap.set(d.name, {});
+        donorMap.get(d.name)[profile.name] = d.total;
+      });
+    });
+
+    const filerNames = profiles.map(p => p.name);
+    const pivotRows = Array.from(donorMap.entries())
+      .map(([name, byFiler]) => {
+        const total = Object.values(byFiler).reduce((s, v) => s + v, 0);
+        return { name, ...byFiler, total };
+      })
+      .sort((a, b) => b.total - a.total);
+
+    // Build thead dynamically
+    const thead = document.getElementById("donors-multi-thead");
+    thead.innerHTML = `<tr>
+      <th>#</th>
+      <th>Donor</th>
+      ${filerNames.map(n => `<th class="num">${esc(n)}</th>`).join("")}
+      <th class="num">Total ($)</th>
+    </tr>`;
+
+    document.getElementById("donors-multi-title").textContent =
+      `Donor Comparison: ${filerNames.join(" vs ")}`;
+
+    const tbody = document.querySelector("#table-donors-multi tbody");
+    tbody.innerHTML = pivotRows.map((row, i) => `<tr>
+      <td>${i + 1}</td>
+      <td>${esc(row.name)}</td>
+      ${filerNames.map(n => `<td class="num">${row[n] !== undefined ? fmt$(row[n]) : "—"}</td>`).join("")}
+      <td class="num">${fmt$(row.total)}</td>
+    </tr>`).join("");
+  }
 }
 
 function renderDonors(year) {
@@ -305,17 +663,48 @@ function renderDonors(year) {
 
 // ── Recipients ────────────────────────────────────────────────────────────────
 
-let recipientsData = null;
-
 async function loadRecipients() {
-  recipientsData = await fetchJSON(`${DATA}/top_recipients.json`);
+  if (!recipientsData) {
+    recipientsData = await fetchJSON(`${DATA}/top_recipients.json`);
+  }
 
-  const sel = document.getElementById("recipient-year");
-  Object.keys(recipientsData.by_year || {}).sort().reverse().forEach(yr => {
-    sel.insertAdjacentHTML("beforeend", `<option value="${yr}">${yr}</option>`);
-  });
-  sel.addEventListener("change", () => renderRecipients(sel.value));
-  renderRecipients("all");
+  const chartTitle = document.getElementById("recipients-chart-title");
+  const tableTitle = document.getElementById("recipients-table-title");
+  const n = state.selectedFilers.length;
+
+  if (n === 0) {
+    chartTitle.textContent = "Top 20 Recipients (by Contributions Received)";
+    tableTitle.textContent = "Top 100 Recipients";
+
+    const sel = document.getElementById("recipient-year");
+    if (!sel._listenerAttached) {
+      Object.keys(recipientsData.by_year || {}).sort().reverse().forEach(yr => {
+        sel.insertAdjacentHTML("beforeend", `<option value="${yr}">${yr}</option>`);
+      });
+      sel.addEventListener("change", () => renderRecipients(sel.value));
+      sel._listenerAttached = true;
+    }
+    renderRecipients(sel.value || "all");
+
+  } else {
+    const profile = await loadFilerProfile(state.selectedFilers[0].slug);
+    chartTitle.textContent = `Top Spending by ${profile.name}`;
+    tableTitle.textContent = `Top Spending by ${profile.name}`;
+
+    const rows  = profile.top_payees || [];
+    const top20 = rows.slice(0, 20);
+    makeBarChart(
+      "chart-top-recipients",
+      top20.map(r => r.name),
+      top20.map(r => r.total),
+      "Expenditures",
+      "#dd6b20",
+    );
+    buildSortableTable("table-recipients", rows, [
+      { key: "name",  label: "Payee" },
+      { key: "total", label: "Total Paid ($)", fmt: fmt$, cls: "num" },
+    ]);
+  }
 }
 
 function renderRecipients(year) {
@@ -340,17 +729,27 @@ function renderRecipients(year) {
 
 // ── Timeline ──────────────────────────────────────────────────────────────────
 
-let timelineData = null;
-
 async function loadTimeline() {
-  timelineData = await fetchJSON(`${DATA}/timeline.json`);
+  if (!timelineData) {
+    timelineData = await fetchJSON(`${DATA}/timeline.json`);
+  }
 
-  // Populate year selector
-  const years = [...new Set(timelineData.map(r => r.month.slice(0, 4)))].sort();
-  const sel = document.getElementById("timeline-year");
-  years.forEach(yr => sel.insertAdjacentHTML("beforeend", `<option value="${yr}">${yr}</option>`));
-  sel.addEventListener("change", () => renderTimeline(sel.value));
-  renderTimeline("all");
+  const n = state.selectedFilers.length;
+
+  if (n === 0) {
+    const sel = document.getElementById("timeline-year");
+    if (!sel._listenerAttached) {
+      const years = [...new Set(timelineData.map(r => r.month.slice(0, 4)))].sort();
+      years.forEach(yr => sel.insertAdjacentHTML("beforeend", `<option value="${yr}">${yr}</option>`));
+      sel.addEventListener("change", () => renderTimeline(sel.value));
+      sel._listenerAttached = true;
+    }
+    renderTimeline(sel.value || "all");
+
+  } else {
+    const profiles = await Promise.all(state.selectedFilers.map(f => loadFilerProfile(f.slug)));
+    renderTimelineMultiFiler(profiles);
+  }
 }
 
 function renderTimeline(year) {
@@ -384,43 +783,101 @@ function renderTimeline(year) {
   );
 }
 
-// ── Search ────────────────────────────────────────────────────────────────────
+function renderTimelineMultiFiler(profiles) {
+  // Union of all months across profiles
+  const monthSet = new Set();
+  profiles.forEach(p => (p.timeline || []).forEach(t => monthSet.add(t.month)));
+  const months = Array.from(monthSet).sort();
 
-let fuseIndex = null;
-let allRecent = [];
+  const datasets = [];
+  profiles.forEach((profile, idx) => {
+    const color  = PALETTE[idx % PALETTE.length];
+    const byMonth = new Map((profile.timeline || []).map(t => [t.month, t]));
 
-async function loadSearch() {
-  allRecent = await fetchJSON(`${DATA}/recent_transactions.json`);
-  document.getElementById("search-count").textContent = fmtNum(allRecent.length);
-
-  fuseIndex = new Fuse(allRecent, {
-    keys: ["contributor_payee", "filer", "amount", "purpose"],
-    threshold: 0.35,
-    includeScore: false,
+    datasets.push({
+      label: `${profile.name} (Contributions)`,
+      data: months.map(m => (byMonth.get(m) || {}).contributions || 0),
+      borderColor: color,
+      backgroundColor: "transparent",
+      fill: false,
+      tension: 0.3,
+      pointRadius: months.length > 60 ? 0 : 3,
+    });
+    datasets.push({
+      label: `${profile.name} (Expenditures)`,
+      data: months.map(m => (byMonth.get(m) || {}).expenditures || 0),
+      borderColor: color,
+      backgroundColor: "transparent",
+      borderDash: [5, 5],
+      fill: false,
+      tension: 0.3,
+      pointRadius: months.length > 60 ? 0 : 3,
+    });
   });
 
-  renderSearchResults(allRecent);
+  makeLineChart("chart-timeline", months, datasets);
+}
+
+// ── Search ────────────────────────────────────────────────────────────────────
+
+async function loadSearch() {
+  if (!allRecent.length) {
+    allRecent = await fetchJSON(`${DATA}/recent_transactions.json`);
+    fuseIndex = new Fuse(allRecent, {
+      keys: ["contributor_payee", "filer", "amount", "purpose"],
+      threshold: 0.35,
+      includeScore: false,
+    });
+  }
 
   const input   = document.getElementById("search-input");
   const typeEl  = document.getElementById("search-type");
   const clearEl = document.getElementById("search-clear");
 
-  function doSearch() {
-    const q    = input.value.trim();
-    const type = typeEl.value;
-    let results = q ? fuseIndex.search(q).map(r => r.item) : [...allRecent];
-    if (type) results = results.filter(r => (r.tran_type || "").trim().toUpperCase() === type);
-    document.getElementById("search-count").textContent = fmtNum(results.length);
-    renderSearchResults(results);
+  if (!input._listenerAttached) {
+    input.addEventListener("input", applySearchFilters);
+    typeEl.addEventListener("change", applySearchFilters);
+    clearEl.addEventListener("click", () => {
+      input.value = "";
+      typeEl.value = "";
+      applySearchFilters();
+    });
+    input._listenerAttached = true;
   }
 
-  input.addEventListener("input", doSearch);
-  typeEl.addEventListener("change", doSearch);
-  clearEl.addEventListener("click", () => {
-    input.value = "";
-    typeEl.value = "";
-    doSearch();
-  });
+  applySearchFilters();
+}
+
+function applySearchFilters() {
+  const input  = document.getElementById("search-input");
+  const typeEl = document.getElementById("search-type");
+  const q      = input ? input.value.trim() : "";
+  const type   = typeEl ? typeEl.value : "";
+
+  let results = q && fuseIndex
+    ? fuseIndex.search(q).map(r => r.item)
+    : [...allRecent];
+
+  if (type) {
+    results = results.filter(r => (r.tran_type || "").trim().toUpperCase() === type);
+  }
+
+  // Filer filter
+  if (state.selectedFilers.length > 0) {
+    const selectedNames = new Set(state.selectedFilers.map(f => f.name.toLowerCase()));
+    results = results.filter(r => selectedNames.has((r.filer || "").toLowerCase()));
+  }
+
+  // Date range filter
+  if (state.dateStart) {
+    results = results.filter(r => r.filed_date && r.filed_date >= state.dateStart);
+  }
+  if (state.dateEnd) {
+    results = results.filter(r => r.filed_date && r.filed_date <= state.dateEnd);
+  }
+
+  document.getElementById("search-count").textContent = fmtNum(results.length);
+  renderSearchResults(results);
 }
 
 function renderSearchResults(rows) {
@@ -431,7 +888,7 @@ function renderSearchResults(rows) {
   }
 
   tbody.innerHTML = rows.slice(0, 2000).map(r => {
-    const type = (r.tran_type || "").trim().toUpperCase();
+    const type  = (r.tran_type || "").trim().toUpperCase();
     const badge = `<span class="badge badge-${type}">${type === "C" ? "Contribution" : type === "E" ? "Expenditure" : type}</span>`;
     return `<tr>
       <td>${r.filed_date || "—"}</td>
@@ -444,18 +901,7 @@ function renderSearchResults(rows) {
   }).join("");
 }
 
-function esc(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-// ── Lazy tab loading ──────────────────────────────────────────────────────────
-// Each tab's data is loaded once on first activation.
-
-const loaded = {};
+// ── Tab loaders map ───────────────────────────────────────────────────────────
 
 const loaders = {
   overview:   loadOverview,
@@ -465,20 +911,14 @@ const loaders = {
   search:     loadSearch,
 };
 
-async function lazyLoad(tab) {
-  if (loaded[tab]) return;
-  loaded[tab] = true;
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+(async function init() {
   try {
-    await loaders[tab]();
-  } catch (err) {
-    console.error(`Error loading ${tab}:`, err);
-    showError(`Could not load data for "${tab}" tab. ${err.message}`);
+    filerIndex = await fetchJSON(`${DATA}/filer_index.json`);
+  } catch (e) {
+    filerIndex = [];
   }
-}
-
-document.querySelectorAll(".tab-btn").forEach(btn => {
-  btn.addEventListener("click", () => lazyLoad(btn.dataset.tab));
-});
-
-// ── Init: load Overview on page ready ────────────────────────────────────────
-lazyLoad("overview");
+  initFilerSelector();
+  renderActiveTab();
+})();

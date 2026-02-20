@@ -95,6 +95,12 @@ CONTRIBUTOR_TYPE_LABELS = {
     "O": "Other",
 }
 
+
+def make_slug(name: str) -> str:
+    s = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+    return s[:60]
+
+
 # ---------------------------------------------------------------------------
 # Name normalization
 # ---------------------------------------------------------------------------
@@ -542,49 +548,6 @@ def aggregate(df: pd.DataFrame) -> None:
     by_type["total"] = by_type["total"].round(2)
     _write_json("by_contributor_type.json", by_type.to_dict(orient="records"))
 
-    # ── by_party.json ─────────────────────────────────────────────────────────
-    if "party" in contributions.columns:
-        by_party = (
-            contributions[contributions["party"].ne("")]
-            .groupby("party")["amount"]
-            .sum()
-            .reset_index()
-            .rename(columns={"amount": "total"})
-            .sort_values("total", ascending=False)
-        )
-        by_party["total"] = by_party["total"].round(2)
-        _write_json("by_party.json", by_party.to_dict(orient="records"))
-    else:
-        _write_json("by_party.json", [])
-
-    # ── by_office_type.json ───────────────────────────────────────────────────
-    if "office" in contributions.columns:
-        def categorize_office(o: str) -> str:
-            o = str(o).lower()
-            if "governor" in o:               return "Governor"
-            if "legislat" in o or "rep" in o or "senator" in o: return "State Legislature"
-            if "secretary" in o:              return "Secretary of State"
-            if "treasurer" in o:              return "State Treasurer"
-            if "attorney" in o:               return "Attorney General"
-            if "ballot" in o or "measure" in o: return "Ballot Measure"
-            if "county" in o or "city" in o or "local" in o: return "Local / County"
-            if o.strip() == "":               return "Unknown"
-            return "Other Statewide"
-
-        contributions = contributions.copy()
-        contributions["office_category"] = contributions["office"].apply(categorize_office)
-        by_office = (
-            contributions.groupby("office_category")["amount"]
-            .sum()
-            .reset_index()
-            .rename(columns={"office_category": "office_type", "amount": "total"})
-            .sort_values("total", ascending=False)
-        )
-        by_office["total"] = by_office["total"].round(2)
-        _write_json("by_office_type.json", by_office.to_dict(orient="records"))
-    else:
-        _write_json("by_office_type.json", [])
-
     # ── recent_transactions.json ──────────────────────────────────────────────
     cutoff = pd.Timestamp.now() - pd.DateOffset(months=12)
     recent = df[df["filed_date"] >= cutoff].copy()
@@ -593,7 +556,7 @@ def aggregate(df: pd.DataFrame) -> None:
 
     keep_cols = [c for c in [
         "tran_id", "filed_date", "tran_type", "amount",
-        contrib_col, filer_col, "contributor_type_label", "office", "party", "purpose"
+        contrib_col, filer_col, "contributor_type_label", "purpose"
     ] if c in recent.columns]
     recent = recent[keep_cols].rename(columns={
         contrib_col: "contributor_payee",
@@ -602,7 +565,149 @@ def aggregate(df: pd.DataFrame) -> None:
     recent = recent.sort_values("filed_date", ascending=False).head(5000)
     _write_json("recent_transactions.json", recent.to_dict(orient="records"))
 
+    # ── per-filer index + detail files ───────────────────────────────────────
+    aggregate_filers(df, contributions, expenditures, filer_col, contrib_col)
+
     log.info("Aggregation complete. JSON files written to %s", AGG_DIR)
+
+
+def aggregate_filers(
+    df: pd.DataFrame,
+    contributions: pd.DataFrame,
+    expenditures: pd.DataFrame,
+    filer_col: str,
+    contrib_col: str,
+) -> None:
+    """Generate filer_index.json and per-filer detail files under data/aggregated/filers/."""
+    filers_dir = AGG_DIR / "filers"
+    filers_dir.mkdir(parents=True, exist_ok=True)
+
+    type_col = (
+        "contributor_type_label"
+        if "contributor_type_label" in contributions.columns
+        else "contributor_type"
+    )
+
+    # ── Build slug registry with collision handling ──────────────────────────
+    all_filer_names = sorted([n for n in df[filer_col].dropna().unique() if n != ""])
+    slug_registry: dict[str, str] = {}  # slug → name (first claimant)
+    filer_slugs: dict[str, str] = {}    # name → slug
+
+    for name in all_filer_names:
+        base = make_slug(name)
+        slug = base
+        counter = 2
+        while slug in slug_registry and slug_registry[slug] != name:
+            slug = f"{base}_{counter}"
+            counter += 1
+        slug_registry[slug] = name
+        filer_slugs[name] = slug
+
+    # ── Pre-group for performance ─────────────────────────────────────────────
+    contrib_groups = contributions.groupby(filer_col)
+    expend_groups  = expenditures.groupby(filer_col)
+    all_groups     = df.groupby(filer_col)
+
+    def get_group(groups, name):
+        return groups.get_group(name) if name in groups.groups else pd.DataFrame()
+
+    def monthly_sum(frame, col_name):
+        if frame.empty or "month" not in frame.columns:
+            return pd.Series(dtype=float, name=col_name)
+        return frame.groupby("month")["amount"].sum().rename(col_name)
+
+    # ── Per-filer detail files ────────────────────────────────────────────────
+    index_rows = []
+    log.info("Generating per-filer detail files for %d filers…", len(all_filer_names))
+
+    for name in all_filer_names:
+        slug = filer_slugs[name]
+        filer_contrib = get_group(contrib_groups, name)
+        filer_expend  = get_group(expend_groups,  name)
+        filer_all     = get_group(all_groups,     name)
+
+        total_in     = round(float(filer_contrib["amount"].sum()) if not filer_contrib.empty else 0.0, 2)
+        total_out    = round(float(filer_expend["amount"].sum())  if not filer_expend.empty  else 0.0, 2)
+        cash_on_hand = round(total_in - total_out, 2)
+        tran_count   = int(len(filer_all))
+
+        # Timeline
+        c_monthly = monthly_sum(filer_contrib, "contributions")
+        e_monthly = monthly_sum(filer_expend,  "expenditures")
+        tl_df = pd.concat([c_monthly, e_monthly], axis=1).fillna(0).sort_index()
+        timeline = [
+            {
+                "month": m,
+                "contributions": round(float(row.get("contributions", 0)), 2),
+                "expenditures":  round(float(row.get("expenditures",  0)), 2),
+            }
+            for m, row in tl_df.iterrows()
+        ]
+
+        # Top donors (who gave TO this filer)
+        if not filer_contrib.empty and contrib_col in filer_contrib.columns:
+            td = (
+                filer_contrib.groupby(contrib_col)["amount"]
+                .sum().nlargest(50).reset_index()
+                .rename(columns={contrib_col: "name", "amount": "total"})
+            )
+            td["total"] = td["total"].round(2)
+            top_donors_list = td.to_dict(orient="records")
+        else:
+            top_donors_list = []
+
+        # Top payees (what this filer paid out)
+        if not filer_expend.empty and contrib_col in filer_expend.columns:
+            tp = (
+                filer_expend.groupby(contrib_col)["amount"]
+                .sum().nlargest(50).reset_index()
+                .rename(columns={contrib_col: "name", "amount": "total"})
+            )
+            tp["total"] = tp["total"].round(2)
+            top_payees_list = tp.to_dict(orient="records")
+        else:
+            top_payees_list = []
+
+        # By contributor type
+        if not filer_contrib.empty and type_col in filer_contrib.columns:
+            bt = (
+                filer_contrib.groupby(type_col)["amount"]
+                .sum().reset_index()
+                .rename(columns={type_col: "type", "amount": "total"})
+                .sort_values("total", ascending=False)
+            )
+            bt["total"] = bt["total"].round(2)
+            by_type_list = bt.to_dict(orient="records")
+        else:
+            by_type_list = []
+
+        detail = {
+            "name": name, "slug": slug,
+            "total_in": total_in, "total_out": total_out,
+            "cash_on_hand": cash_on_hand, "tran_count": tran_count,
+            "timeline": timeline,
+            "top_donors": top_donors_list,
+            "top_payees": top_payees_list,
+            "by_contributor_type": by_type_list,
+        }
+
+        out_path = filers_dir / f"{slug}.json"
+        with open(out_path, "w") as f:
+            json.dump(detail, f, separators=(",", ":"), default=str)
+
+        index_rows.append({
+            "slug": slug, "name": name,
+            "total_in": total_in, "total_out": total_out,
+            "cash_on_hand": cash_on_hand,
+        })
+
+    # Sort index by total_in descending
+    index_rows.sort(key=lambda r: r["total_in"], reverse=True)
+    _write_json("filer_index.json", index_rows)
+    log.info(
+        "Wrote filer_index.json (%d filers) and %d filer detail files",
+        len(index_rows), len(index_rows),
+    )
 
 
 def _write_json(filename: str, data) -> None:

@@ -51,7 +51,7 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           mkdir -p docs/data/aggregated
-          cp data/aggregated/*.json docs/data/aggregated/ 2>/dev/null || true
+          cp -r data/aggregated/. docs/data/aggregated/
           git add data/ docs/data/
           git diff --cached --quiet || git commit -m "chore: historical backfill from ${{ inputs.start_year }}"
           git push

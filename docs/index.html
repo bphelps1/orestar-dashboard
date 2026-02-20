@@ -22,6 +22,31 @@
   </div>
 </header>
 
+<div class="global-filter-bar">
+  <div class="filter-inner">
+    <div class="filer-selector">
+      <label class="filter-label" for="filer-search-input">Filter by filer</label>
+      <div class="filer-combobox" id="filer-combobox" role="combobox" aria-expanded="false">
+        <div class="chip-input-row" id="chip-input-row">
+          <input type="text" id="filer-search-input" class="filer-search-input"
+            placeholder="Search filers…" autocomplete="off"
+            aria-autocomplete="list" aria-controls="filer-dropdown" />
+        </div>
+        <ul class="filer-dropdown" id="filer-dropdown" role="listbox" hidden></ul>
+      </div>
+    </div>
+    <div class="date-range-selector">
+      <label class="filter-label">Date range</label>
+      <div class="date-inputs">
+        <input type="date" id="date-start" aria-label="Start date" />
+        <span class="date-sep">to</span>
+        <input type="date" id="date-end" aria-label="End date" />
+      </div>
+    </div>
+    <button class="filter-clear-btn" id="filter-clear-btn" hidden>Clear filters</button>
+  </div>
+</div>
+
 <nav class="tab-nav" role="tablist">
   <button class="tab-btn active" data-tab="overview"    role="tab" aria-selected="true">Overview</button>
   <button class="tab-btn"        data-tab="donors"      role="tab">Donors</button>
@@ -44,6 +69,10 @@
         <div class="card-value" id="stat-expenditures">—</div>
       </div>
       <div class="card">
+        <div class="card-label">Cash on Hand</div>
+        <div class="card-value" id="stat-cash-on-hand">—</div>
+      </div>
+      <div class="card">
         <div class="card-label">Total Transactions</div>
         <div class="card-value" id="stat-transactions">—</div>
       </div>
@@ -53,49 +82,69 @@
       </div>
     </div>
 
-    <div class="chart-row">
-      <div class="chart-box">
-        <h2>Contributions by Donor Type</h2>
-        <canvas id="chart-contributor-type"></canvas>
-      </div>
-      <div class="chart-box">
-        <h2>Contributions by Party</h2>
-        <canvas id="chart-party"></canvas>
-      </div>
+    <div class="chart-box" id="overview-donut-box">
+      <h2 id="overview-donut-title">Contributions by Donor Type</h2>
+      <canvas id="chart-contributor-type"></canvas>
     </div>
 
-    <div class="chart-box full-width">
-      <h2>Contributions by Office Type</h2>
-      <canvas id="chart-office-type"></canvas>
-    </div>
+    <div id="filer-comparison-grid" class="filer-comparison-grid" hidden></div>
 
     <p class="last-updated">Last updated: <span id="last-updated">—</span></p>
   </section>
 
   <!-- ══════════════════════════ DONORS ══════════════════════════ -->
   <section id="tab-donors" class="tab-panel" hidden>
-    <div class="controls-bar">
-      <label for="donor-year">Year:</label>
-      <select id="donor-year"><option value="all">All time</option></select>
+    <div id="donors-global-view">
+      <div class="controls-bar">
+        <label for="donor-year">Year:</label>
+        <select id="donor-year"><option value="all">All time</option></select>
+      </div>
+
+      <div class="chart-box full-width">
+        <h2>Top 20 Donors</h2>
+        <canvas id="chart-top-donors"></canvas>
+      </div>
+
+      <div class="table-wrapper">
+        <h2>Top 100 Donors</h2>
+        <table id="table-donors" class="data-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th class="sortable" data-col="name">Donor</th>
+              <th class="sortable" data-col="total">Total ($)</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
 
-    <div class="chart-box full-width">
-      <h2>Top 20 Donors</h2>
-      <canvas id="chart-top-donors"></canvas>
+    <div id="donors-multi-view" hidden>
+      <div class="table-wrapper">
+        <h2 id="donors-multi-title">Donor Comparison</h2>
+        <table id="table-donors-multi" class="data-table">
+          <thead id="donors-multi-thead"></thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
 
-    <div class="table-wrapper">
-      <h2>Top 100 Donors</h2>
-      <table id="table-donors" class="data-table">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th class="sortable" data-col="name">Donor</th>
-            <th class="sortable" data-col="total">Total ($)</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
+    <div id="untapped-donors-section" hidden>
+      <div class="table-wrapper">
+        <h2>Untapped Donors</h2>
+        <p class="section-desc">Top global donors who have not contributed to the selected filer.</p>
+        <table id="table-untapped" class="data-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th class="sortable" data-col="name">Donor</th>
+              <th class="sortable" data-col="total">Global Total ($)</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
   </section>
 
@@ -107,12 +156,12 @@
     </div>
 
     <div class="chart-box full-width">
-      <h2>Top 20 Recipients (by Contributions Received)</h2>
+      <h2 id="recipients-chart-title">Top 20 Recipients (by Contributions Received)</h2>
       <canvas id="chart-top-recipients"></canvas>
     </div>
 
     <div class="table-wrapper">
-      <h2>Top 100 Recipients</h2>
+      <h2 id="recipients-table-title">Top 100 Recipients</h2>
       <table id="table-recipients" class="data-table">
         <thead>
           <tr>
