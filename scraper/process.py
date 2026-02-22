@@ -178,8 +178,11 @@ def fuzzy_deduplicate(
         canonical_map:  {raw_name → canonical_name}
         review_items:   list of {"a": ..., "b": ..., "score": ...} for 85–95% matches
     """
-    # Apply existing entity_map first
-    resolved = {n: entity_map.get(n, n) for n in names}
+    # Apply existing entity_map first (case-insensitive: try title-cased key, then exact key)
+    def _em_lookup(n: str) -> str:
+        return entity_map.get(canonical_name(n), entity_map.get(n, n))
+
+    resolved = {n: _em_lookup(n) for n in names}
 
     # Count frequency for picking canonical form
     freq: dict[str, int] = defaultdict(int)
@@ -208,6 +211,9 @@ def fuzzy_deduplicate(
     unique_names = list(set(resolved.values()))
     review_items = []
 
+    def _scorer(a, b, **kw):
+        return max(fuzz.token_sort_ratio(a, b), fuzz.token_set_ratio(a, b))
+
     log.info("Fuzzy-deduplicating %d unique names…", len(unique_names))
     for i, name_a in enumerate(unique_names):
         if i % 500 == 0 and i > 0:
@@ -216,7 +222,7 @@ def fuzzy_deduplicate(
         matches = rfuzz_process.extract(
             name_a,
             unique_names,
-            scorer=fuzz.token_sort_ratio,
+            scorer=_scorer,
             score_cutoff=review_threshold,
             limit=10,
         )
