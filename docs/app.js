@@ -580,7 +580,7 @@ async function loadDonors() {
           toggleBtns.forEach(b => b.classList.remove("active"));
           btn.classList.add("active");
           donorsViewMode = btn.dataset.view;
-          renderGlobalDonorsView();
+          renderActiveTab();
         });
         btn._listenerAttached = true;
       });
@@ -589,34 +589,39 @@ async function loadDonors() {
     renderGlobalDonorsView();
 
   } else if (n === 1) {
-    donorsViewMode = "summary";
-    document.getElementById("donors-view-toggle").hidden = true;
-    // Reset toggle highlight for when user returns to global view
-    document.querySelectorAll("#donors-view-toggle .toggle-btn").forEach((b, i) => {
-      b.classList.toggle("active", i === 0);
-    });
     const profile = await loadFilerProfile(state.selectedFilers[0].slug);
-    document.getElementById("donors-global-view").hidden     = false;
-    document.getElementById("donors-multi-view").hidden      = true;
+    document.getElementById("donors-global-view").hidden      = false;
+    document.getElementById("donors-multi-view").hidden       = true;
     document.getElementById("untapped-donors-section").hidden = false;
+    document.getElementById("donors-view-toggle").hidden      = false;
+    document.getElementById("donor-year-group").hidden        = true;
 
-    // Chart and table from filer profile
-    const rows  = profile.top_donors || [];
-    const top20 = rows.slice(0, 20);
-    makeBarChart(
-      "chart-top-donors",
-      top20.map(r => r.name),
-      top20.map(r => r.total),
-      "Total Contributions",
-      "#3182ce",
-    );
-    buildSortableTable("table-donors", rows, [
-      { key: "name",  label: "Donor" },
-      { key: "total", label: "Total ($)", fmt: fmt$, cls: "num" },
-    ]);
+    const isByYear = donorsViewMode === "by-year";
+    document.getElementById("donors-chart-box").hidden      = isByYear;
+    document.getElementById("donors-summary-table").hidden  = isByYear;
+    document.getElementById("donors-by-year-view").hidden   = !isByYear;
 
-    // Untapped donors: global top donors NOT in filer's donor list
-    const filerDonorNames = new Set(rows.map(r => r.name.toLowerCase()));
+    const allTimeDonors = profile.top_donors || [];
+
+    if (isByYear) {
+      renderDonorsByYear(profile.top_donors_by_year || {}, allTimeDonors);
+    } else {
+      const top20 = allTimeDonors.slice(0, 20);
+      makeBarChart(
+        "chart-top-donors",
+        top20.map(r => r.name),
+        top20.map(r => r.total),
+        "Total Contributions",
+        "#3182ce",
+      );
+      buildSortableTable("table-donors", allTimeDonors, [
+        { key: "name",  label: "Donor" },
+        { key: "total", label: "Total ($)", fmt: fmt$, cls: "num" },
+      ]);
+    }
+
+    // Untapped donors: global top donors NOT in this filer's donor list
+    const filerDonorNames = new Set(allTimeDonors.map(r => r.name.toLowerCase()));
     const untapped = (donorsData.all_time || []).filter(
       r => !filerDonorNames.has(r.name.toLowerCase())
     );
@@ -682,27 +687,27 @@ function renderGlobalDonorsView() {
   document.getElementById("donors-by-year-view").hidden = !isByYear;
 
   if (isByYear) {
-    renderDonorsByYear();
+    renderDonorsByYear(donorsData.by_year, donorsData.all_time);
   } else {
     const sel = document.getElementById("donor-year");
     renderDonors(sel.value || "all");
   }
 }
 
-function renderDonorsByYear() {
-  const years = Object.keys(donorsData.by_year || {}).sort();
+function renderDonorsByYear(byYear, allTime) {
+  const years = Object.keys(byYear || {}).sort();
 
   // Build map: donor name → { [year]: total }
   const donorYearMap = new Map();
   years.forEach(yr => {
-    (donorsData.by_year[yr] || []).forEach(d => {
+    (byYear[yr] || []).forEach(d => {
       if (!donorYearMap.has(d.name)) donorYearMap.set(d.name, {});
       donorYearMap.get(d.name)[yr] = d.total;
     });
   });
 
-  // Rows from all_time (already sorted by total desc); fill in per-year from map
-  const rows = donorsData.all_time.map(d => ({
+  // Rows from allTime (sorted by total desc); fill in per-year from map
+  const rows = (allTime || []).map(d => ({
     name: d.name,
     total: d.total,
     ...Object.fromEntries(years.map(yr => [yr, donorYearMap.get(d.name)?.[yr] ?? null])),

@@ -672,7 +672,7 @@ def aggregate_filers(
             for m, row in tl_df.iterrows()
         ]
 
-        # Top donors (who gave TO this filer)
+        # Top donors (who gave TO this filer) — all-time and by year
         if not filer_contrib.empty and contrib_col in filer_contrib.columns:
             td = (
                 filer_contrib.groupby(contrib_col)["amount"]
@@ -681,8 +681,21 @@ def aggregate_filers(
             )
             td["total"] = td["total"].round(2)
             top_donors_list = td.to_dict(orient="records")
+
+            top_donors_by_year: dict[str, list] = {}
+            if "year" in filer_contrib.columns:
+                for yr in sorted(filer_contrib["year"].dropna().unique()):
+                    yr_df = filer_contrib[filer_contrib["year"] == yr]
+                    td_yr = (
+                        yr_df.groupby(contrib_col)["amount"]
+                        .sum().nlargest(50).reset_index()
+                        .rename(columns={contrib_col: "name", "amount": "total"})
+                    )
+                    td_yr["total"] = td_yr["total"].round(2)
+                    top_donors_by_year[str(int(yr))] = td_yr.to_dict(orient="records")
         else:
             top_donors_list = []
+            top_donors_by_year = {}
 
         # Top payees (what this filer paid out)
         if not filer_expend.empty and contrib_col in filer_expend.columns:
@@ -715,6 +728,7 @@ def aggregate_filers(
             "cash_on_hand": cash_on_hand, "tran_count": tran_count,
             "timeline": timeline,
             "top_donors": top_donors_list,
+            "top_donors_by_year": top_donors_by_year,
             "top_payees": top_payees_list,
             "by_contributor_type": by_type_list,
         }
