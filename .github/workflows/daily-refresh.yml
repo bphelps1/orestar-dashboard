@@ -50,4 +50,5 @@ jobs:
           cp -r data/aggregated/. docs/data/aggregated/
           git add data/ docs/data/
           git diff --cached --quiet || git commit -m "chore: daily data refresh $(date -u +%Y-%m-%d)"
+          git pull --rebase
           git push
