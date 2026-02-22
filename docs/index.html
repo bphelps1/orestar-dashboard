@@ -41,6 +41,7 @@
         <input type="date" id="date-start" aria-label="Start date" />
         <span class="date-sep">to</span>
         <input type="date" id="date-end" aria-label="End date" />
+        <button class="filter-apply-btn" id="filter-apply-btn">Apply</button>
       </div>
     </div>
     <button class="filter-clear-btn" id="filter-clear-btn" hidden>Clear filters</button>
@@ -96,16 +97,22 @@
   <section id="tab-donors" class="tab-panel" hidden>
     <div id="donors-global-view">
       <div class="controls-bar">
-        <label for="donor-year">Year:</label>
-        <select id="donor-year"><option value="all">All time</option></select>
+        <span id="donor-year-group">
+          <label for="donor-year">Year:</label>
+          <select id="donor-year"><option value="all">All time</option></select>
+        </span>
+        <div class="view-toggle" id="donors-view-toggle">
+          <button class="toggle-btn active" data-view="summary">Summary</button>
+          <button class="toggle-btn" data-view="by-year">By Year</button>
+        </div>
       </div>
 
-      <div class="chart-box full-width">
+      <div class="chart-box full-width" id="donors-chart-box">
         <h2>Top 20 Donors</h2>
         <canvas id="chart-top-donors"></canvas>
       </div>
 
-      <div class="table-wrapper">
+      <div class="table-wrapper" id="donors-summary-table">
         <h2>Top 100 Donors</h2>
         <table id="table-donors" class="data-table">
           <thead>
@@ -117,6 +124,16 @@
           </thead>
           <tbody></tbody>
         </table>
+      </div>
+
+      <div id="donors-by-year-view" hidden>
+        <div class="table-wrapper">
+          <h2>Donor Contributions by Year</h2>
+          <table id="table-donors-by-year" class="data-table">
+            <thead id="donors-by-year-thead"></thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
     </div>
 

@@ -44,6 +44,9 @@ let allRecent        = [];
 // ── Active tab ───────────────────────────────────────────────────────────────
 let activeTab = "overview";
 
+// ── Donors view mode ─────────────────────────────────────────────────────────
+let donorsViewMode = "summary";  // "summary" | "by-year"
+
 // ── Utility helpers ───────────────────────────────────────────────────────────
 
 function fmt$(n) {
@@ -394,15 +397,18 @@ function initFilerSelector() {
     removeFiler(btn.dataset.slug);
   });
 
+  // Date inputs update state but don't trigger a re-render — use Apply for that
   dateStartEl.addEventListener("change", () => {
     state.dateStart = dateStartEl.value;
     updateClearBtn();
-    onStateChange();
   });
 
   dateEndEl.addEventListener("change", () => {
     state.dateEnd = dateEndEl.value;
     updateClearBtn();
+  });
+
+  document.getElementById("filter-apply-btn").addEventListener("click", () => {
     onStateChange();
   });
 
@@ -552,18 +558,43 @@ async function loadDonors() {
     document.getElementById("donors-global-view").hidden     = false;
     document.getElementById("donors-multi-view").hidden      = true;
     document.getElementById("untapped-donors-section").hidden = true;
+    document.getElementById("donors-view-toggle").hidden     = false;
 
+    // Year selector — populate once
     const sel = document.getElementById("donor-year");
     if (!sel._listenerAttached) {
       Object.keys(donorsData.by_year || {}).sort().reverse().forEach(yr => {
         sel.insertAdjacentHTML("beforeend", `<option value="${yr}">${yr}</option>`);
       });
-      sel.addEventListener("change", () => renderDonors(sel.value));
+      sel.addEventListener("change", () => {
+        if (donorsViewMode === "summary") renderDonors(sel.value);
+      });
       sel._listenerAttached = true;
     }
-    renderDonors(sel.value || "all");
+
+    // View toggle — wire up once
+    const toggleBtns = document.querySelectorAll("#donors-view-toggle .toggle-btn");
+    if (!toggleBtns[0]._listenerAttached) {
+      toggleBtns.forEach(btn => {
+        btn.addEventListener("click", () => {
+          toggleBtns.forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          donorsViewMode = btn.dataset.view;
+          renderGlobalDonorsView();
+        });
+        btn._listenerAttached = true;
+      });
+    }
+
+    renderGlobalDonorsView();
 
   } else if (n === 1) {
+    donorsViewMode = "summary";
+    document.getElementById("donors-view-toggle").hidden = true;
+    // Reset toggle highlight for when user returns to global view
+    document.querySelectorAll("#donors-view-toggle .toggle-btn").forEach((b, i) => {
+      b.classList.toggle("active", i === 0);
+    });
     const profile = await loadFilerProfile(state.selectedFilers[0].slug);
     document.getElementById("donors-global-view").hidden     = false;
     document.getElementById("donors-multi-view").hidden      = true;
@@ -596,6 +627,8 @@ async function loadDonors() {
 
   } else {
     // Multi-filer: pivot table
+    donorsViewMode = "summary";
+    document.getElementById("donors-view-toggle").hidden     = true;
     document.getElementById("donors-global-view").hidden     = true;
     document.getElementById("donors-multi-view").hidden      = false;
     document.getElementById("untapped-donors-section").hidden = true;
@@ -639,6 +672,85 @@ async function loadDonors() {
       <td class="num">${fmt$(row.total)}</td>
     </tr>`).join("");
   }
+}
+
+function renderGlobalDonorsView() {
+  const isByYear = donorsViewMode === "by-year";
+  document.getElementById("donor-year-group").hidden    = isByYear;
+  document.getElementById("donors-chart-box").hidden    = isByYear;
+  document.getElementById("donors-summary-table").hidden = isByYear;
+  document.getElementById("donors-by-year-view").hidden = !isByYear;
+
+  if (isByYear) {
+    renderDonorsByYear();
+  } else {
+    const sel = document.getElementById("donor-year");
+    renderDonors(sel.value || "all");
+  }
+}
+
+function renderDonorsByYear() {
+  const years = Object.keys(donorsData.by_year || {}).sort();
+
+  // Build map: donor name → { [year]: total }
+  const donorYearMap = new Map();
+  years.forEach(yr => {
+    (donorsData.by_year[yr] || []).forEach(d => {
+      if (!donorYearMap.has(d.name)) donorYearMap.set(d.name, {});
+      donorYearMap.get(d.name)[yr] = d.total;
+    });
+  });
+
+  // Rows from all_time (already sorted by total desc); fill in per-year from map
+  const rows = donorsData.all_time.map(d => ({
+    name: d.name,
+    total: d.total,
+    ...Object.fromEntries(years.map(yr => [yr, donorYearMap.get(d.name)?.[yr] ?? null])),
+  }));
+
+  let sortCol = "total";
+  let sortDir = "desc";
+
+  const thead = document.getElementById("donors-by-year-thead");
+  thead.innerHTML = `<tr>
+    <th>#</th>
+    <th class="sortable" data-col="name">Donor</th>
+    ${years.map(yr => `<th class="num sortable" data-col="${yr}">${yr}</th>`).join("")}
+    <th class="num sortable" data-col="total">All Time</th>
+  </tr>`;
+
+  function renderByYearTable() {
+    const sorted = [...rows].sort((a, b) => {
+      const va = a[sortCol] ?? -1;
+      const vb = b[sortCol] ?? -1;
+      if (sortCol === "name") return sortDir === "asc"
+        ? a.name.localeCompare(b.name)
+        : b.name.localeCompare(a.name);
+      return sortDir === "asc" ? va - vb : vb - va;
+    });
+    const tbody = document.querySelector("#table-donors-by-year tbody");
+    tbody.innerHTML = sorted.map((row, i) => `<tr>
+      <td>${i + 1}</td>
+      <td>${esc(row.name)}</td>
+      ${years.map(yr => `<td class="num">${row[yr] != null ? fmt$(row[yr]) : "—"}</td>`).join("")}
+      <td class="num">${fmt$(row.total)}</td>
+    </tr>`).join("");
+  }
+
+  // Sort listeners (thead is rebuilt each call so no accumulation)
+  thead.querySelectorAll("th.sortable").forEach(th => {
+    th.addEventListener("click", () => {
+      const col = th.dataset.col;
+      sortDir = sortCol === col && sortDir === "desc" ? "asc" : "desc";
+      sortCol = col;
+      thead.querySelectorAll("th.sortable").forEach(t => t.classList.remove("sort-asc", "sort-desc"));
+      th.classList.add("sort-" + sortDir);
+      renderByYearTable();
+    });
+  });
+  thead.querySelector(`th[data-col="total"]`).classList.add("sort-desc");
+
+  renderByYearTable();
 }
 
 function renderDonors(year) {
