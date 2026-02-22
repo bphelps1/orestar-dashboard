@@ -101,6 +101,12 @@ def make_slug(name: str) -> str:
     return s[:60]
 
 
+# Fuzzy-dedup only the N most-frequent names; rarer names are self-canonical
+# unless entity_map.json explicitly maps them.  At 0.76 µs/comparison,
+# 10 000² ≈ 100 M comparisons ≈ 76 s — safe inside any workflow timeout.
+MAX_DEDUP_NAMES = 10_000
+
+
 # ---------------------------------------------------------------------------
 # Name normalization
 # ---------------------------------------------------------------------------
@@ -208,20 +214,36 @@ def fuzzy_deduplicate(
         else:
             parent[ra] = rb
 
-    unique_names = list(set(resolved.values()))
+    all_resolved = list(set(resolved.values()))
     review_items = []
 
     def _scorer(a, b, **kw):
         return max(fuzz.token_sort_ratio(a, b), fuzz.token_set_ratio(a, b))
 
-    log.info("Fuzzy-deduplicating %d unique names…", len(unique_names))
-    for i, name_a in enumerate(unique_names):
+    # Limit the O(n²) comparison pool to the most-frequent names so the step
+    # completes within workflow timeouts.  Rare names (one-time contributors)
+    # remain self-canonical; entity_map.json handles any manual merges needed
+    # beyond this set.
+    if len(all_resolved) > MAX_DEDUP_NAMES:
+        log.warning(
+            "Limiting fuzzy-dedup to the %d most-frequent names (of %d total); "
+            "use entity_map.json for merges outside this set.",
+            MAX_DEDUP_NAMES, len(all_resolved),
+        )
+        candidates = sorted(
+            all_resolved, key=lambda n: freq.get(n, 0), reverse=True
+        )[:MAX_DEDUP_NAMES]
+    else:
+        candidates = all_resolved
+
+    log.info("Fuzzy-deduplicating %d names…", len(candidates))
+    for i, name_a in enumerate(candidates):
         if i % 500 == 0 and i > 0:
-            log.debug("  … %d / %d", i, len(unique_names))
+            log.debug("  … %d / %d", i, len(candidates))
         # rapidfuzz process.extract returns top matches
         matches = rfuzz_process.extract(
             name_a,
-            unique_names,
+            candidates,
             scorer=_scorer,
             score_cutoff=review_threshold,
             limit=10,
@@ -236,9 +258,9 @@ def fuzzy_deduplicate(
                 pair = tuple(sorted([name_a, name_b]))
                 review_items.append({"a": pair[0], "b": pair[1], "score": round(score, 1)})
 
-    # Build canonical map: raw_name → canonical_name (highest frequency in cluster)
+    # Build canonical map for ALL resolved names (not just comparison candidates)
     cluster_freq: dict[str, dict[str, int]] = defaultdict(dict)
-    for n in unique_names:
+    for n in all_resolved:
         root = find(n)
         cluster_freq[root][n] = freq.get(n, 0)
 
