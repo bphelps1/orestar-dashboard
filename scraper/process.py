@@ -591,6 +591,7 @@ def aggregate(df: pd.DataFrame) -> None:
         filer_col:   "filer",
     })
     recent = recent.sort_values("filed_date", ascending=False).head(5000)
+    recent = recent.fillna("")
     _write_json("recent_transactions.json", recent.to_dict(orient="records"))
 
     # ── per-filer index + detail files ───────────────────────────────────────
