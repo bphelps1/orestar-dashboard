@@ -480,12 +480,19 @@ def aggregate(df: pd.DataFrame) -> None:
     contributions = df[df["tran_type"].str.strip().str.upper() == "C"]
     expenditures  = df[df["tran_type"].str.strip().str.upper() == "E"]
 
+    # Separate cash contributions from in-kind (forgiven expenditures, etc.)
+    inkind_mask     = contributions["sub_type"].str.contains("In-Kind", case=False, na=False)
+    cash_contribs   = contributions[~inkind_mask]
+    inkind_contribs = contributions[inkind_mask]
+
     # ── summary.json ─────────────────────────────────────────────────────────
     summary = {
-        "total_contributions":  round(contributions["amount"].sum(), 2),
+        "total_contributions":  round(cash_contribs["amount"].sum(), 2),
+        "total_inkind":         round(inkind_contribs["amount"].sum(), 2),
         "total_expenditures":   round(expenditures["amount"].sum(), 2),
         "total_transactions":   int(len(df)),
-        "num_contributions":    int(len(contributions)),
+        "num_contributions":    int(len(cash_contribs)),
+        "num_inkind":           int(len(inkind_contribs)),
         "num_expenditures":     int(len(expenditures)),
         "date_range_start":     df["filed_date"].min().strftime("%Y-%m-%d") if len(df) else "",
         "date_range_end":       df["filed_date"].max().strftime("%Y-%m-%d") if len(df) else "",
@@ -495,7 +502,7 @@ def aggregate(df: pd.DataFrame) -> None:
 
     # ── top_donors.json ───────────────────────────────────────────────────────
     top_donors_all = (
-        contributions.groupby(contrib_col)["amount"]
+        cash_contribs.groupby(contrib_col)["amount"]
         .sum()
         .nlargest(100)
         .reset_index()
@@ -504,8 +511,8 @@ def aggregate(df: pd.DataFrame) -> None:
     top_donors_all["total"] = top_donors_all["total"].round(2)
 
     by_year_donors: dict[str, list] = {}
-    for yr in sorted(contributions["year"].unique()):
-        yr_df = contributions[contributions["year"] == yr]
+    for yr in sorted(cash_contribs["year"].unique()):
+        yr_df = cash_contribs[cash_contribs["year"] == yr]
         top = (
             yr_df.groupby(contrib_col)["amount"]
             .sum()
@@ -523,7 +530,7 @@ def aggregate(df: pd.DataFrame) -> None:
 
     # ── top_recipients.json ───────────────────────────────────────────────────
     top_recipients_all = (
-        contributions.groupby(filer_col)["amount"]
+        cash_contribs.groupby(filer_col)["amount"]
         .sum()
         .nlargest(100)
         .reset_index()
@@ -532,8 +539,8 @@ def aggregate(df: pd.DataFrame) -> None:
     top_recipients_all["total"] = top_recipients_all["total"].round(2)
 
     by_year_recipients: dict[str, list] = {}
-    for yr in sorted(contributions["year"].unique()):
-        yr_df = contributions[contributions["year"] == yr]
+    for yr in sorted(cash_contribs["year"].unique()):
+        yr_df = cash_contribs[cash_contribs["year"] == yr]
         top = (
             yr_df.groupby(filer_col)["amount"]
             .sum()
@@ -550,24 +557,34 @@ def aggregate(df: pd.DataFrame) -> None:
     })
 
     # ── timeline.json ─────────────────────────────────────────────────────────
-    contrib_monthly = (
-        contributions.groupby("month")["amount"].sum().reset_index()
+    cash_monthly = (
+        cash_contribs.groupby("month")["amount"].sum().reset_index()
         .rename(columns={"amount": "contributions"})
+    )
+    inkind_monthly = (
+        inkind_contribs.groupby("month")["amount"].sum().reset_index()
+        .rename(columns={"amount": "inkind"})
     )
     expend_monthly = (
         expenditures.groupby("month")["amount"].sum().reset_index()
         .rename(columns={"amount": "expenditures"})
     )
-    timeline = pd.merge(contrib_monthly, expend_monthly, on="month", how="outer").fillna(0)
-    timeline = timeline.sort_values("month")
+    timeline = (
+        cash_monthly
+        .merge(inkind_monthly, on="month", how="outer")
+        .merge(expend_monthly, on="month", how="outer")
+        .fillna(0)
+        .sort_values("month")
+    )
     timeline["contributions"] = timeline["contributions"].round(2)
+    timeline["inkind"]        = timeline["inkind"].round(2)
     timeline["expenditures"]  = timeline["expenditures"].round(2)
     _write_json("timeline.json", timeline.to_dict(orient="records"))
 
     # ── by_contributor_type.json ──────────────────────────────────────────────
-    type_col = "contributor_type_label" if "contributor_type_label" in contributions.columns else "contributor_type"
+    type_col = "contributor_type_label" if "contributor_type_label" in cash_contribs.columns else "contributor_type"
     by_type = (
-        contributions.groupby(type_col)["amount"]
+        cash_contribs.groupby(type_col)["amount"]
         .sum()
         .reset_index()
         .rename(columns={type_col: "type", "amount": "total"})
@@ -575,8 +592,8 @@ def aggregate(df: pd.DataFrame) -> None:
     )
     by_type["total"] = by_type["total"].round(2)
     by_type_by_year: dict[str, list] = {}
-    for yr in sorted(contributions["year"].dropna().unique()):
-        yr_df = contributions[contributions["year"] == yr]
+    for yr in sorted(cash_contribs["year"].dropna().unique()):
+        yr_df = cash_contribs[cash_contribs["year"] == yr]
         bt_yr = (
             yr_df.groupby(type_col)["amount"].sum().reset_index()
             .rename(columns={type_col: "type", "amount": "total"})
@@ -608,14 +625,15 @@ def aggregate(df: pd.DataFrame) -> None:
     _write_json("recent_transactions.json", recent.to_dict(orient="records"))
 
     # ── per-filer index + detail files ───────────────────────────────────────
-    aggregate_filers(df, contributions, expenditures, filer_col, contrib_col)
+    aggregate_filers(df, cash_contribs, inkind_contribs, expenditures, filer_col, contrib_col)
 
     log.info("Aggregation complete. JSON files written to %s", AGG_DIR)
 
 
 def aggregate_filers(
     df: pd.DataFrame,
-    contributions: pd.DataFrame,
+    contributions: pd.DataFrame,   # cash contributions only
+    inkind_contribs: pd.DataFrame,
     expenditures: pd.DataFrame,
     filer_col: str,
     contrib_col: str,
@@ -647,6 +665,7 @@ def aggregate_filers(
 
     # ── Pre-group for performance ─────────────────────────────────────────────
     contrib_groups = contributions.groupby(filer_col)
+    inkind_groups  = inkind_contribs.groupby(filer_col)
     expend_groups  = expenditures.groupby(filer_col)
     all_groups     = df.groupby(filer_col)
 
@@ -665,22 +684,26 @@ def aggregate_filers(
     for name in all_filer_names:
         slug = filer_slugs[name]
         filer_contrib = get_group(contrib_groups, name)
+        filer_inkind  = get_group(inkind_groups,  name)
         filer_expend  = get_group(expend_groups,  name)
         filer_all     = get_group(all_groups,     name)
 
         total_in     = round(float(filer_contrib["amount"].sum()) if not filer_contrib.empty else 0.0, 2)
+        total_inkind = round(float(filer_inkind["amount"].sum())  if not filer_inkind.empty  else 0.0, 2)
         total_out    = round(float(filer_expend["amount"].sum())  if not filer_expend.empty  else 0.0, 2)
         cash_on_hand = round(total_in - total_out, 2)
         tran_count   = int(len(filer_all))
 
         # Timeline
         c_monthly = monthly_sum(filer_contrib, "contributions")
+        i_monthly = monthly_sum(filer_inkind,  "inkind")
         e_monthly = monthly_sum(filer_expend,  "expenditures")
-        tl_df = pd.concat([c_monthly, e_monthly], axis=1).fillna(0).sort_index()
+        tl_df = pd.concat([c_monthly, i_monthly, e_monthly], axis=1).fillna(0).sort_index()
         timeline = [
             {
                 "month": m,
                 "contributions": round(float(row.get("contributions", 0)), 2),
+                "inkind":        round(float(row.get("inkind",        0)), 2),
                 "expenditures":  round(float(row.get("expenditures",  0)), 2),
             }
             for m, row in tl_df.iterrows()
@@ -762,7 +785,8 @@ def aggregate_filers(
 
         detail = {
             "name": name, "slug": slug,
-            "total_in": total_in, "total_out": total_out,
+            "total_in": total_in, "total_inkind": total_inkind,
+            "total_out": total_out,
             "cash_on_hand": cash_on_hand, "tran_count": tran_count,
             "timeline": timeline,
             "top_donors": top_donors_list,
@@ -779,7 +803,8 @@ def aggregate_filers(
 
         index_rows.append({
             "slug": slug, "name": name,
-            "total_in": total_in, "total_out": total_out,
+            "total_in": total_in, "total_inkind": total_inkind,
+            "total_out": total_out,
             "cash_on_hand": cash_on_hand,
         })
 

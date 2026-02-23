@@ -78,12 +78,14 @@ function mergeTypeByYear(byYear, years) {
 
 // Sum contributions/expenditures from a (possibly filtered) timeline array.
 function statsFromTimeline(rows) {
-  const totalIn  = rows.reduce((s, r) => s + (r.contributions || 0), 0);
-  const totalOut = rows.reduce((s, r) => s + (r.expenditures  || 0), 0);
+  const totalIn    = rows.reduce((s, r) => s + (r.contributions || 0), 0);
+  const totalInKind = rows.reduce((s, r) => s + (r.inkind       || 0), 0);
+  const totalOut   = rows.reduce((s, r) => s + (r.expenditures  || 0), 0);
   return {
-    totalIn:    Math.round(totalIn  * 100) / 100,
-    totalOut:   Math.round(totalOut * 100) / 100,
-    cashOnHand: Math.round((totalIn - totalOut) * 100) / 100,
+    totalIn:     Math.round(totalIn    * 100) / 100,
+    totalInKind: Math.round(totalInKind * 100) / 100,
+    totalOut:    Math.round(totalOut   * 100) / 100,
+    cashOnHand:  Math.round((totalIn - totalOut) * 100) / 100,
   };
 }
 
@@ -516,8 +518,9 @@ async function loadOverview() {
 function renderOverviewGlobal() {
   const hasDate = state.dateStart || state.dateEnd;
   if (hasDate) {
-    const { totalIn, totalOut, cashOnHand } = statsFromTimeline(filterMonthRows(timelineData || []));
+    const { totalIn, totalInKind, totalOut, cashOnHand } = statsFromTimeline(filterMonthRows(timelineData || []));
     document.getElementById("stat-contributions").textContent = fmt$(totalIn);
+    document.getElementById("stat-inkind").textContent        = fmt$(totalInKind);
     document.getElementById("stat-expenditures").textContent  = fmt$(totalOut);
     document.getElementById("stat-cash-on-hand").textContent  = fmt$(cashOnHand);
     document.getElementById("stat-transactions").textContent  = "—";
@@ -525,6 +528,7 @@ function renderOverviewGlobal() {
       `${state.dateStart || "…"} – ${state.dateEnd || "…"}`;
   } else {
     document.getElementById("stat-contributions").textContent = fmt$(summaryData.total_contributions);
+    document.getElementById("stat-inkind").textContent        = fmt$(summaryData.total_inkind || 0);
     document.getElementById("stat-expenditures").textContent  = fmt$(summaryData.total_expenditures);
     const coh = summaryData.total_contributions - summaryData.total_expenditures;
     document.getElementById("stat-cash-on-hand").textContent  = fmt$(coh);
@@ -562,13 +566,15 @@ function renderOverviewGlobal() {
 function renderOverviewSingleFiler(profile) {
   const hasDate = state.dateStart || state.dateEnd;
   if (hasDate) {
-    const { totalIn, totalOut, cashOnHand } = statsFromTimeline(filterMonthRows(profile.timeline || []));
+    const { totalIn, totalInKind, totalOut, cashOnHand } = statsFromTimeline(filterMonthRows(profile.timeline || []));
     document.getElementById("stat-contributions").textContent = fmt$(totalIn);
+    document.getElementById("stat-inkind").textContent        = fmt$(totalInKind);
     document.getElementById("stat-expenditures").textContent  = fmt$(totalOut);
     document.getElementById("stat-cash-on-hand").textContent  = fmt$(cashOnHand);
     document.getElementById("stat-transactions").textContent  = "—";
   } else {
     document.getElementById("stat-contributions").textContent = fmt$(profile.total_in);
+    document.getElementById("stat-inkind").textContent        = fmt$(profile.total_inkind || 0);
     document.getElementById("stat-expenditures").textContent  = fmt$(profile.total_out);
     document.getElementById("stat-cash-on-hand").textContent  = fmt$(profile.cash_on_hand);
     document.getElementById("stat-transactions").textContent  = fmtNum(profile.tran_count);
@@ -596,6 +602,7 @@ function renderOverviewSingleFiler(profile) {
 
 function renderOverviewMultiFiler(profiles) {
   document.getElementById("stat-contributions").textContent = "—";
+  document.getElementById("stat-inkind").textContent        = "—";
   document.getElementById("stat-expenditures").textContent  = "—";
   document.getElementById("stat-cash-on-hand").textContent  = "—";
   document.getElementById("stat-transactions").textContent  = "—";
@@ -631,20 +638,22 @@ function renderOverviewMultiFiler(profiles) {
   const grid = document.getElementById("filer-comparison-grid");
   grid.hidden = false;
   grid.innerHTML = profiles.map(p => {
-    let totalIn, totalOut, cashOnHand, tranCount;
+    let totalIn, totalInKind, totalOut, cashOnHand, tranCount;
     if (hasDate) {
-      ({ totalIn, totalOut, cashOnHand } = statsFromTimeline(filterMonthRows(p.timeline || [])));
+      ({ totalIn, totalInKind, totalOut, cashOnHand } = statsFromTimeline(filterMonthRows(p.timeline || [])));
       tranCount = null;
     } else {
-      totalIn = p.total_in; totalOut = p.total_out;
-      cashOnHand = p.cash_on_hand; tranCount = p.tran_count;
+      totalIn = p.total_in; totalInKind = p.total_inkind || 0;
+      totalOut = p.total_out; cashOnHand = p.cash_on_hand; tranCount = p.tran_count;
     }
     return `
     <div class="filer-card">
       <div class="filer-card-name">${esc(p.name)}</div>
       <div class="filer-card-stats">
-        <div class="filer-card-stat-label">Contributions</div>
+        <div class="filer-card-stat-label">Cash Contributions</div>
         <div class="filer-card-stat-value">${fmt$(totalIn)}</div>
+        <div class="filer-card-stat-label">In-Kind</div>
+        <div class="filer-card-stat-value">${fmt$(totalInKind)}</div>
         <div class="filer-card-stat-label">Expenditures</div>
         <div class="filer-card-stat-value">${fmt$(totalOut)}</div>
         <div class="filer-card-stat-label">Cash on Hand</div>
