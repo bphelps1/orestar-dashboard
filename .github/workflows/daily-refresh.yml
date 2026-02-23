@@ -50,6 +50,7 @@ jobs:
           cp -r data/aggregated/. docs/data/aggregated/
           git add data/ docs/data/
           git restore --staged data/fetched_windows.json  # not needed for incremental; avoids merge conflicts
+          git restore data/fetched_windows.json           # also discard working tree changes so rebase doesn't abort
           git diff --cached --quiet || git commit -m "chore: daily data refresh $(date -u +%Y-%m-%d)"
           for attempt in 1 2 3 4 5; do
             git pull --rebase -X ours && git push && break
