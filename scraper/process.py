@@ -574,7 +574,20 @@ def aggregate(df: pd.DataFrame) -> None:
         .sort_values("total", ascending=False)
     )
     by_type["total"] = by_type["total"].round(2)
-    _write_json("by_contributor_type.json", by_type.to_dict(orient="records"))
+    by_type_by_year: dict[str, list] = {}
+    for yr in sorted(contributions["year"].dropna().unique()):
+        yr_df = contributions[contributions["year"] == yr]
+        bt_yr = (
+            yr_df.groupby(type_col)["amount"].sum().reset_index()
+            .rename(columns={type_col: "type", "amount": "total"})
+            .sort_values("total", ascending=False)
+        )
+        bt_yr["total"] = bt_yr["total"].round(2)
+        by_type_by_year[str(int(yr))] = bt_yr.to_dict(orient="records")
+    _write_json("by_contributor_type.json", {
+        "all_time": by_type.to_dict(orient="records"),
+        "by_year":  by_type_by_year,
+    })
 
     # ── recent_transactions.json ──────────────────────────────────────────────
     cutoff = pd.Timestamp.now() - pd.DateOffset(months=12)
@@ -698,7 +711,7 @@ def aggregate_filers(
             top_donors_list = []
             top_donors_by_year = {}
 
-        # Top payees (what this filer paid out)
+        # Top payees (what this filer paid out) — all-time and by year
         if not filer_expend.empty and contrib_col in filer_expend.columns:
             tp = (
                 filer_expend.groupby(contrib_col)["amount"]
@@ -707,10 +720,22 @@ def aggregate_filers(
             )
             tp["total"] = tp["total"].round(2)
             top_payees_list = tp.to_dict(orient="records")
+            top_payees_by_year: dict[str, list] = {}
+            if "year" in filer_expend.columns:
+                for yr in sorted(filer_expend["year"].dropna().unique()):
+                    yr_df = filer_expend[filer_expend["year"] == yr]
+                    tp_yr = (
+                        yr_df.groupby(contrib_col)["amount"]
+                        .sum().nlargest(50).reset_index()
+                        .rename(columns={contrib_col: "name", "amount": "total"})
+                    )
+                    tp_yr["total"] = tp_yr["total"].round(2)
+                    top_payees_by_year[str(int(yr))] = tp_yr.to_dict(orient="records")
         else:
             top_payees_list = []
+            top_payees_by_year = {}
 
-        # By contributor type
+        # By contributor type — all-time and by year
         if not filer_contrib.empty and type_col in filer_contrib.columns:
             bt = (
                 filer_contrib.groupby(type_col)["amount"]
@@ -720,8 +745,20 @@ def aggregate_filers(
             )
             bt["total"] = bt["total"].round(2)
             by_type_list = bt.to_dict(orient="records")
+            by_type_by_year_filer: dict[str, list] = {}
+            if "year" in filer_contrib.columns:
+                for yr in sorted(filer_contrib["year"].dropna().unique()):
+                    yr_df = filer_contrib[filer_contrib["year"] == yr]
+                    bt_yr = (
+                        yr_df.groupby(type_col)["amount"].sum().reset_index()
+                        .rename(columns={type_col: "type", "amount": "total"})
+                        .sort_values("total", ascending=False)
+                    )
+                    bt_yr["total"] = bt_yr["total"].round(2)
+                    by_type_by_year_filer[str(int(yr))] = bt_yr.to_dict(orient="records")
         else:
             by_type_list = []
+            by_type_by_year_filer = {}
 
         detail = {
             "name": name, "slug": slug,
@@ -731,7 +768,9 @@ def aggregate_filers(
             "top_donors": top_donors_list,
             "top_donors_by_year": top_donors_by_year,
             "top_payees": top_payees_list,
+            "top_payees_by_year": top_payees_by_year,
             "by_contributor_type": by_type_list,
+            "by_contributor_type_by_year": by_type_by_year_filer,
         }
 
         out_path = filers_dir / f"{slug}.json"

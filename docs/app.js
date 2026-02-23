@@ -27,6 +27,66 @@ const PALETTE = [
   "#68d391", "#63b3ed", "#fc8181", "#d6bcfa", "#fbd38d",
 ];
 
+// ── Date-range filter helpers ─────────────────────────────────────────────────
+
+// Returns ["2020","2021",...] for the active date range, or null (= all years).
+function yearsInRange() {
+  const ds = state.dateStart, de = state.dateEnd;
+  if (!ds && !de) return null;
+  const sy = ds ? +ds.slice(0, 4) : 2000;
+  const ey = de ? +de.slice(0, 4) : new Date().getFullYear();
+  const out = [];
+  for (let y = sy; y <= ey; y++) out.push(String(y));
+  return out;
+}
+
+// Filter an array of {month:"YYYY-MM", ...} rows to the active date range.
+function filterMonthRows(rows) {
+  const sm = state.dateStart ? state.dateStart.slice(0, 7) : null;
+  const em = state.dateEnd   ? state.dateEnd.slice(0, 7)   : null;
+  if (!sm && !em) return rows;
+  return rows.filter(r => (!sm || r.month >= sm) && (!em || r.month <= em));
+}
+
+// Merge per-year {name, total} arrays for the given years (null = all).
+function mergeByYear(byYear, years) {
+  const src = years === null ? Object.keys(byYear || {}) : years;
+  const map = new Map();
+  src.forEach(yr => {
+    (byYear[yr] || []).forEach(d => {
+      map.set(d.name, (map.get(d.name) || 0) + d.total);
+    });
+  });
+  return [...map.entries()]
+    .map(([name, total]) => ({ name, total: Math.round(total * 100) / 100 }))
+    .sort((a, b) => b.total - a.total);
+}
+
+// Same as mergeByYear but uses "type" as the key (contributor-type arrays).
+function mergeTypeByYear(byYear, years) {
+  const src = years === null ? Object.keys(byYear || {}) : years;
+  const map = new Map();
+  src.forEach(yr => {
+    (byYear[yr] || []).forEach(d => {
+      map.set(d.type, (map.get(d.type) || 0) + d.total);
+    });
+  });
+  return [...map.entries()]
+    .map(([type, total]) => ({ type, total: Math.round(total * 100) / 100 }))
+    .sort((a, b) => b.total - a.total);
+}
+
+// Sum contributions/expenditures from a (possibly filtered) timeline array.
+function statsFromTimeline(rows) {
+  const totalIn  = rows.reduce((s, r) => s + (r.contributions || 0), 0);
+  const totalOut = rows.reduce((s, r) => s + (r.expenditures  || 0), 0);
+  return {
+    totalIn:    Math.round(totalIn  * 100) / 100,
+    totalOut:   Math.round(totalOut * 100) / 100,
+    cashOnHand: Math.round((totalIn - totalOut) * 100) / 100,
+  };
+}
+
 // ── Global state ─────────────────────────────────────────────────────────────
 const state = { selectedFilers: [], dateStart: "", dateEnd: "" };
 const filerCache = {};   // slug → Promise<filerDetail>
@@ -433,6 +493,9 @@ async function loadOverview() {
       fetchJSON(`${DATA}/by_contributor_type.json`),
     ]);
   }
+  if (!timelineData) {
+    timelineData = await fetchJSON(`${DATA}/timeline.json`);
+  }
 
   document.getElementById("last-updated").textContent = summaryData.last_updated
     ? new Date(summaryData.last_updated).toLocaleString() : "—";
@@ -451,21 +514,44 @@ async function loadOverview() {
 }
 
 function renderOverviewGlobal() {
-  document.getElementById("stat-contributions").textContent = fmt$(summaryData.total_contributions);
-  document.getElementById("stat-expenditures").textContent  = fmt$(summaryData.total_expenditures);
-  const coh = summaryData.total_contributions - summaryData.total_expenditures;
-  document.getElementById("stat-cash-on-hand").textContent  = fmt$(coh);
-  document.getElementById("stat-transactions").textContent  = fmtNum(summaryData.total_transactions);
-  document.getElementById("stat-range").textContent =
-    `${summaryData.date_range_start} – ${summaryData.date_range_end}`;
+  const hasDate = state.dateStart || state.dateEnd;
+  if (hasDate) {
+    const { totalIn, totalOut, cashOnHand } = statsFromTimeline(filterMonthRows(timelineData || []));
+    document.getElementById("stat-contributions").textContent = fmt$(totalIn);
+    document.getElementById("stat-expenditures").textContent  = fmt$(totalOut);
+    document.getElementById("stat-cash-on-hand").textContent  = fmt$(cashOnHand);
+    document.getElementById("stat-transactions").textContent  = "—";
+    document.getElementById("stat-range").textContent =
+      `${state.dateStart || "…"} – ${state.dateEnd || "…"}`;
+  } else {
+    document.getElementById("stat-contributions").textContent = fmt$(summaryData.total_contributions);
+    document.getElementById("stat-expenditures").textContent  = fmt$(summaryData.total_expenditures);
+    const coh = summaryData.total_contributions - summaryData.total_expenditures;
+    document.getElementById("stat-cash-on-hand").textContent  = fmt$(coh);
+    document.getElementById("stat-transactions").textContent  = fmtNum(summaryData.total_transactions);
+    document.getElementById("stat-range").textContent =
+      `${summaryData.date_range_start} – ${summaryData.date_range_end}`;
+  }
 
   document.getElementById("overview-donut-title").textContent = "Contributions by Donor Type";
 
-  if (byTypeDataGlobal && byTypeDataGlobal.length) {
+  // byTypeDataGlobal is now {all_time:[...], by_year:{...}}; handle old flat-array format too
+  const years = yearsInRange();
+  let byTypeRows;
+  if (Array.isArray(byTypeDataGlobal)) {
+    byTypeRows = byTypeDataGlobal; // old cached format — show as-is
+  } else if (byTypeDataGlobal) {
+    byTypeRows = years
+      ? mergeTypeByYear(byTypeDataGlobal.by_year || {}, years)
+      : (byTypeDataGlobal.all_time || []);
+  } else {
+    byTypeRows = [];
+  }
+  if (byTypeRows.length) {
     makeDonutChart(
       "chart-contributor-type",
-      byTypeDataGlobal.map(r => r.type),
-      byTypeDataGlobal.map(r => r.total),
+      byTypeRows.map(r => r.type),
+      byTypeRows.map(r => r.total),
       "Contributor Type",
     );
   }
@@ -474,20 +560,33 @@ function renderOverviewGlobal() {
 }
 
 function renderOverviewSingleFiler(profile) {
-  document.getElementById("stat-contributions").textContent = fmt$(profile.total_in);
-  document.getElementById("stat-expenditures").textContent  = fmt$(profile.total_out);
-  document.getElementById("stat-cash-on-hand").textContent  = fmt$(profile.cash_on_hand);
-  document.getElementById("stat-transactions").textContent  = fmtNum(profile.tran_count);
-  document.getElementById("stat-range").textContent         = profile.name;
+  const hasDate = state.dateStart || state.dateEnd;
+  if (hasDate) {
+    const { totalIn, totalOut, cashOnHand } = statsFromTimeline(filterMonthRows(profile.timeline || []));
+    document.getElementById("stat-contributions").textContent = fmt$(totalIn);
+    document.getElementById("stat-expenditures").textContent  = fmt$(totalOut);
+    document.getElementById("stat-cash-on-hand").textContent  = fmt$(cashOnHand);
+    document.getElementById("stat-transactions").textContent  = "—";
+  } else {
+    document.getElementById("stat-contributions").textContent = fmt$(profile.total_in);
+    document.getElementById("stat-expenditures").textContent  = fmt$(profile.total_out);
+    document.getElementById("stat-cash-on-hand").textContent  = fmt$(profile.cash_on_hand);
+    document.getElementById("stat-transactions").textContent  = fmtNum(profile.tran_count);
+  }
+  document.getElementById("stat-range").textContent = profile.name;
 
   document.getElementById("overview-donut-title").textContent =
     `Contributions by Donor Type — ${profile.name}`;
 
-  if (profile.by_contributor_type && profile.by_contributor_type.length) {
+  const years = yearsInRange();
+  const byTypeRows = years
+    ? mergeTypeByYear(profile.by_contributor_type_by_year || {}, years)
+    : (profile.by_contributor_type || []);
+  if (byTypeRows.length) {
     makeDonutChart(
       "chart-contributor-type",
-      profile.by_contributor_type.map(r => r.type),
-      profile.by_contributor_type.map(r => r.total),
+      byTypeRows.map(r => r.type),
+      byTypeRows.map(r => r.total),
       "Contributor Type",
     );
   }
@@ -505,14 +604,17 @@ function renderOverviewMultiFiler(profiles) {
   document.getElementById("overview-donut-title").textContent =
     "Contributions by Donor Type (Combined)";
 
-  // Merge by_contributor_type across all selected filers
+  const years = yearsInRange();
   const typeMap = new Map();
   profiles.forEach(p => {
-    (p.by_contributor_type || []).forEach(t => {
+    const rows = years
+      ? mergeTypeByYear(p.by_contributor_type_by_year || {}, years)
+      : (p.by_contributor_type || []);
+    rows.forEach(t => {
       typeMap.set(t.type, (typeMap.get(t.type) || 0) + t.total);
     });
   });
-  const merged = Array.from(typeMap.entries())
+  const merged = [...typeMap.entries()]
     .map(([type, total]) => ({ type, total }))
     .sort((a, b) => b.total - a.total);
 
@@ -525,24 +627,33 @@ function renderOverviewMultiFiler(profiles) {
     );
   }
 
-  // Per-filer comparison cards
+  const hasDate = state.dateStart || state.dateEnd;
   const grid = document.getElementById("filer-comparison-grid");
   grid.hidden = false;
-  grid.innerHTML = profiles.map(p => `
+  grid.innerHTML = profiles.map(p => {
+    let totalIn, totalOut, cashOnHand, tranCount;
+    if (hasDate) {
+      ({ totalIn, totalOut, cashOnHand } = statsFromTimeline(filterMonthRows(p.timeline || [])));
+      tranCount = null;
+    } else {
+      totalIn = p.total_in; totalOut = p.total_out;
+      cashOnHand = p.cash_on_hand; tranCount = p.tran_count;
+    }
+    return `
     <div class="filer-card">
       <div class="filer-card-name">${esc(p.name)}</div>
       <div class="filer-card-stats">
         <div class="filer-card-stat-label">Contributions</div>
-        <div class="filer-card-stat-value">${fmt$(p.total_in)}</div>
+        <div class="filer-card-stat-value">${fmt$(totalIn)}</div>
         <div class="filer-card-stat-label">Expenditures</div>
-        <div class="filer-card-stat-value">${fmt$(p.total_out)}</div>
+        <div class="filer-card-stat-value">${fmt$(totalOut)}</div>
         <div class="filer-card-stat-label">Cash on Hand</div>
-        <div class="filer-card-stat-value">${fmt$(p.cash_on_hand)}</div>
+        <div class="filer-card-stat-value">${fmt$(cashOnHand)}</div>
         <div class="filer-card-stat-label">Transactions</div>
-        <div class="filer-card-stat-value">${fmtNum(p.tran_count)}</div>
+        <div class="filer-card-stat-value">${tranCount !== null ? fmtNum(tranCount) : "—"}</div>
       </div>
-    </div>
-  `).join("");
+    </div>`;
+  }).join("");
 }
 
 // ── Donors ────────────────────────────────────────────────────────────────────
@@ -553,14 +664,17 @@ async function loadDonors() {
   }
 
   const n = state.selectedFilers.length;
+  const years = yearsInRange();
 
   if (n === 0) {
-    document.getElementById("donors-global-view").hidden     = false;
-    document.getElementById("donors-multi-view").hidden      = true;
+    document.getElementById("donors-global-view").hidden      = false;
+    document.getElementById("donors-multi-view").hidden       = true;
     document.getElementById("untapped-donors-section").hidden = true;
-    document.getElementById("donors-view-toggle").hidden     = false;
+    document.getElementById("donors-view-toggle").hidden      = false;
 
-    // Year selector — populate once
+    // Hide year selector when date range is active (date range takes precedence)
+    document.getElementById("donor-year-group").hidden = donorsViewMode === "by-year" || !!years;
+
     const sel = document.getElementById("donor-year");
     if (!sel._listenerAttached) {
       Object.keys(donorsData.by_year || {}).sort().reverse().forEach(yr => {
@@ -572,7 +686,6 @@ async function loadDonors() {
       sel._listenerAttached = true;
     }
 
-    // View toggle — wire up once
     const toggleBtns = document.querySelectorAll("#donors-view-toggle .toggle-btn");
     if (!toggleBtns[0]._listenerAttached) {
       toggleBtns.forEach(btn => {
@@ -586,7 +699,7 @@ async function loadDonors() {
       });
     }
 
-    renderGlobalDonorsView();
+    renderGlobalDonorsView(years);
 
   } else if (n === 1) {
     const profile = await loadFilerProfile(state.selectedFilers[0].slug);
@@ -601,30 +714,35 @@ async function loadDonors() {
     document.getElementById("donors-summary-table").hidden  = isByYear;
     document.getElementById("donors-by-year-view").hidden   = !isByYear;
 
-    const allTimeDonors = profile.top_donors || [];
+    // Date-filtered or all-time donor list
+    const allTimeDonors = years
+      ? mergeByYear(profile.top_donors_by_year || {}, years).slice(0, 50)
+      : (profile.top_donors || []);
 
     if (isByYear) {
-      renderDonorsByYear(profile.top_donors_by_year || {}, allTimeDonors);
+      const relevantYears = years || Object.keys(profile.top_donors_by_year || {});
+      const filteredByYear = {};
+      relevantYears.forEach(yr => {
+        if ((profile.top_donors_by_year || {})[yr]) filteredByYear[yr] = profile.top_donors_by_year[yr];
+      });
+      renderDonorsByYear(filteredByYear, allTimeDonors);
     } else {
       const top20 = allTimeDonors.slice(0, 20);
-      makeBarChart(
-        "chart-top-donors",
-        top20.map(r => r.name),
-        top20.map(r => r.total),
-        "Total Contributions",
-        "#3182ce",
-      );
+      makeBarChart("chart-top-donors",
+        top20.map(r => r.name), top20.map(r => r.total),
+        "Total Contributions", "#3182ce");
       buildSortableTable("table-donors", allTimeDonors, [
         { key: "name",  label: "Donor" },
         { key: "total", label: "Total ($)", fmt: fmt$, cls: "num" },
       ]);
     }
 
-    // Untapped donors: global top donors NOT in this filer's donor list
+    // Untapped: global top donors (date-filtered) not in this filer's donor list
+    const globalDonors = years
+      ? mergeByYear(donorsData.by_year || {}, years)
+      : (donorsData.all_time || []);
     const filerDonorNames = new Set(allTimeDonors.map(r => r.name.toLowerCase()));
-    const untapped = (donorsData.all_time || []).filter(
-      r => !filerDonorNames.has(r.name.toLowerCase())
-    );
+    const untapped = globalDonors.filter(r => !filerDonorNames.has(r.name.toLowerCase()));
     buildSortableTable("table-untapped", untapped, [
       { key: "name",  label: "Donor" },
       { key: "total", label: "Global Total ($)", fmt: fmt$, cls: "num" },
@@ -633,31 +751,32 @@ async function loadDonors() {
   } else {
     // Multi-filer: pivot table
     donorsViewMode = "summary";
-    document.getElementById("donors-view-toggle").hidden     = true;
-    document.getElementById("donors-global-view").hidden     = true;
-    document.getElementById("donors-multi-view").hidden      = false;
+    document.getElementById("donors-view-toggle").hidden      = true;
+    document.getElementById("donors-global-view").hidden      = true;
+    document.getElementById("donors-multi-view").hidden       = false;
     document.getElementById("untapped-donors-section").hidden = true;
 
     const profiles = await Promise.all(state.selectedFilers.map(f => loadFilerProfile(f.slug)));
 
-    // Build pivot: donor name → { [filerName]: total }
     const donorMap = new Map();
     profiles.forEach(profile => {
-      (profile.top_donors || []).forEach(d => {
+      const donors = years
+        ? mergeByYear(profile.top_donors_by_year || {}, years).slice(0, 50)
+        : (profile.top_donors || []);
+      donors.forEach(d => {
         if (!donorMap.has(d.name)) donorMap.set(d.name, {});
         donorMap.get(d.name)[profile.name] = d.total;
       });
     });
 
     const filerNames = profiles.map(p => p.name);
-    const pivotRows = Array.from(donorMap.entries())
+    const pivotRows = [...donorMap.entries()]
       .map(([name, byFiler]) => {
         const total = Object.values(byFiler).reduce((s, v) => s + v, 0);
         return { name, ...byFiler, total };
       })
       .sort((a, b) => b.total - a.total);
 
-    // Build thead dynamically
     const thead = document.getElementById("donors-multi-thead");
     thead.innerHTML = `<tr>
       <th>#</th>
@@ -679,15 +798,30 @@ async function loadDonors() {
   }
 }
 
-function renderGlobalDonorsView() {
+function renderGlobalDonorsView(years) {
   const isByYear = donorsViewMode === "by-year";
-  document.getElementById("donor-year-group").hidden    = isByYear;
+  document.getElementById("donor-year-group").hidden    = isByYear || !!years;
   document.getElementById("donors-chart-box").hidden    = isByYear;
   document.getElementById("donors-summary-table").hidden = isByYear;
   document.getElementById("donors-by-year-view").hidden = !isByYear;
 
   if (isByYear) {
-    renderDonorsByYear(donorsData.by_year, donorsData.all_time);
+    const relevantYears = years || Object.keys(donorsData.by_year || {});
+    const filteredByYear = {};
+    relevantYears.forEach(yr => {
+      if (donorsData.by_year[yr]) filteredByYear[yr] = donorsData.by_year[yr];
+    });
+    renderDonorsByYear(filteredByYear, mergeByYear(donorsData.by_year, years));
+  } else if (years) {
+    const rows  = mergeByYear(donorsData.by_year, years);
+    const top20 = rows.slice(0, 20);
+    makeBarChart("chart-top-donors",
+      top20.map(r => r.name), top20.map(r => r.total),
+      "Total Contributions", "#3182ce");
+    buildSortableTable("table-donors", rows, [
+      { key: "name",  label: "Donor" },
+      { key: "total", label: "Total ($)", fmt: fmt$, cls: "num" },
+    ]);
   } else {
     const sel = document.getElementById("donor-year");
     renderDonors(sel.value || "all");
@@ -788,10 +922,14 @@ async function loadRecipients() {
   const chartTitle = document.getElementById("recipients-chart-title");
   const tableTitle = document.getElementById("recipients-table-title");
   const n = state.selectedFilers.length;
+  const years = yearsInRange();
 
   if (n === 0) {
     chartTitle.textContent = "Top 20 Recipients (by Contributions Received)";
     tableTitle.textContent = "Top 100 Recipients";
+
+    // Hide year selector when date range is active
+    document.getElementById("recipient-year-group").hidden = !!years;
 
     const sel = document.getElementById("recipient-year");
     if (!sel._listenerAttached) {
@@ -801,22 +939,33 @@ async function loadRecipients() {
       sel.addEventListener("change", () => renderRecipients(sel.value));
       sel._listenerAttached = true;
     }
-    renderRecipients(sel.value || "all");
+
+    if (years) {
+      const rows  = mergeByYear(recipientsData.by_year, years);
+      const top20 = rows.slice(0, 20);
+      makeBarChart("chart-top-recipients",
+        top20.map(r => r.name), top20.map(r => r.total),
+        "Total Received", "#38a169");
+      buildSortableTable("table-recipients", rows, [
+        { key: "name",  label: "Committee / Candidate" },
+        { key: "total", label: "Total Received ($)", fmt: fmt$, cls: "num" },
+      ]);
+    } else {
+      renderRecipients(sel.value || "all");
+    }
 
   } else {
     const profile = await loadFilerProfile(state.selectedFilers[0].slug);
     chartTitle.textContent = `Top Spending by ${profile.name}`;
     tableTitle.textContent = `Top Spending by ${profile.name}`;
 
-    const rows  = profile.top_payees || [];
+    const rows = years
+      ? mergeByYear(profile.top_payees_by_year || {}, years).slice(0, 50)
+      : (profile.top_payees || []);
     const top20 = rows.slice(0, 20);
-    makeBarChart(
-      "chart-top-recipients",
-      top20.map(r => r.name),
-      top20.map(r => r.total),
-      "Expenditures",
-      "#dd6b20",
-    );
+    makeBarChart("chart-top-recipients",
+      top20.map(r => r.name), top20.map(r => r.total),
+      "Expenditures", "#dd6b20");
     buildSortableTable("table-recipients", rows, [
       { key: "name",  label: "Payee" },
       { key: "total", label: "Total Paid ($)", fmt: fmt$, cls: "num" },
@@ -852,12 +1001,16 @@ async function loadTimeline() {
   }
 
   const n = state.selectedFilers.length;
+  const hasDate = state.dateStart || state.dateEnd;
 
   if (n === 0) {
+    // Hide year filter when date range is active
+    document.getElementById("timeline-year-group").hidden = !!hasDate;
+
     const sel = document.getElementById("timeline-year");
     if (!sel._listenerAttached) {
-      const years = [...new Set(timelineData.map(r => r.month.slice(0, 4)))].sort();
-      years.forEach(yr => sel.insertAdjacentHTML("beforeend", `<option value="${yr}">${yr}</option>`));
+      const allYears = [...new Set(timelineData.map(r => r.month.slice(0, 4)))].sort();
+      allYears.forEach(yr => sel.insertAdjacentHTML("beforeend", `<option value="${yr}">${yr}</option>`));
       sel.addEventListener("change", () => renderTimeline(sel.value));
       sel._listenerAttached = true;
     }
@@ -870,9 +1023,15 @@ async function loadTimeline() {
 }
 
 function renderTimeline(year) {
-  const rows = year === "all"
-    ? timelineData
-    : timelineData.filter(r => r.month.startsWith(year));
+  // Date range takes precedence over year dropdown
+  let rows;
+  if (state.dateStart || state.dateEnd) {
+    rows = filterMonthRows(timelineData);
+  } else {
+    rows = year === "all"
+      ? timelineData
+      : timelineData.filter(r => r.month.startsWith(year));
+  }
 
   makeLineChart(
     "chart-timeline",
@@ -901,10 +1060,12 @@ function renderTimeline(year) {
 }
 
 function renderTimelineMultiFiler(profiles) {
-  // Union of all months across profiles
+  // Union of all months across profiles, filtered to date range
   const monthSet = new Set();
   profiles.forEach(p => (p.timeline || []).forEach(t => monthSet.add(t.month)));
-  const months = Array.from(monthSet).sort();
+  const sm = state.dateStart ? state.dateStart.slice(0, 7) : null;
+  const em = state.dateEnd   ? state.dateEnd.slice(0, 7)   : null;
+  const months = [...monthSet].sort().filter(m => (!sm || m >= sm) && (!em || m <= em));
 
   const datasets = [];
   profiles.forEach((profile, idx) => {

@@ -168,8 +168,10 @@
   <!-- ══════════════════════════ RECIPIENTS ══════════════════════════ -->
   <section id="tab-recipients" class="tab-panel" hidden>
     <div class="controls-bar">
-      <label for="recipient-year">Year:</label>
-      <select id="recipient-year"><option value="all">All time</option></select>
+      <span id="recipient-year-group">
+        <label for="recipient-year">Year:</label>
+        <select id="recipient-year"><option value="all">All time</option></select>
+      </span>
     </div>
 
     <div class="chart-box full-width">
@@ -194,7 +196,7 @@
 
   <!-- ══════════════════════════ TIMELINE ══════════════════════════ -->
   <section id="tab-timeline" class="tab-panel" hidden>
-    <div class="controls-bar">
+    <div class="controls-bar" id="timeline-year-group">
       <label for="timeline-year">Filter year:</label>
       <select id="timeline-year"><option value="all">All years</option></select>
     </div>
