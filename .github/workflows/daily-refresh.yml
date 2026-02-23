@@ -49,9 +49,10 @@ jobs:
           mkdir -p docs/data/aggregated
           cp -r data/aggregated/. docs/data/aggregated/
           git add data/ docs/data/
+          git restore --staged data/fetched_windows.json  # not needed for incremental; avoids merge conflicts
           git diff --cached --quiet || git commit -m "chore: daily data refresh $(date -u +%Y-%m-%d)"
           for attempt in 1 2 3 4 5; do
-            git pull --rebase && git push && break
+            git pull --rebase -X ours && git push && break
             echo "Push attempt $attempt failed, retrying in $((attempt * 15))s..."
             sleep $((attempt * 15))
           done

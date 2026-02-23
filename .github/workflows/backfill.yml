@@ -55,7 +55,7 @@ jobs:
           git add data/ docs/data/
           git diff --cached --quiet || git commit -m "chore: historical backfill from ${{ inputs.start_year }}"
           for attempt in 1 2 3 4 5; do
-            git pull --rebase && git push && break
+            git pull --rebase -X ours && git push && break
             echo "Push attempt $attempt failed, retrying in $((attempt * 15))s..."
             sleep $((attempt * 15))
           done
