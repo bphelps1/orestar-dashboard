@@ -24,6 +24,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import requests
+from openpyxl import load_workbook
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
 # ---------------------------------------------------------------------------
@@ -49,6 +50,11 @@ PAGE_RENDER_WAIT = 7
 
 # Polite pause between downloads
 REQUEST_DELAY = 1.5
+
+# ORESTAR truncates Excel exports at this many data rows.  Any downloaded file
+# with exactly this many rows is treated as capped and the window is split into
+# two halves so both halves can be fetched independently.
+ORESTAR_ROW_CAP = 4999
 
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -322,9 +328,46 @@ def _fetch_range(start: date, end: date) -> None:
 
             log.info("[%d/%d] %s  %s → %s", i + 1, total, tran_type, w_start, w_end)
             try:
-                download_week(page, context, w_start, w_end, tran_type, RAW_DIR)
-                i += 1
+                result = download_week(page, context, w_start, w_end, tran_type, RAW_DIR)
                 consecutive_restarts = 0
+
+                # ── Check for ORESTAR row-cap truncation ─────────────────────
+                span_days = (w_end - w_start).days
+                cap_hit = False
+                if result is not None and result.exists() and span_days > 0:
+                    try:
+                        wb = load_workbook(result, read_only=True)
+                        file_rows = wb.active.max_row  # includes header row
+                        wb.close()
+                        if file_rows is not None and file_rows - 1 >= ORESTAR_ROW_CAP:
+                            cap_hit = True
+                    except Exception:
+                        pass
+
+                if cap_hit:
+                    half = span_days // 2
+                    mid  = w_start + timedelta(days=half)
+                    log.warning(
+                        "ORESTAR cap hit for %s %s→%s — splitting at %s",
+                        tran_type, w_start, w_end, mid,
+                    )
+                    sub1 = (tran_type, w_start, mid)
+                    sub2 = (tran_type, mid + timedelta(days=1), w_end)
+                    ins = i + 1
+                    for sub in (sub1, sub2):
+                        sub_key = (sub[0], str(sub[1]), str(sub[2]))
+                        if sub_key not in fetched:
+                            tasks.insert(ins, sub)
+                            total += 1
+                            ins += 1
+                    # Mark original window done (its 4999 rows are valid; sub-windows
+                    # will fetch the remainder and process.py deduplicates by tran_id)
+                    fetched.add(key)
+                    _save_fetched(fetched)
+                    i += 1
+                    continue
+
+                i += 1
                 # Record as fetched (file saved OR empty results — both are "done")
                 fetched.add(key)
                 _save_fetched(fetched)
