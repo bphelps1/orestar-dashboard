@@ -337,9 +337,15 @@ def _fetch_range(start: date, end: date) -> None:
                 if result is not None and result.exists() and span_days > 0:
                     try:
                         wb = load_workbook(result, read_only=True)
-                        file_rows = wb.active.max_row  # includes header row
+                        # max_row returns None for ORESTAR xlsx files (no dimension metadata);
+                        # iterate rows to get an accurate count.  Stop early once we confirm cap.
+                        row_count = 0
+                        for _ in wb.active.rows:
+                            row_count += 1
+                            if row_count > ORESTAR_ROW_CAP + 1:
+                                break
                         wb.close()
-                        if file_rows is not None and file_rows - 1 >= ORESTAR_ROW_CAP:
+                        if row_count - 1 >= ORESTAR_ROW_CAP:  # subtract header row
                             cap_hit = True
                     except Exception:
                         pass
