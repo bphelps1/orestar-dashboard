@@ -336,15 +336,27 @@ def _fetch_range(start: date, end: date) -> None:
                 cap_hit = False
                 if result is not None and result.exists() and span_days > 0:
                     try:
-                        wb = load_workbook(result, read_only=True)
-                        # max_row returns None for ORESTAR xlsx files (no dimension metadata);
-                        # iterate rows to get an accurate count.  Stop early once we confirm cap.
-                        row_count = 0
-                        for _ in wb.active.rows:
-                            row_count += 1
-                            if row_count > ORESTAR_ROW_CAP + 1:
-                                break
-                        wb.close()
+                        # ORESTAR exports the old OLE2 .xls binary format even when saved
+                        # with a .xlsx extension — openpyxl silently fails on these files.
+                        # Detect the real format from magic bytes and use the right reader.
+                        _hdr = result.read_bytes()[:4]
+                        _XLS  = b"\xd0\xcf\x11\xe0"   # OLE2 — must use xlrd
+                        _XLSX = b"PK\x03\x04"          # ZIP  — use openpyxl
+                        if _hdr == _XLS:
+                            import xlrd as _xlrd
+                            _wb = _xlrd.open_workbook(str(result), on_demand=True)
+                            row_count = _wb.sheet_by_index(0).nrows  # includes header
+                            _wb.release_resources()
+                        elif _hdr[:4] == _XLSX:
+                            wb = load_workbook(result, read_only=True)
+                            row_count = 0
+                            for _ in wb.active.rows:
+                                row_count += 1
+                                if row_count > ORESTAR_ROW_CAP + 1:
+                                    break
+                            wb.close()
+                        else:
+                            row_count = 0
                         if row_count - 1 >= ORESTAR_ROW_CAP:  # subtract header row
                             cap_hit = True
                     except Exception:
