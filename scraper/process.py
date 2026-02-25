@@ -328,10 +328,11 @@ def load_excel_files(raw_dir: Path) -> pd.DataFrame:
             # Rename to internal names
             df = df.rename(columns={k: v for k, v in COL_MAP.items() if k in df.columns})
             df["_source_file"] = f.name
-            # Derive tran_type from filename: C_2026-... → "C", E_2026-... → "E"
+            # Derive tran_type from filename prefix: C_2026-...→"C", OR_2026-...→"OR"
             # ORESTAR does not include a transaction type column in the export.
-            first_char = f.stem[0].upper()
-            df["tran_type"] = first_char if first_char in ("C", "E") else ""
+            _valid_types = {"C", "E", "O", "OA", "OD", "OR"}
+            _prefix = f.stem.split("_")[0].upper()
+            df["tran_type"] = _prefix if _prefix in _valid_types else ""
             frames.append(df)
         except Exception as exc:
             log.warning("Failed to read %s: %s", f.name, exc)
@@ -477,8 +478,11 @@ def aggregate(df: pd.DataFrame) -> None:
     contrib_col = "contributor_payee_canonical" if "contributor_payee_canonical" in df.columns else "contributor_payee"
     filer_col   = "filer_canonical" if "filer_canonical" in df.columns else "filer"
 
-    contributions = df[df["tran_type"].str.strip().str.upper() == "C"]
-    expenditures  = df[df["tran_type"].str.strip().str.upper() == "E"]
+    ttype = df["tran_type"].str.strip().str.upper()
+    contributions   = df[ttype == "C"]
+    expenditures    = df[ttype == "E"]
+    other_receipts  = df[ttype.isin({"OR", "O", "OA"})]   # Other Receipt, Other, Other AR
+    other_disburse  = df[ttype == "OD"]                    # Other Disbursement
 
     # Separate cash contributions from in-kind (forgiven expenditures, etc.)
     inkind_mask     = contributions["sub_type"].str.contains("In-Kind", case=False, na=False)
@@ -490,6 +494,8 @@ def aggregate(df: pd.DataFrame) -> None:
         "total_contributions":  round(cash_contribs["amount"].sum(), 2),
         "total_inkind":         round(inkind_contribs["amount"].sum(), 2),
         "total_expenditures":   round(expenditures["amount"].sum(), 2),
+        "total_other_receipts":  round(other_receipts["amount"].sum(), 2),
+        "total_other_disburse":  round(other_disburse["amount"].sum(), 2),
         "total_transactions":   int(len(df)),
         "num_contributions":    int(len(cash_contribs)),
         "num_inkind":           int(len(inkind_contribs)),
@@ -625,16 +631,19 @@ def aggregate(df: pd.DataFrame) -> None:
     _write_json("recent_transactions.json", recent.to_dict(orient="records"))
 
     # ── per-filer index + detail files ───────────────────────────────────────
-    aggregate_filers(df, cash_contribs, inkind_contribs, expenditures, filer_col, contrib_col)
+    aggregate_filers(df, cash_contribs, inkind_contribs, expenditures,
+                     other_receipts, other_disburse, filer_col, contrib_col)
 
     log.info("Aggregation complete. JSON files written to %s", AGG_DIR)
 
 
 def aggregate_filers(
     df: pd.DataFrame,
-    contributions: pd.DataFrame,   # cash contributions only
+    contributions: pd.DataFrame,   # cash contributions only (C type, non-inkind)
     inkind_contribs: pd.DataFrame,
-    expenditures: pd.DataFrame,
+    expenditures: pd.DataFrame,    # E type
+    other_receipts: pd.DataFrame,  # OR/O/OA type (e.g. Return/Refund, Misc Receipt)
+    other_disburse: pd.DataFrame,  # OD type (e.g. Misc Other Disbursement)
     filer_col: str,
     contrib_col: str,
 ) -> None:
@@ -664,10 +673,12 @@ def aggregate_filers(
         filer_slugs[name] = slug
 
     # ── Pre-group for performance ─────────────────────────────────────────────
-    contrib_groups = contributions.groupby(filer_col)
-    inkind_groups  = inkind_contribs.groupby(filer_col)
-    expend_groups  = expenditures.groupby(filer_col)
-    all_groups     = df.groupby(filer_col)
+    contrib_groups  = contributions.groupby(filer_col)
+    inkind_groups   = inkind_contribs.groupby(filer_col)
+    expend_groups   = expenditures.groupby(filer_col)
+    or_groups       = other_receipts.groupby(filer_col)
+    od_groups       = other_disburse.groupby(filer_col)
+    all_groups      = df.groupby(filer_col)
 
     def get_group(groups, name):
         return groups.get_group(name) if name in groups.groups else pd.DataFrame()
@@ -686,13 +697,19 @@ def aggregate_filers(
         filer_contrib = get_group(contrib_groups, name)
         filer_inkind  = get_group(inkind_groups,  name)
         filer_expend  = get_group(expend_groups,  name)
+        filer_or      = get_group(or_groups,      name)
+        filer_od      = get_group(od_groups,      name)
         filer_all     = get_group(all_groups,     name)
 
-        total_in     = round(float(filer_contrib["amount"].sum()) if not filer_contrib.empty else 0.0, 2)
-        total_inkind = round(float(filer_inkind["amount"].sum())  if not filer_inkind.empty  else 0.0, 2)
-        total_out    = round(float(filer_expend["amount"].sum())  if not filer_expend.empty  else 0.0, 2)
-        cash_on_hand = round(total_in - total_out, 2)
-        tran_count   = int(len(filer_all))
+        total_in      = round(float(filer_contrib["amount"].sum()) if not filer_contrib.empty else 0.0, 2)
+        total_inkind  = round(float(filer_inkind["amount"].sum())  if not filer_inkind.empty  else 0.0, 2)
+        total_out     = round(float(filer_expend["amount"].sum())  if not filer_expend.empty  else 0.0, 2)
+        total_or      = round(float(filer_or["amount"].sum())      if not filer_or.empty      else 0.0, 2)
+        total_od      = round(float(filer_od["amount"].sum())      if not filer_od.empty      else 0.0, 2)
+        # cash_on_hand: contributions received minus expenditures made.
+        # Other Receipts (OR) add to cash; Other Disbursements (OD) reduce it.
+        cash_on_hand  = round(total_in + total_or - total_out - total_od, 2)
+        tran_count    = int(len(filer_all))
 
         # Timeline
         c_monthly = monthly_sum(filer_contrib, "contributions")
@@ -787,6 +804,7 @@ def aggregate_filers(
             "name": name, "slug": slug,
             "total_in": total_in, "total_inkind": total_inkind,
             "total_out": total_out,
+            "total_or": total_or, "total_od": total_od,
             "cash_on_hand": cash_on_hand, "tran_count": tran_count,
             "timeline": timeline,
             "top_donors": top_donors_list,

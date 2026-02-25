@@ -43,7 +43,12 @@ RAW_DIR = Path(__file__).parent.parent / "data" / "_raw"
 # Tracks which windows have been successfully fetched across runs (committed to git)
 FETCHED_LOG = RAW_DIR.parent / "fetched_windows.json"
 
-TRAN_TYPES = ["C", "E"]   # C = Contribution, E = Expenditure
+TRAN_TYPES = ["C", "E", "O", "OA", "OD", "OR"]
+# C  = Contribution,          E  = Expenditure
+# O  = Other,                 OA = Other Account Receivable
+# OD = Other Disbursement,    OR = Other Receipt
+# (OR: Return/Refund of Contribution, Refunds & Rebates, Misc Other Receipt
+#  OD: Misc Other Disbursement, Refunds & Rebates)
 
 # Time (seconds) to wait after page.goto() for F5 JS challenge + app to render
 PAGE_RENDER_WAIT = 7
