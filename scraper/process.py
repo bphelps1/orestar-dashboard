@@ -701,14 +701,18 @@ def aggregate_filers(
         filer_od      = get_group(od_groups,      name)
         filer_all     = get_group(all_groups,     name)
 
-        total_in      = round(float(filer_contrib["amount"].sum()) if not filer_contrib.empty else 0.0, 2)
-        total_inkind  = round(float(filer_inkind["amount"].sum())  if not filer_inkind.empty  else 0.0, 2)
-        total_out     = round(float(filer_expend["amount"].sum())  if not filer_expend.empty  else 0.0, 2)
-        total_or      = round(float(filer_or["amount"].sum())      if not filer_or.empty      else 0.0, 2)
-        total_od      = round(float(filer_od["amount"].sum())      if not filer_od.empty      else 0.0, 2)
-        # cash_on_hand: contributions received minus expenditures made.
-        # Other Receipts (OR) add to cash; Other Disbursements (OD) reduce it.
-        cash_on_hand  = round(total_in + total_or - total_out - total_od, 2)
+        # total_in/total_out: strict "Cash Contribution" / "Cash Expenditure" sub_type only
+        _cash_contrib   = filer_contrib[filer_contrib["sub_type"] == "Cash Contribution"] if not filer_contrib.empty else filer_contrib
+        _cash_expend    = filer_expend[filer_expend["sub_type"] == "Cash Expenditure"]    if not filer_expend.empty  else filer_expend
+        total_in        = round(float(_cash_contrib["amount"].sum()) if not _cash_contrib.empty else 0.0, 2)
+        total_inkind    = round(float(filer_inkind["amount"].sum())  if not filer_inkind.empty  else 0.0, 2)
+        total_out       = round(float(_cash_expend["amount"].sum())  if not _cash_expend.empty  else 0.0, 2)
+        total_or        = round(float(filer_or["amount"].sum())      if not filer_or.empty      else 0.0, 2)
+        total_od        = round(float(filer_od["amount"].sum())      if not filer_od.empty      else 0.0, 2)
+        # cash_on_hand uses full C/E totals so loans, personal expenditures, etc. are included
+        _total_in_full  = round(float(filer_contrib["amount"].sum()) if not filer_contrib.empty else 0.0, 2)
+        _total_out_full = round(float(filer_expend["amount"].sum())  if not filer_expend.empty  else 0.0, 2)
+        cash_on_hand    = round(_total_in_full + total_or - _total_out_full - total_od, 2)
         tran_count    = int(len(filer_all))
 
         # Timeline
