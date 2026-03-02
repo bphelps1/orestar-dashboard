@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   backfill:
@@ -59,3 +60,17 @@ jobs:
             echo "Push attempt $attempt failed, retrying in $((attempt * 15))s..."
             sleep $((attempt * 15))
           done
+
+      - name: Re-trigger if backfill incomplete
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          remaining=$(python scraper/fetch.py --mode=count-remaining --start-year=${{ inputs.start_year }})
+          echo "Remaining unfetched windows: $remaining"
+          if [ "$remaining" -gt 0 ]; then
+            echo "Re-triggering backfill workflow..."
+            gh workflow run backfill.yml --ref main -f start_year=${{ inputs.start_year }}
+          else
+            echo "Backfill complete — all windows fetched."
+          fi

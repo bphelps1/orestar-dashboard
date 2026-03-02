@@ -442,6 +442,22 @@ def run_test(days: int = 7) -> None:
     _fetch_range(start, today)
 
 
+def count_remaining(start_year: int = 2017) -> int:
+    """
+    Count standard 7-day windows not yet in fetched_windows.json.
+    Prints the count to stdout and returns it.
+    Used by the backfill workflow to decide whether to re-trigger itself.
+    """
+    start = date(start_year, 1, 1)
+    today = date.today()
+    windows = list(week_windows(start, today))
+    tasks = [(tt, str(ws), str(we)) for tt in TRAN_TYPES for ws, we in windows]
+    fetched = _load_fetched()
+    remaining = sum(1 for key in tasks if key not in fetched)
+    print(remaining)
+    return remaining
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -452,7 +468,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--mode",
-        choices=["incremental", "backfill", "test"],
+        choices=["incremental", "backfill", "test", "count-remaining"],
         default="incremental",
     )
     parser.add_argument("--days",       type=int, default=14,   dest="days")
@@ -465,6 +481,8 @@ def main() -> None:
         run_backfill(start_year=args.start_year)
     elif args.mode == "test":
         run_test(days=args.days)
+    elif args.mode == "count-remaining":
+        count_remaining(start_year=args.start_year)
 
 
 if __name__ == "__main__":
