@@ -471,8 +471,16 @@ def aggregate(df: pd.DataFrame) -> None:
     df["amount"] = df["amount"].apply(to_float)
     df["filed_date"] = pd.to_datetime(df["filed_date"], errors="coerce")
     df = df.dropna(subset=["filed_date"])
-    df["year"]  = df["filed_date"].dt.year.astype(int)
-    df["month"] = df["filed_date"].dt.to_period("M").astype(str)
+
+    # Use tran_date for year/month groupings (matches ORESTAR Account Summary);
+    # fall back to filed_date for records where tran_date is missing.
+    if "tran_date" in df.columns:
+        _tran_date = pd.to_datetime(df["tran_date"], errors="coerce")
+        _eff_date  = _tran_date.where(_tran_date.notna(), df["filed_date"])
+    else:
+        _eff_date = df["filed_date"]
+    df["year"]  = _eff_date.dt.year.astype(int)
+    df["month"] = _eff_date.dt.to_period("M").astype(str)
 
     # Use canonical names if available, fall back to raw
     contrib_col = "contributor_payee_canonical" if "contributor_payee_canonical" in df.columns else "contributor_payee"
