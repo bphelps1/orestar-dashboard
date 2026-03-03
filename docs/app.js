@@ -672,9 +672,6 @@ function renderOverviewGlobal() {
   const coh = summaryData.total_contributions - summaryData.total_expenditures;
   document.getElementById("stat-cash-on-hand").textContent  = fmt$(coh);
   document.getElementById("stat-transactions").textContent  = fmtNum(summaryData.total_transactions);
-  document.getElementById("stat-range").textContent =
-    `${summaryData.date_range_start} – ${summaryData.date_range_end}`;
-
   document.getElementById("stat-cards").hidden             = false;
   document.getElementById("filer-comparison-grid").hidden  = true;
   document.getElementById("overview-donut-box").hidden     = false;
@@ -716,8 +713,6 @@ function renderOverviewSingleFiler(profile) {
   document.getElementById("stat-expenditures").textContent  = fmt$(profile.total_out);
   document.getElementById("stat-cash-on-hand").textContent  = fmt$(profile.cash_on_hand);
   document.getElementById("stat-transactions").textContent  = fmtNum(profile.tran_count);
-  document.getElementById("stat-range").textContent         = profile.name;
-
   document.getElementById("stat-cards").hidden             = false;
   document.getElementById("filer-comparison-grid").hidden  = true;
   document.getElementById("overview-donut-box").hidden     = false;
