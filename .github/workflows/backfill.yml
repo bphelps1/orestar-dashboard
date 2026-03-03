@@ -4,9 +4,19 @@ on:
   workflow_dispatch:
     inputs:
       start_year:
-        description: "Start year for backfill (e.g. 2017)"
+        description: "Start year for backfill"
         required: false
-        default: "2017"
+        default: "2006"
+        type: string
+      end_year:
+        description: "End year for backfill (blank = current year)"
+        required: false
+        default: ""
+        type: string
+      date_field:
+        description: "Date field to search by: 'filed' (default) or 'tran' (transaction date, needed for pre-2017 data)"
+        required: false
+        default: "tran"
         type: string
 
 permissions:
@@ -40,8 +50,13 @@ jobs:
       - name: Install Xvfb (virtual display for headed browser)
         run: sudo apt-get install -y xvfb
 
-      - name: Backfill ORESTAR data from ${{ inputs.start_year }}
-        run: xvfb-run --auto-servernum python scraper/fetch.py --mode=backfill --start-year=${{ inputs.start_year }}
+      - name: Backfill ORESTAR data
+        run: |
+          ARGS="--mode=backfill --start-year=${{ inputs.start_year }} --date-field=${{ inputs.date_field }}"
+          if [ -n "${{ inputs.end_year }}" ]; then
+            ARGS="$ARGS --end-year=${{ inputs.end_year }}"
+          fi
+          xvfb-run --auto-servernum python scraper/fetch.py $ARGS
 
       - name: Process and aggregate data
         run: python scraper/process.py
@@ -54,7 +69,7 @@ jobs:
           mkdir -p docs/data/aggregated
           cp -r data/aggregated/. docs/data/aggregated/
           git add data/ docs/data/
-          git diff --cached --quiet || git commit -m "chore: historical backfill from ${{ inputs.start_year }}"
+          git diff --cached --quiet || git commit -m "chore: backfill ${{ inputs.date_field }}-date ${{ inputs.start_year }}–${{ inputs.end_year || 'now' }}"
           for attempt in 1 2 3 4 5; do
             git pull --rebase -X ours && git push && break
             echo "Push attempt $attempt failed, retrying in $((attempt * 15))s..."
@@ -66,11 +81,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          remaining=$(python scraper/fetch.py --mode=count-remaining --start-year=${{ inputs.start_year }})
+          ARGS="--mode=count-remaining --start-year=${{ inputs.start_year }} --date-field=${{ inputs.date_field }}"
+          if [ -n "${{ inputs.end_year }}" ]; then
+            ARGS="$ARGS --end-year=${{ inputs.end_year }}"
+          fi
+          remaining=$(python scraper/fetch.py $ARGS)
           echo "Remaining unfetched windows: $remaining"
           if [ "$remaining" -gt 0 ]; then
             echo "Re-triggering backfill workflow..."
-            gh workflow run backfill.yml --ref main -f start_year=${{ inputs.start_year }}
+            RETRIGGER_ARGS="-f start_year=${{ inputs.start_year }} -f date_field=${{ inputs.date_field }}"
+            if [ -n "${{ inputs.end_year }}" ]; then
+              RETRIGGER_ARGS="$RETRIGGER_ARGS -f end_year=${{ inputs.end_year }}"
+            fi
+            gh workflow run backfill.yml --ref main $RETRIGGER_ARGS
           else
             echo "Backfill complete — all windows fetched."
           fi

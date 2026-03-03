@@ -41,7 +41,10 @@ RESULTS_URL_PATTERN = "**/gotoPublicTransactionSearchResults**"
 RAW_DIR = Path(__file__).parent.parent / "data" / "_raw"
 
 # Tracks which windows have been successfully fetched across runs (committed to git)
-FETCHED_LOG = RAW_DIR.parent / "fetched_windows.json"
+# Two separate logs: one per date-field mode so filed-date and tran-date searches
+# don't share state (different searches, different result sets).
+FETCHED_LOG     = RAW_DIR.parent / "fetched_windows.json"       # filed-date mode
+FETCHED_LOG_TRN = RAW_DIR.parent / "fetched_windows_tran.json"  # tran-date mode
 
 TRAN_TYPES = ["C", "E", "O", "OA", "OD", "OR"]
 # C  = Contribution,          E  = Expenditure
@@ -153,6 +156,7 @@ def download_week(
     end: date,
     tran_type: str,
     raw_dir: Path,
+    date_field: str = "filed",
 ) -> Path | None:
     """
     Fill the ORESTAR search form for one week + transaction type,
@@ -174,15 +178,13 @@ def download_week(
         page.select_option('select[name="cneSearchTranType"]', tran_type)
         page.wait_for_timeout(600)  # brief wait for any dynamic field updates
 
-        # Filed date range (MM/DD/YYYY)
-        page.fill(
-            'input[name="cneSearchTranFiledStartDate"]',
-            start.strftime("%m/%d/%Y"),
-        )
-        page.fill(
-            'input[name="cneSearchTranFiledEndDate"]',
-            end.strftime("%m/%d/%Y"),
-        )
+        # Date range (MM/DD/YYYY) — filed date or transaction date depending on mode
+        if date_field == "tran":
+            page.fill('input[name="cneSearchTranStartDate"]',     start.strftime("%m/%d/%Y"))
+            page.fill('input[name="cneSearchTranEndDate"]',        end.strftime("%m/%d/%Y"))
+        else:
+            page.fill('input[name="cneSearchTranFiledStartDate"]', start.strftime("%m/%d/%Y"))
+            page.fill('input[name="cneSearchTranFiledEndDate"]',   end.strftime("%m/%d/%Y"))
 
         # ── Submit search ─────────────────────────────────────────────────────
         page.click('input[name="search"]')
@@ -284,39 +286,43 @@ def week_windows(start: date, end: date):
         cur += timedelta(days=7)
 
 
-def _load_fetched() -> set:
+def _load_fetched(log_file: Path = FETCHED_LOG) -> set:
     """Load the set of already-fetched (tran_type, start, end) keys from disk."""
-    if FETCHED_LOG.exists():
+    if log_file.exists():
         try:
-            with open(FETCHED_LOG) as f:
+            with open(log_file) as f:
                 return {tuple(x) for x in json.load(f)}
         except Exception:
             return set()
     return set()
 
 
-def _save_fetched(fetched: set) -> None:
+def _save_fetched(fetched: set, log_file: Path = FETCHED_LOG) -> None:
     """Persist the fetched-windows set to disk immediately."""
-    FETCHED_LOG.parent.mkdir(parents=True, exist_ok=True)
-    with open(FETCHED_LOG, "w") as f:
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(log_file, "w") as f:
         json.dump(sorted([list(x) for x in fetched]), f, indent=2)
 
 
-def _fetch_range(start: date, end: date) -> None:
+def _fetch_range(start: date, end: date, date_field: str = "filed") -> None:
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     windows = list(week_windows(start, end))
     tasks   = [(tt, ws, we) for tt in TRAN_TYPES for ws, we in windows]
     total   = len(tasks)
-    log.info("Fetching %d windows × %d types = %d downloads", len(windows), len(TRAN_TYPES), total)
+    log.info(
+        "Fetching %d windows × %d types = %d downloads (date_field=%s)",
+        len(windows), len(TRAN_TYPES), total, date_field,
+    )
 
     # Windows recorded here are skipped on every run — they have already been
     # fetched, processed, and committed to git in a previous run.  This is the
     # key mechanism that lets us make progress across runs despite F5 rate-limiting
     # each runner IP after ~25 requests.
-    fetched = _load_fetched()
+    log_file = FETCHED_LOG_TRN if date_field == "tran" else FETCHED_LOG
+    fetched = _load_fetched(log_file)
     skipped = sum(1 for tt, ws, we in tasks if (tt, str(ws), str(we)) in fetched)
     if skipped:
-        log.info("Skipping %d already-fetched windows (recorded in %s)", skipped, FETCHED_LOG.name)
+        log.info("Skipping %d already-fetched windows (recorded in %s)", skipped, log_file.name)
 
     with sync_playwright() as p:
         browser, context, page = setup_browser(p)
@@ -333,7 +339,7 @@ def _fetch_range(start: date, end: date) -> None:
 
             log.info("[%d/%d] %s  %s → %s", i + 1, total, tran_type, w_start, w_end)
             try:
-                result = download_week(page, context, w_start, w_end, tran_type, RAW_DIR)
+                result = download_week(page, context, w_start, w_end, tran_type, RAW_DIR, date_field)
                 consecutive_restarts = 0
 
                 # ── Check for ORESTAR row-cap truncation ─────────────────────
@@ -386,14 +392,14 @@ def _fetch_range(start: date, end: date) -> None:
                     # Mark original window done (its 4999 rows are valid; sub-windows
                     # will fetch the remainder and process.py deduplicates by tran_id)
                     fetched.add(key)
-                    _save_fetched(fetched)
+                    _save_fetched(fetched, log_file)
                     i += 1
                     continue
 
                 i += 1
                 # Record as fetched (file saved OR empty results — both are "done")
                 fetched.add(key)
-                _save_fetched(fetched)
+                _save_fetched(fetched, log_file)
             except SessionExpiredError as exc:
                 consecutive_restarts += 1
                 log.warning(
@@ -425,34 +431,39 @@ def run_incremental(days: int = 14) -> None:
     today = date.today()
     start = today - timedelta(days=days)
     log.info("Incremental mode: %s → %s", start, today)
-    _fetch_range(start, today)
+    _fetch_range(start, today, date_field="filed")
 
 
-def run_backfill(start_year: int = 2017) -> None:
+def run_backfill(start_year: int = 2017, end_year: int | None = None,
+                 date_field: str = "filed") -> None:
     start = date(start_year, 1, 1)
-    today = date.today()
-    log.info("Backfill mode: %s → %s", start, today)
-    _fetch_range(start, today)
+    end   = date(end_year, 12, 31) if end_year else date.today()
+    end   = min(end, date.today())
+    log.info("Backfill mode: %s → %s (date_field=%s)", start, end, date_field)
+    _fetch_range(start, end, date_field=date_field)
 
 
 def run_test(days: int = 7) -> None:
     today = date.today()
     start = today - timedelta(days=days)
     log.info("Test mode: %s → %s", start, today)
-    _fetch_range(start, today)
+    _fetch_range(start, today, date_field="filed")
 
 
-def count_remaining(start_year: int = 2017) -> int:
+def count_remaining(start_year: int = 2017, end_year: int | None = None,
+                    date_field: str = "filed") -> int:
     """
-    Count standard 7-day windows not yet in fetched_windows.json.
+    Count standard 7-day windows not yet fetched.
     Prints the count to stdout and returns it.
     Used by the backfill workflow to decide whether to re-trigger itself.
     """
     start = date(start_year, 1, 1)
-    today = date.today()
-    windows = list(week_windows(start, today))
+    end   = date(end_year, 12, 31) if end_year else date.today()
+    end   = min(end, date.today())
+    windows = list(week_windows(start, end))
     tasks = [(tt, str(ws), str(we)) for tt in TRAN_TYPES for ws, we in windows]
-    fetched = _load_fetched()
+    log_file = FETCHED_LOG_TRN if date_field == "tran" else FETCHED_LOG
+    fetched = _load_fetched(log_file)
     remaining = sum(1 for key in tasks if key not in fetched)
     print(remaining)
     return remaining
@@ -471,18 +482,28 @@ def main() -> None:
         choices=["incremental", "backfill", "test", "count-remaining"],
         default="incremental",
     )
-    parser.add_argument("--days",       type=int, default=14,   dest="days")
-    parser.add_argument("--start-year", type=int, default=2017, dest="start_year")
+    parser.add_argument("--days",        type=int,  default=14,   dest="days")
+    parser.add_argument("--start-year",  type=int,  default=2017, dest="start_year")
+    parser.add_argument("--end-year",    type=int,  default=None, dest="end_year")
+    parser.add_argument(
+        "--date-field",
+        choices=["filed", "tran"],
+        default="filed",
+        dest="date_field",
+        help="Search by filed date (default) or transaction date (use 'tran' for pre-2017 backfill)",
+    )
 
     args = parser.parse_args()
     if args.mode == "incremental":
         run_incremental(days=args.days)
     elif args.mode == "backfill":
-        run_backfill(start_year=args.start_year)
+        run_backfill(start_year=args.start_year, end_year=args.end_year,
+                     date_field=args.date_field)
     elif args.mode == "test":
         run_test(days=args.days)
     elif args.mode == "count-remaining":
-        count_remaining(start_year=args.start_year)
+        count_remaining(start_year=args.start_year, end_year=args.end_year,
+                        date_field=args.date_field)
 
 
 if __name__ == "__main__":
