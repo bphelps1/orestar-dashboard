@@ -96,10 +96,12 @@ main { max-width: 1200px; margin: 32px auto; padding: 0 24px; }
   margin-bottom: 8px;
 }
 .card-value {
-  font-size: 1.8rem;
+  font-size: clamp(1rem, 2.5vw, 1.6rem);
   font-weight: 700;
   color: var(--color-accent);
-  line-height: 1.1;
+  line-height: 1.2;
+  overflow-wrap: break-word;
+  word-break: break-all;
 }
 
 /* ── Chart boxes ────────────────────────────────────────────────────────── */
