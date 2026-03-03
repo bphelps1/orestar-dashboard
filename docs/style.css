@@ -505,3 +505,53 @@ input[type="date"]:focus {
   color: var(--color-text-muted);
   padding: 0 20px 10px;
 }
+
+/* ── Donut tooltip ──────────────────────────────────────────────────────── */
+.donut-tooltip {
+  position: fixed;
+  z-index: 9999;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0,0,0,.14);
+  padding: 12px 14px;
+  min-width: 200px;
+  max-width: 260px;
+  pointer-events: none;
+  font-size: 0.85rem;
+}
+.dt-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.dt-swatch { flex-shrink: 0; width: 12px; height: 12px; border-radius: 3px; }
+.dt-type { font-weight: 600; color: var(--color-text); word-break: break-word; }
+.dt-amount { font-size: 1.05rem; font-weight: 700; color: var(--color-accent); margin-bottom: 2px; }
+.dt-pct { color: var(--color-text-muted); margin-bottom: 8px; }
+.dt-donors-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--color-text-muted);
+  margin-bottom: 4px;
+}
+.dt-donor { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
+.dt-donor-name { color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.dt-donor-amt  { flex-shrink: 0; color: var(--color-text-muted); }
+
+/* ── Multi-filer donuts ─────────────────────────────────────────────────── */
+.multi-donut-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  padding: 8px 0;
+}
+.donut-unit {
+  flex: 1 1 260px;
+  min-width: 220px;
+  max-width: 420px;
+}
+.donut-unit-title {
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin-bottom: 6px;
+}

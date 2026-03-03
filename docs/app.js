@@ -34,6 +34,106 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+// Fixed color map: base type → PALETTE color (consistent across all filter states)
+const TYPE_COLOR_MAP = {};
+[
+  "Individual", "Business Entity", "Political Committee", "Other",
+  "Labor Organization", "Candidate & Immediate Family",
+  "Unregistered Committee", "Political Party Committee",
+].forEach((t, i) => { TYPE_COLOR_MAP[t] = PALETTE[i]; });
+
+function typeColor(label) {
+  const base  = label.endsWith(" (out of state)") ? label.slice(0, -15) : label;
+  const color = TYPE_COLOR_MAP[base] ?? PALETTE[Object.keys(TYPE_COLOR_MAP).length % PALETTE.length];
+  return label.endsWith(" (out of state)") ? hexToRgba(color, 0.45) : color;
+}
+
+// ── Donut box DOM helpers ─────────────────────────────────────────────────────
+
+function resetDonutBox() {
+  const box = document.getElementById("overview-donut-box");
+  box.querySelectorAll("canvas").forEach(c => { if (c._chart) { c._chart.destroy(); c._chart = null; } });
+  const multiRow = box.querySelector(".multi-donut-row");
+  if (multiRow) multiRow.remove();
+  if (!document.getElementById("chart-contributor-type")) {
+    const canvas = document.createElement("canvas");
+    canvas.id = "chart-contributor-type";
+    box.appendChild(canvas);
+  }
+}
+
+function buildMultiDonutBox(profiles) {
+  const box = document.getElementById("overview-donut-box");
+  box.querySelectorAll("canvas").forEach(c => { if (c._chart) { c._chart.destroy(); c._chart = null; } });
+  const single = document.getElementById("chart-contributor-type");
+  if (single) single.remove();
+  const existing = box.querySelector(".multi-donut-row");
+  if (existing) existing.remove();
+  const row = document.createElement("div");
+  row.className = "multi-donut-row";
+  profiles.forEach((p, i) => {
+    const unit   = document.createElement("div");
+    unit.className = "donut-unit";
+    const title  = document.createElement("div");
+    title.className = "donut-unit-title";
+    title.textContent = p.name;
+    const canvas = document.createElement("canvas");
+    canvas.id = `chart-type-${i}`;
+    unit.appendChild(title);
+    unit.appendChild(canvas);
+    row.appendChild(unit);
+  });
+  box.appendChild(row);
+}
+
+// ── Donut tooltip ─────────────────────────────────────────────────────────────
+
+function makeDonutTooltip(typeRows) {
+  return function({ chart, tooltip }) {
+    const el = document.getElementById("donut-tooltip");
+    if (!el) return;
+    if (tooltip.opacity === 0) { el.hidden = true; return; }
+
+    const di    = tooltip.dataPoints[0].dataIndex;
+    const label = tooltip.dataPoints[0].label;
+    const value = tooltip.dataPoints[0].raw;
+    const all   = tooltip.dataPoints[0].dataset.data;
+    const total = all.reduce((s, v) => s + v, 0);
+    const pct   = total > 0 ? (value / total * 100).toFixed(1) : "0.0";
+    const color = typeColor(label);
+    const row   = typeRows ? typeRows[di] : null;
+
+    let html = `
+      <div class="dt-header">
+        <span class="dt-swatch" style="background:${color}"></span>
+        <span class="dt-type">${esc(label)}</span>
+      </div>
+      <div class="dt-amount">${fmt$(value)}</div>
+      <div class="dt-pct">${pct}% of total</div>`;
+
+    if (row && row.top_donors && row.top_donors.length) {
+      html += `<div class="dt-donors-label">Top donors</div>`;
+      row.top_donors.slice(0, 5).forEach(d => {
+        html += `<div class="dt-donor">
+          <span class="dt-donor-name">${esc(d.name)}</span>
+          <span class="dt-donor-amt">${fmt$(d.total)}</span>
+        </div>`;
+      });
+    }
+
+    el.innerHTML = html;
+    el.hidden = false;
+
+    const rect = chart.canvas.getBoundingClientRect();
+    let left = rect.left + tooltip.caretX + 16;
+    let top  = rect.top  + tooltip.caretY - 20;
+    if (left + 240 > window.innerWidth) left = rect.left + tooltip.caretX - 256;
+    top = Math.max(top, 8);
+    el.style.left = left + "px";
+    el.style.top  = top  + "px";
+  };
+}
+
 // ── Date-range filter helpers ─────────────────────────────────────────────────
 
 // Returns ["2020","2021",...] for the active date range, or null (= all years).
@@ -229,30 +329,27 @@ function makeBarChart(canvasId, labels, values, label, color = "#3182ce") {
   return chart;
 }
 
-function makeDonutChart(canvasId, labels, values, title) {
+function makeDonutChart(canvasId, labels, values, title, typeRows = null) {
   const ctx = document.getElementById(canvasId);
   if (!ctx) return null;
   if (ctx._chart) ctx._chart.destroy();
+
+  // Hide tooltip when cursor leaves the canvas
+  if (!ctx._tooltipLeaveAttached) {
+    ctx.addEventListener("mouseleave", () => {
+      const el = document.getElementById("donut-tooltip");
+      if (el) el.hidden = true;
+    });
+    ctx._tooltipLeaveAttached = true;
+  }
+
   const chart = new Chart(ctx, {
     type: "doughnut",
     data: {
       labels,
       datasets: [{
         data: values,
-        backgroundColor: (() => {
-          // Each base type gets a PALETTE color; "(out of state)" variant gets same hue at 45% opacity
-          const _baseTypes = [];
-          labels.forEach(l => {
-            const base = l.endsWith(" (out of state)") ? l.slice(0, -15) : l;
-            if (!_baseTypes.includes(base)) _baseTypes.push(base);
-          });
-          return labels.map(l => {
-            const isOOS = l.endsWith(" (out of state)");
-            const base  = isOOS ? l.slice(0, -15) : l;
-            const color = PALETTE[_baseTypes.indexOf(base) % PALETTE.length];
-            return isOOS ? hexToRgba(color, 0.45) : color;
-          });
-        })(),
+        backgroundColor: labels.map(l => typeColor(l)),
         borderWidth: 2,
         borderColor: "#fff",
       }],
@@ -262,7 +359,8 @@ function makeDonutChart(canvasId, labels, values, title) {
       plugins: {
         legend: { position: "right", labels: { font: { size: 12 }, padding: 12 } },
         tooltip: {
-          callbacks: { label: ctx => " " + ctx.label + ": " + fmt$(ctx.raw) },
+          enabled: false,
+          external: makeDonutTooltip(typeRows),
         },
       },
     },
@@ -571,12 +669,16 @@ function renderOverviewGlobal() {
   } else {
     byTypeRows = [];
   }
+  resetDonutBox();
   if (byTypeRows.length) {
+    // all_time rows carry top_donors; year-filtered rows do not
+    const tooltipRows = years ? null : byTypeRows;
     makeDonutChart(
       "chart-contributor-type",
       byTypeRows.map(r => r.type),
       byTypeRows.map(r => r.total),
       "Contributor Type",
+      tooltipRows,
     );
   }
 
@@ -608,12 +710,16 @@ function renderOverviewSingleFiler(profile) {
   const byTypeRows = years
     ? mergeTypeByYear(profile.by_contributor_type_by_year || {}, years)
     : (profile.by_contributor_type || []);
+  resetDonutBox();
   if (byTypeRows.length) {
+    // all_time (no year filter) carries top_donors; year-filtered rows do not
+    const tooltipRows = years ? null : byTypeRows;
     makeDonutChart(
       "chart-contributor-type",
       byTypeRows.map(r => r.type),
       byTypeRows.map(r => r.total),
       "Contributor Type",
+      tooltipRows,
     );
   }
 
@@ -629,30 +735,27 @@ function renderOverviewMultiFiler(profiles) {
   document.getElementById("stat-range").textContent         = "—";
 
   document.getElementById("overview-donut-title").textContent =
-    "Contributions by Donor Type (Combined)";
+    "Contributions by Donor Type";
 
   const years = yearsInRange();
-  const typeMap = new Map();
-  profiles.forEach(p => {
-    const rows = years
+
+  // Build one donut per filer, side by side
+  buildMultiDonutBox(profiles);
+  profiles.forEach((p, i) => {
+    const byTypeRows = years
       ? mergeTypeByYear(p.by_contributor_type_by_year || {}, years)
       : (p.by_contributor_type || []);
-    rows.forEach(t => {
-      typeMap.set(t.type, (typeMap.get(t.type) || 0) + t.total);
-    });
+    if (byTypeRows.length) {
+      const tooltipRows = years ? null : byTypeRows;
+      makeDonutChart(
+        `chart-type-${i}`,
+        byTypeRows.map(r => r.type),
+        byTypeRows.map(r => r.total),
+        p.name,
+        tooltipRows,
+      );
+    }
   });
-  const merged = [...typeMap.entries()]
-    .map(([type, total]) => ({ type, total }))
-    .sort((a, b) => b.total - a.total);
-
-  if (merged.length) {
-    makeDonutChart(
-      "chart-contributor-type",
-      merged.map(r => r.type),
-      merged.map(r => r.total),
-      "Contributor Type",
-    );
-  }
 
   const hasDate = state.dateStart || state.dateEnd;
   const grid = document.getElementById("filer-comparison-grid");
