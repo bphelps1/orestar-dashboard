@@ -112,14 +112,15 @@ function makeDonutTooltip(typeRows) {
       return;
     }
 
-    const di    = tooltip.dataPoints[0].dataIndex;
     const label = tooltip.dataPoints[0].label;
     const value = tooltip.dataPoints[0].raw;
     const all   = tooltip.dataPoints[0].dataset.data;
     const total = all.reduce((s, v) => s + v, 0);
     const pct   = total > 0 ? (value / total * 100).toFixed(1) : "0.0";
     const color = typeColor(label);
-    const row   = typeRows ? typeRows[di] : null;
+    // Look up by type name rather than array index for robustness
+    const row   = typeRows ? typeRows.find(r => r.type === label) : null;
+    console.log("[donut-tooltip] label:", label, "row:", row ? { type: row.type, donors: row.top_donors?.length } : null);
 
     let html = `
       <div class="dt-header">
@@ -149,6 +150,11 @@ function makeDonutTooltip(typeRows) {
     top = Math.max(top, 8);
     el.style.left = left + "px";
     el.style.top  = top  + "px";
+    // Clamp bottom: if tooltip extends below viewport, flip it above the cursor
+    if (top + el.offsetHeight + 8 > window.innerHeight) {
+      top = Math.max(8, rect.top + tooltip.caretY - el.offsetHeight - 10);
+      el.style.top = top + "px";
+    }
   };
 }
 
