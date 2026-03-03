@@ -1,6 +1,10 @@
 # Raw Excel downloads — never committed
 data/_raw/
 
+# Legacy single-file transactions store (replaced by data/transactions/txn_YYYY.csv.gz)
+data/transactions.csv.gz
+data/transactions.csv
+
 # Python
 __pycache__/
 *.py[cod]

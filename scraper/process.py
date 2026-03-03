@@ -41,10 +41,11 @@ DATA_DIR      = ROOT / "data"
 AGG_DIR       = DATA_DIR / "aggregated"
 ENTITY_MAP    = Path(__file__).parent / "entity_map.json"
 REVIEW_QUEUE  = DATA_DIR / "review_queue.json"
-TRANSACTIONS  = DATA_DIR / "transactions.csv.gz"
+TRANS_DIR     = DATA_DIR / "transactions"   # per-year gzip files: txn_YYYY.csv.gz
 COMMITTEES    = DATA_DIR / "committees.csv"
 
 AGG_DIR.mkdir(parents=True, exist_ok=True)
+TRANS_DIR.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------------------------------------------------------
 # Column mapping: ORESTAR Excel headers → internal names
@@ -347,6 +348,37 @@ def load_excel_files(raw_dir: Path) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# Per-year transaction file helpers
+# ---------------------------------------------------------------------------
+
+def _txn_path(year) -> Path:
+    return TRANS_DIR / f"txn_{year}.csv.gz"
+
+
+def _load_all_transactions() -> pd.DataFrame:
+    """Load and concatenate all per-year transaction files."""
+    files = sorted(TRANS_DIR.glob("txn_*.csv.gz"))
+    if not files:
+        return pd.DataFrame()
+    return pd.concat(
+        [pd.read_csv(f, compression="gzip", dtype=str) for f in files],
+        ignore_index=True,
+    )
+
+
+def _save_transactions(df: pd.DataFrame) -> None:
+    """Split df by year and write/overwrite per-year gzip CSV files."""
+    TRANS_DIR.mkdir(parents=True, exist_ok=True)
+    date_col = df["filed_date"].astype(str)
+    years = date_col.apply(lambda d: d[:4] if len(d) >= 4 and d[:4].isdigit() else "0000")
+    n_files = 0
+    for yr, grp in df.groupby(years, sort=False):
+        grp.to_csv(_txn_path(yr), index=False, compression="gzip")
+        n_files += 1
+    log.info("Wrote %d transactions across %d year files in %s", len(df), n_files, TRANS_DIR)
+
+
+# ---------------------------------------------------------------------------
 # Main processing pipeline
 # ---------------------------------------------------------------------------
 
@@ -358,13 +390,11 @@ def process() -> None:
 
     if new_df.empty:
         log.info("No new data to process.")
-        # If transactions.csv.gz already exists, still re-aggregate for JSON output
-        if TRANSACTIONS.exists():
-            log.info("Re-aggregating from existing transactions.csv.gz")
-            df = pd.read_csv(TRANSACTIONS, compression="gzip", dtype=str)
-        else:
+        df = _load_all_transactions()
+        if df.empty:
             log.info("No existing transactions data. Nothing to do.")
             return
+        log.info("Re-aggregating from existing transaction files (%d rows)", len(df))
     else:
         # ── 2. Type coercion ─────────────────────────────────────────────────
         for col in ["tran_id", "contributor_payee", "filer", "contributor_type",
@@ -394,12 +424,11 @@ def process() -> None:
         )
 
         # ── 3. Load existing transactions and merge ───────────────────────────
-        if TRANSACTIONS.exists():
-            log.info("Loading existing transactions.csv.gz…")
-            existing = pd.read_csv(TRANSACTIONS, compression="gzip", dtype=str)
+        existing = _load_all_transactions()
+        if not existing.empty:
+            log.info("Loading existing transactions (%d rows)…", len(existing))
             if "book type" in existing.columns and "book_type" not in existing.columns:
                 existing = existing.rename(columns={"book type": "book_type"})
-            # Convert amount back to float
             existing["amount"] = pd.to_numeric(existing["amount"], errors="coerce").fillna(0.0)
             existing["filed_date"] = pd.to_datetime(existing["filed_date"], errors="coerce").dt.date
             df = pd.concat([existing, new_df], ignore_index=True)
@@ -445,10 +474,9 @@ def process() -> None:
             with open(REVIEW_QUEUE, "w") as f:
                 json.dump(review_items, f, indent=2)
 
-        # ── 8. Write updated transactions.csv.gz ─────────────────────────────
-        log.info("Writing %d transactions to %s", len(df), TRANSACTIONS)
+        # ── 8. Write updated per-year transaction files ───────────────────────
         df["filed_date"] = df["filed_date"].astype(str)
-        df.to_csv(TRANSACTIONS, index=False, compression="gzip")
+        _save_transactions(df)
 
     # ── 9. Aggregate JSON files ───────────────────────────────────────────────
     aggregate(df)
