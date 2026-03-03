@@ -193,6 +193,7 @@ function mergeByYear(byYear, years) {
 }
 
 // Same as mergeByYear but uses "type" as the key (contributor-type arrays).
+// Sorts by base-type combined total so in-state/out-of-state pairs stay adjacent.
 function mergeTypeByYear(byYear, years) {
   const src = years === null ? Object.keys(byYear || {}) : years;
   const map = new Map();
@@ -201,9 +202,22 @@ function mergeTypeByYear(byYear, years) {
       map.set(d.type, (map.get(d.type) || 0) + d.total);
     });
   });
-  return [...map.entries()]
-    .map(([type, total]) => ({ type, total: Math.round(total * 100) / 100 }))
-    .sort((a, b) => b.total - a.total);
+  const entries = [...map.entries()]
+    .map(([type, total]) => ({ type, total: Math.round(total * 100) / 100 }));
+  // Compute combined total per base type so pairs sort together
+  const baseTotals = new Map();
+  entries.forEach(e => {
+    const base = e.type.endsWith(" (out of state)") ? e.type.slice(0, -15) : e.type;
+    baseTotals.set(base, (baseTotals.get(base) || 0) + e.total);
+  });
+  return entries.sort((a, b) => {
+    const baseA = a.type.endsWith(" (out of state)") ? a.type.slice(0, -15) : a.type;
+    const baseB = b.type.endsWith(" (out of state)") ? b.type.slice(0, -15) : b.type;
+    const diff = (baseTotals.get(baseB) || 0) - (baseTotals.get(baseA) || 0);
+    if (diff !== 0) return diff;
+    // Same base: in-state before out-of-state
+    return (a.type.endsWith(" (out of state)") ? 1 : 0) - (b.type.endsWith(" (out of state)") ? 1 : 0);
+  });
 }
 
 // Sum contributions/expenditures from a (possibly filtered) timeline array.
@@ -666,12 +680,22 @@ async function loadOverview() {
 }
 
 function renderOverviewGlobal() {
-  document.getElementById("stat-contributions").textContent = fmt$(summaryData.total_contributions);
-  document.getElementById("stat-inkind").textContent        = fmt$(summaryData.total_inkind || 0);
-  document.getElementById("stat-expenditures").textContent  = fmt$(summaryData.total_expenditures);
-  const coh = summaryData.total_contributions - summaryData.total_expenditures;
-  document.getElementById("stat-cash-on-hand").textContent  = fmt$(coh);
-  document.getElementById("stat-transactions").textContent  = fmtNum(summaryData.total_transactions);
+  const hasDate = state.dateStart || state.dateEnd;
+  if (hasDate) {
+    const { totalIn, totalInKind, totalOut, cashOnHand } = statsFromTimeline(filterMonthRows(timelineData || []));
+    document.getElementById("stat-contributions").textContent = fmt$(totalIn);
+    document.getElementById("stat-inkind").textContent        = fmt$(totalInKind);
+    document.getElementById("stat-expenditures").textContent  = fmt$(totalOut);
+    document.getElementById("stat-cash-on-hand").textContent  = fmt$(cashOnHand);
+    document.getElementById("stat-transactions").textContent  = "—";
+  } else {
+    document.getElementById("stat-contributions").textContent = fmt$(summaryData.total_contributions);
+    document.getElementById("stat-inkind").textContent        = fmt$(summaryData.total_inkind || 0);
+    document.getElementById("stat-expenditures").textContent  = fmt$(summaryData.total_expenditures);
+    const coh = summaryData.total_contributions - summaryData.total_expenditures;
+    document.getElementById("stat-cash-on-hand").textContent  = fmt$(coh);
+    document.getElementById("stat-transactions").textContent  = fmtNum(summaryData.total_transactions);
+  }
   document.getElementById("stat-cards").hidden             = false;
   document.getElementById("filer-comparison-grid").hidden  = true;
   document.getElementById("overview-donut-box").hidden     = false;
