@@ -367,15 +367,41 @@ def _load_all_transactions() -> pd.DataFrame:
 
 
 def _save_transactions(df: pd.DataFrame) -> None:
-    """Split df by year and write/overwrite per-year gzip CSV files."""
+    """Split df by year and write/overwrite per-year gzip CSV files.
+
+    Uses mtime=0 for deterministic gzip output so that files whose content
+    has not changed produce identical bytes on each run — keeping git diffs
+    clean across years where no new data arrived.
+    """
+    import io
     TRANS_DIR.mkdir(parents=True, exist_ok=True)
     date_col = df["filed_date"].astype(str)
     years = date_col.apply(lambda d: d[:4] if len(d) >= 4 and d[:4].isdigit() else "0000")
-    n_files = 0
+    n_written = n_unchanged = 0
     for yr, grp in df.groupby(years, sort=False):
-        grp.to_csv(_txn_path(yr), index=False, compression="gzip")
-        n_files += 1
-    log.info("Wrote %d transactions across %d year files in %s", len(df), n_files, TRANS_DIR)
+        # Serialise to CSV bytes in memory
+        buf = io.BytesIO()
+        grp.to_csv(buf, index=False)
+        csv_bytes = buf.getvalue()
+
+        # Compress deterministically (mtime=0 → no embedded timestamp)
+        gz_buf = io.BytesIO()
+        with gzip.GzipFile(fileobj=gz_buf, mode="wb", mtime=0) as gz:
+            gz.write(csv_bytes)
+        new_gz = gz_buf.getvalue()
+
+        dest = _txn_path(yr)
+        if dest.exists() and dest.read_bytes() == new_gz:
+            n_unchanged += 1
+            continue  # identical content — skip write, no git diff
+
+        dest.write_bytes(new_gz)
+        n_written += 1
+
+    log.info(
+        "Wrote %d transactions: %d year file(s) updated, %d unchanged",
+        len(df), n_written, n_unchanged,
+    )
 
 
 # ---------------------------------------------------------------------------

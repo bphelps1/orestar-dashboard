@@ -120,7 +120,6 @@ function makeDonutTooltip(typeRows) {
     const color = typeColor(label);
     // Look up by type name rather than array index for robustness
     const row   = typeRows ? typeRows.find(r => r.type === label) : null;
-    console.log("[donut-tooltip] label:", label, "row:", row ? { type: row.type, donors: row.top_donors?.length } : null);
 
     let html = `
       <div class="dt-header">
