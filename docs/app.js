@@ -253,6 +253,25 @@ let activeTab = "overview";
 // ── Donors view mode ─────────────────────────────────────────────────────────
 let donorsViewMode = "summary";  // "summary" | "by-year"
 
+// ── Stat card auto-fit ────────────────────────────────────────────────────────
+// Binary-searches for the largest font size (px) that keeps each value on one
+// line within its card. Runs after the next layout frame so clientWidth is valid.
+function fitStatCards() {
+  requestAnimationFrame(() => {
+    document.querySelectorAll('#stat-cards .card-value').forEach(el => {
+      let lo = 12, hi = 26;           // search range in px
+      el.style.fontSize = hi + 'px';
+      if (el.scrollWidth <= el.clientWidth) return; // already fits
+      while (hi - lo > 1) {
+        const mid = Math.floor((lo + hi) / 2);
+        el.style.fontSize = mid + 'px';
+        if (el.scrollWidth <= el.clientWidth) lo = mid; else hi = mid;
+      }
+      el.style.fontSize = lo + 'px';
+    });
+  });
+}
+
 // ── Utility helpers ───────────────────────────────────────────────────────────
 
 function fmt$(n) {
@@ -729,6 +748,7 @@ function renderOverviewGlobal() {
   }
 
   document.getElementById("filer-comparison-grid").hidden = true;
+  fitStatCards();
 }
 
 function renderOverviewSingleFiler(profile) {
@@ -763,6 +783,7 @@ function renderOverviewSingleFiler(profile) {
   }
 
   document.getElementById("filer-comparison-grid").hidden = true;
+  fitStatCards();
 }
 
 function renderOverviewMultiFiler(profiles) {
