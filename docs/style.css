@@ -566,3 +566,51 @@ input[type="date"]:focus {
 .mdl-item { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; }
 .mdl-swatch { flex-shrink: 0; width: 11px; height: 11px; border-radius: 2px; }
 .mdl-label { color: var(--color-text); }
+
+/* ── Frozen columns: donors by-year pivot table ──────────────────────────── */
+/* Give the rank (#) column a fixed width so the left offset for the Donor
+   column can be hardcoded to match exactly.                                  */
+#table-donors-by-year th:nth-child(1),
+#table-donors-by-year td:nth-child(1) {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  width: 48px;
+  min-width: 48px;
+  max-width: 48px;
+}
+/* Donor name column — sticky at left: 48px (width of the # column) */
+#table-donors-by-year th:nth-child(2),
+#table-donors-by-year td:nth-child(2) {
+  position: sticky;
+  left: 48px;
+  z-index: 2;
+  /* shadow replaces the collapsed border so a divider shows when scrolled */
+  box-shadow: 3px 0 5px -2px rgba(0,0,0,0.10);
+}
+/* All Time (grand total) column — sticky on the right */
+#table-donors-by-year th:last-child,
+#table-donors-by-year td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  box-shadow: -3px 0 5px -2px rgba(0,0,0,0.10);
+}
+/* Solid backgrounds so scrolling content doesn't bleed through */
+#table-donors-by-year th:nth-child(1),
+#table-donors-by-year th:nth-child(2),
+#table-donors-by-year th:last-child {
+  background: var(--color-bg);
+}
+#table-donors-by-year td:nth-child(1),
+#table-donors-by-year td:nth-child(2),
+#table-donors-by-year td:last-child {
+  background: var(--color-surface);
+}
+/* Preserve the row hover colour on frozen cells */
+#table-donors-by-year tr:hover td:nth-child(1),
+#table-donors-by-year tr:hover td:nth-child(2),
+#table-donors-by-year tr:hover td:last-child {
+  background: #f0f4f8;
+}
+.mdl-label { color: var(--color-text); }
