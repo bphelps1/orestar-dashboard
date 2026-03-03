@@ -717,16 +717,22 @@ def aggregate_filers(
         total_out       = round(float(_cash_expend["amount"].sum())  if not _cash_expend.empty  else 0.0, 2)
         total_or        = round(float(filer_or["amount"].sum())      if not filer_or.empty      else 0.0, 2)
         total_od        = round(float(filer_od["amount"].sum())      if not filer_od.empty      else 0.0, 2)
-        # cash_on_hand uses full C/E totals so loans, personal expenditures, etc. are included
+        # cash_on_hand: include all C-type receipts and all E-type disbursements
+        # EXCEPT "Personal Expenditure for Reimbursement" — that sub_type records the
+        # obligation (candidate spent own money) but the actual cash outflow is the
+        # subsequent reimbursement "Cash Expenditure" to the candidate. Including both
+        # would double-count the amount.
+        _e_for_coh      = filer_expend[filer_expend["sub_type"] != "Personal Expenditure for Reimbursement"] if not filer_expend.empty else filer_expend
         _total_in_full  = round(float(filer_contrib["amount"].sum()) if not filer_contrib.empty else 0.0, 2)
-        _total_out_full = round(float(filer_expend["amount"].sum())  if not filer_expend.empty  else 0.0, 2)
+        _total_out_full = round(float(_e_for_coh["amount"].sum())    if not _e_for_coh.empty    else 0.0, 2)
         cash_on_hand    = round(_total_in_full + total_or - _total_out_full - total_od, 2)
         tran_count    = int(len(filer_all))
 
-        # Timeline
+        # Timeline — use _e_for_coh so personal-expenditure-for-reimbursement
+        # obligations don't inflate the expenditures series
         c_monthly = monthly_sum(filer_contrib, "contributions")
         i_monthly = monthly_sum(filer_inkind,  "inkind")
-        e_monthly = monthly_sum(filer_expend,  "expenditures")
+        e_monthly = monthly_sum(_e_for_coh,    "expenditures")
         tl_df = pd.concat([c_monthly, i_monthly, e_monthly], axis=1).fillna(0).sort_index()
         timeline = [
             {
