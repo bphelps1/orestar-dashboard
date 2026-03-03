@@ -622,7 +622,7 @@ def aggregate(df: pd.DataFrame) -> None:
 
     # ── by_contributor_type.json ──────────────────────────────────────────────
     def _type_rows(frame):
-        """Build [{type, total}] list interleaving in-state then out-of-state per type."""
+        """Build [{type, total, top_donors}] list interleaving in-state then out-of-state per type."""
         if frame.empty or "book_type" not in frame.columns:
             return []
         oos = frame["is_out_of_state"] if "is_out_of_state" in frame.columns else pd.Series(False, index=frame.index)
@@ -637,14 +637,31 @@ def aggregate(df: pd.DataFrame) -> None:
             iv = round(float(in_s.get(t, 0)), 2)
             ov = round(float(out_s.get(t, 0)), 2)
             if iv:
-                rows.append({"type": t, "total": iv})
+                sub_in = frame[~oos & (frame["book_type"] == t)]
+                top_in = (
+                    sub_in.groupby(contrib_col)["amount"].sum()
+                    .nlargest(5).reset_index()
+                    .rename(columns={contrib_col: "name", "amount": "total"})
+                )
+                top_in["total"] = top_in["total"].round(2)
+                rows.append({"type": t, "total": iv, "top_donors": top_in.to_dict(orient="records")})
             if ov:
-                rows.append({"type": t + " (out of state)", "total": ov})
+                sub_oos = frame[oos & (frame["book_type"] == t)]
+                top_oos = (
+                    sub_oos.groupby(contrib_col)["amount"].sum()
+                    .nlargest(5).reset_index()
+                    .rename(columns={contrib_col: "name", "amount": "total"})
+                )
+                top_oos["total"] = top_oos["total"].round(2)
+                rows.append({"type": t + " (out of state)", "total": ov, "top_donors": top_oos.to_dict(orient="records")})
         return rows
 
     by_type_by_year: dict[str, list] = {}
     for yr in sorted(cash_contribs["year"].dropna().unique()):
-        by_type_by_year[str(int(yr))] = _type_rows(cash_contribs[cash_contribs["year"] == yr])
+        yr_rows = _type_rows(cash_contribs[cash_contribs["year"] == yr])
+        by_type_by_year[str(int(yr))] = [
+            {k: v for k, v in r.items() if k != "top_donors"} for r in yr_rows
+        ]
     _write_json("by_contributor_type.json", {
         "all_time": _type_rows(cash_contribs),
         "by_year":  by_type_by_year,
@@ -704,9 +721,23 @@ def aggregate_filers(
             iv = round(float(in_s.get(t, 0)), 2)
             ov = round(float(out_s.get(t, 0)), 2)
             if iv:
-                rows.append({"type": t, "total": iv})
+                sub_in = frame[~oos & (frame["book_type"] == t)]
+                top_in = (
+                    sub_in.groupby(contrib_col)["amount"].sum()
+                    .nlargest(5).reset_index()
+                    .rename(columns={contrib_col: "name", "amount": "total"})
+                )
+                top_in["total"] = top_in["total"].round(2)
+                rows.append({"type": t, "total": iv, "top_donors": top_in.to_dict(orient="records")})
             if ov:
-                rows.append({"type": t + " (out of state)", "total": ov})
+                sub_oos = frame[oos & (frame["book_type"] == t)]
+                top_oos = (
+                    sub_oos.groupby(contrib_col)["amount"].sum()
+                    .nlargest(5).reset_index()
+                    .rename(columns={contrib_col: "name", "amount": "total"})
+                )
+                top_oos["total"] = top_oos["total"].round(2)
+                rows.append({"type": t + " (out of state)", "total": ov, "top_donors": top_oos.to_dict(orient="records")})
         return rows
 
     # ── Build slug registry with collision handling ──────────────────────────
@@ -837,14 +868,15 @@ def aggregate_filers(
             top_payees_list = []
             top_payees_by_year = {}
 
-        # By contributor type — all-time and by year
+        # By contributor type — all-time (with top_donors) and by year (totals only)
         by_type_list = _filer_type_rows(filer_contrib)
         by_type_by_year_filer: dict[str, list] = {}
         if "year" in filer_contrib.columns and not filer_contrib.empty:
             for yr in sorted(filer_contrib["year"].dropna().unique()):
-                by_type_by_year_filer[str(int(yr))] = _filer_type_rows(
-                    filer_contrib[filer_contrib["year"] == yr]
-                )
+                yr_rows = _filer_type_rows(filer_contrib[filer_contrib["year"] == yr])
+                by_type_by_year_filer[str(int(yr))] = [
+                    {k: v for k, v in r.items() if k != "top_donors"} for r in yr_rows
+                ]
 
         detail = {
             "name": name, "slug": slug,
