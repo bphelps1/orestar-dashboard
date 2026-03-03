@@ -568,6 +568,12 @@ input[type="date"]:focus {
 .mdl-label { color: var(--color-text); }
 
 /* ── Frozen columns: donors by-year pivot table ──────────────────────────── */
+/* border-collapse:collapse silently disables position:sticky on table cells.
+   Switch to separate+0 spacing for this table only — visually identical.    */
+#table-donors-by-year {
+  border-collapse: separate;
+  border-spacing: 0;
+}
 /* Give the rank (#) column a fixed width so the left offset for the Donor
    column can be hardcoded to match exactly.                                  */
 #table-donors-by-year th:nth-child(1),
