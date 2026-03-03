@@ -597,7 +597,7 @@ def aggregate(df: pd.DataFrame) -> None:
     top_donors_all = (
         cash_contribs.groupby(contrib_col)["amount"]
         .sum()
-        .nlargest(100)
+        .nlargest(500)
         .reset_index()
         .rename(columns={contrib_col: "name", "amount": "total"})
     )
@@ -609,7 +609,7 @@ def aggregate(df: pd.DataFrame) -> None:
         top = (
             yr_df.groupby(contrib_col)["amount"]
             .sum()
-            .nlargest(100)
+            .nlargest(500)
             .reset_index()
             .rename(columns={contrib_col: "name", "amount": "total"})
         )
