@@ -658,8 +658,9 @@ function initFilerSelector() {
     state.selectedFilers = [];
     state.dateStart = "";
     state.dateEnd   = "";
-    dateStartEl.value = "";
-    dateEndEl.value   = "";
+    // Restore default range display (populated once summaryData is available)
+    dateStartEl.value = (summaryData && summaryData.date_range_start) || "";
+    dateEndEl.value   = (summaryData && summaryData.date_range_end)   || "";
     renderChips();
     updateClearBtn();
     onStateChange();
@@ -681,6 +682,12 @@ async function loadOverview() {
 
   document.getElementById("last-updated").textContent = summaryData.last_updated
     ? new Date(summaryData.last_updated).toLocaleString() : "—";
+
+  // Pre-fill date inputs with the dataset's full range (only if still blank)
+  const dsEl = document.getElementById("date-start");
+  const deEl = document.getElementById("date-end");
+  if (!dsEl.value && summaryData.date_range_start) dsEl.value = summaryData.date_range_start;
+  if (!deEl.value && summaryData.date_range_end)   deEl.value = summaryData.date_range_end;
 
   const n = state.selectedFilers.length;
 
