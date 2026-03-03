@@ -661,6 +661,7 @@ async function loadOverview() {
   } else {
     const profiles = await Promise.all(state.selectedFilers.map(f => loadFilerProfile(f.slug)));
     renderOverviewMultiFiler(profiles);
+    await loadTimeline();
   }
 }
 
@@ -748,8 +749,8 @@ function renderOverviewSingleFiler(profile) {
 function renderOverviewMultiFiler(profiles) {
   document.getElementById("stat-cards").hidden             = true;
   document.getElementById("filer-comparison-grid").hidden  = false;
-  document.getElementById("overview-donut-box").hidden     = true;
-  document.getElementById("overview-timeline-box").hidden  = true;
+  document.getElementById("overview-donut-box").hidden     = false;
+  document.getElementById("overview-timeline-box").hidden  = false;
 
   document.getElementById("overview-donut-title").textContent =
     "Contributions by Donor Type";
