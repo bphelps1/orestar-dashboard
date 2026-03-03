@@ -55,6 +55,8 @@ function resetDonutBox() {
   box.querySelectorAll("canvas").forEach(c => { if (c._chart) { c._chart.destroy(); c._chart = null; } });
   const multiRow = box.querySelector(".multi-donut-row");
   if (multiRow) multiRow.remove();
+  const legend = box.querySelector(".multi-donut-legend");
+  if (legend) legend.remove();
   if (!document.getElementById("chart-contributor-type")) {
     const canvas = document.createElement("canvas");
     canvas.id = "chart-contributor-type";
@@ -67,8 +69,11 @@ function buildMultiDonutBox(profiles) {
   box.querySelectorAll("canvas").forEach(c => { if (c._chart) { c._chart.destroy(); c._chart = null; } });
   const single = document.getElementById("chart-contributor-type");
   if (single) single.remove();
-  const existing = box.querySelector(".multi-donut-row");
-  if (existing) existing.remove();
+  box.querySelectorAll(".multi-donut-row, .multi-donut-legend").forEach(el => el.remove());
+  // Shared legend placeholder — populated by renderMultiDonutLegend after data is ready
+  const legendEl = document.createElement("div");
+  legendEl.className = "multi-donut-legend";
+  box.appendChild(legendEl);
   const row = document.createElement("div");
   row.className = "multi-donut-row";
   profiles.forEach((p, i) => {
@@ -86,13 +91,26 @@ function buildMultiDonutBox(profiles) {
   box.appendChild(row);
 }
 
+function renderMultiDonutLegend(types) {
+  const el = document.querySelector("#overview-donut-box .multi-donut-legend");
+  if (!el) return;
+  el.innerHTML = types.map(t => `
+    <span class="mdl-item">
+      <span class="mdl-swatch" style="background:${typeColor(t)}"></span>
+      <span class="mdl-label">${esc(t)}</span>
+    </span>`).join("");
+}
+
 // ── Donut tooltip ─────────────────────────────────────────────────────────────
 
 function makeDonutTooltip(typeRows) {
   return function({ chart, tooltip }) {
     const el = document.getElementById("donut-tooltip");
     if (!el) return;
-    if (tooltip.opacity === 0) { el.hidden = true; return; }
+    if (tooltip.opacity === 0 || !tooltip.dataPoints || !tooltip.dataPoints.length) {
+      el.hidden = true;
+      return;
+    }
 
     const di    = tooltip.dataPoints[0].dataIndex;
     const label = tooltip.dataPoints[0].label;
@@ -329,7 +347,7 @@ function makeBarChart(canvasId, labels, values, label, color = "#3182ce") {
   return chart;
 }
 
-function makeDonutChart(canvasId, labels, values, title, typeRows = null) {
+function makeDonutChart(canvasId, labels, values, title, typeRows = null, showLegend = true) {
   const ctx = document.getElementById(canvasId);
   if (!ctx) return null;
   if (ctx._chart) ctx._chart.destroy();
@@ -357,7 +375,9 @@ function makeDonutChart(canvasId, labels, values, title, typeRows = null) {
     options: {
       responsive: true,
       plugins: {
-        legend: { position: "right", labels: { font: { size: 12 }, padding: 12 } },
+        legend: showLegend
+          ? { position: "right", labels: { font: { size: 12 }, padding: 12 } }
+          : { display: false },
         tooltip: {
           enabled: false,
           external: makeDonutTooltip(typeRows),
@@ -739,12 +759,21 @@ function renderOverviewMultiFiler(profiles) {
 
   const years = yearsInRange();
 
-  // Build one donut per filer, side by side
+  // Build one donut per filer, side by side, with a single shared legend
   buildMultiDonutBox(profiles);
+
+  // Collect all unique types across filers (preserving order by first appearance)
+  const legendTypes = [];
+  const perFilerRows = profiles.map(p => years
+    ? mergeTypeByYear(p.by_contributor_type_by_year || {}, years)
+    : (p.by_contributor_type || []));
+  perFilerRows.forEach(rows => {
+    rows.forEach(r => { if (!legendTypes.includes(r.type)) legendTypes.push(r.type); });
+  });
+  renderMultiDonutLegend(legendTypes);
+
   profiles.forEach((p, i) => {
-    const byTypeRows = years
-      ? mergeTypeByYear(p.by_contributor_type_by_year || {}, years)
-      : (p.by_contributor_type || []);
+    const byTypeRows = perFilerRows[i];
     if (byTypeRows.length) {
       const tooltipRows = years ? null : byTypeRows;
       makeDonutChart(
@@ -753,6 +782,7 @@ function renderOverviewMultiFiler(profiles) {
         byTypeRows.map(r => r.total),
         p.name,
         tooltipRows,
+        false, // legend shown separately via renderMultiDonutLegend
       );
     }
   });

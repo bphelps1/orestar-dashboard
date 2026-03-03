@@ -555,3 +555,14 @@ input[type="date"]:focus {
   color: var(--color-text-muted);
   margin-bottom: 6px;
 }
+
+/* ── Multi-donut shared legend ──────────────────────────────────────────── */
+.multi-donut-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 8px 4px 4px;
+}
+.mdl-item { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; }
+.mdl-swatch { flex-shrink: 0; width: 11px; height: 11px; border-radius: 2px; }
+.mdl-label { color: var(--color-text); }
