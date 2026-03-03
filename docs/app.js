@@ -480,8 +480,6 @@ function initFilerSelector() {
   const dropdown = document.getElementById("filer-dropdown");
   const chipRow  = document.getElementById("chip-input-row");
   const clearBtn = document.getElementById("filter-clear-btn");
-  const dateStartEl = document.getElementById("date-start");
-  const dateEndEl   = document.getElementById("date-end");
 
   const fuse = new Fuse(filerIndex, { keys: ["name"], threshold: 0.3 });
 
@@ -544,7 +542,7 @@ function initFilerSelector() {
   }
 
   function updateClearBtn() {
-    clearBtn.hidden = !(state.selectedFilers.length > 0 || state.dateStart || state.dateEnd);
+    clearBtn.hidden = !(state.selectedFilers.length > 0);
   }
 
   input.addEventListener("focus", () => {
@@ -606,27 +604,8 @@ function initFilerSelector() {
     removeFiler(btn.dataset.slug);
   });
 
-  // Date inputs update state but don't trigger a re-render — use Apply for that
-  dateStartEl.addEventListener("change", () => {
-    state.dateStart = dateStartEl.value;
-    updateClearBtn();
-  });
-
-  dateEndEl.addEventListener("change", () => {
-    state.dateEnd = dateEndEl.value;
-    updateClearBtn();
-  });
-
-  document.getElementById("filter-apply-btn").addEventListener("click", () => {
-    onStateChange();
-  });
-
   clearBtn.addEventListener("click", () => {
     state.selectedFilers = [];
-    state.dateStart = "";
-    state.dateEnd   = "";
-    dateStartEl.value = "";
-    dateEndEl.value   = "";
     renderChips();
     updateClearBtn();
     onStateChange();
@@ -660,29 +639,23 @@ async function loadOverview() {
     const profiles = await Promise.all(state.selectedFilers.map(f => loadFilerProfile(f.slug)));
     renderOverviewMultiFiler(profiles);
   }
+
+  // Render timeline chart in the overview panel
+  await loadTimeline();
 }
 
 function renderOverviewGlobal() {
-  const hasDate = state.dateStart || state.dateEnd;
-  if (hasDate) {
-    const { totalIn, totalInKind, totalOut, cashOnHand } = statsFromTimeline(filterMonthRows(timelineData || []));
-    document.getElementById("stat-contributions").textContent = fmt$(totalIn);
-    document.getElementById("stat-inkind").textContent        = fmt$(totalInKind);
-    document.getElementById("stat-expenditures").textContent  = fmt$(totalOut);
-    document.getElementById("stat-cash-on-hand").textContent  = fmt$(cashOnHand);
-    document.getElementById("stat-transactions").textContent  = "—";
-    document.getElementById("stat-range").textContent =
-      `${state.dateStart || "…"} – ${state.dateEnd || "…"}`;
-  } else {
-    document.getElementById("stat-contributions").textContent = fmt$(summaryData.total_contributions);
-    document.getElementById("stat-inkind").textContent        = fmt$(summaryData.total_inkind || 0);
-    document.getElementById("stat-expenditures").textContent  = fmt$(summaryData.total_expenditures);
-    const coh = summaryData.total_contributions - summaryData.total_expenditures;
-    document.getElementById("stat-cash-on-hand").textContent  = fmt$(coh);
-    document.getElementById("stat-transactions").textContent  = fmtNum(summaryData.total_transactions);
-    document.getElementById("stat-range").textContent =
-      `${summaryData.date_range_start} – ${summaryData.date_range_end}`;
-  }
+  document.getElementById("stat-contributions").textContent = fmt$(summaryData.total_contributions);
+  document.getElementById("stat-inkind").textContent        = fmt$(summaryData.total_inkind || 0);
+  document.getElementById("stat-expenditures").textContent  = fmt$(summaryData.total_expenditures);
+  const coh = summaryData.total_contributions - summaryData.total_expenditures;
+  document.getElementById("stat-cash-on-hand").textContent  = fmt$(coh);
+  document.getElementById("stat-transactions").textContent  = fmtNum(summaryData.total_transactions);
+  document.getElementById("stat-range").textContent =
+    `${summaryData.date_range_start} – ${summaryData.date_range_end}`;
+
+  document.getElementById("stat-cards").hidden            = false;
+  document.getElementById("filer-comparison-grid").hidden = true;
 
   document.getElementById("overview-donut-title").textContent = "Contributions by Donor Type";
 
@@ -715,22 +688,15 @@ function renderOverviewGlobal() {
 }
 
 function renderOverviewSingleFiler(profile) {
-  const hasDate = state.dateStart || state.dateEnd;
-  if (hasDate) {
-    const { totalIn, totalInKind, totalOut, cashOnHand } = statsFromTimeline(filterMonthRows(profile.timeline || []));
-    document.getElementById("stat-contributions").textContent = fmt$(totalIn);
-    document.getElementById("stat-inkind").textContent        = fmt$(totalInKind);
-    document.getElementById("stat-expenditures").textContent  = fmt$(totalOut);
-    document.getElementById("stat-cash-on-hand").textContent  = fmt$(cashOnHand);
-    document.getElementById("stat-transactions").textContent  = "—";
-  } else {
-    document.getElementById("stat-contributions").textContent = fmt$(profile.total_in);
-    document.getElementById("stat-inkind").textContent        = fmt$(profile.total_inkind || 0);
-    document.getElementById("stat-expenditures").textContent  = fmt$(profile.total_out);
-    document.getElementById("stat-cash-on-hand").textContent  = fmt$(profile.cash_on_hand);
-    document.getElementById("stat-transactions").textContent  = fmtNum(profile.tran_count);
-  }
-  document.getElementById("stat-range").textContent = profile.name;
+  document.getElementById("stat-contributions").textContent = fmt$(profile.total_in);
+  document.getElementById("stat-inkind").textContent        = fmt$(profile.total_inkind || 0);
+  document.getElementById("stat-expenditures").textContent  = fmt$(profile.total_out);
+  document.getElementById("stat-cash-on-hand").textContent  = fmt$(profile.cash_on_hand);
+  document.getElementById("stat-transactions").textContent  = fmtNum(profile.tran_count);
+  document.getElementById("stat-range").textContent         = profile.name;
+
+  document.getElementById("stat-cards").hidden            = false;
+  document.getElementById("filer-comparison-grid").hidden = true;
 
   document.getElementById("overview-donut-title").textContent =
     `Contributions by Donor Type — ${profile.name}`;
@@ -756,12 +722,8 @@ function renderOverviewSingleFiler(profile) {
 }
 
 function renderOverviewMultiFiler(profiles) {
-  document.getElementById("stat-contributions").textContent = "—";
-  document.getElementById("stat-inkind").textContent        = "—";
-  document.getElementById("stat-expenditures").textContent  = "—";
-  document.getElementById("stat-cash-on-hand").textContent  = "—";
-  document.getElementById("stat-transactions").textContent  = "—";
-  document.getElementById("stat-range").textContent         = "—";
+  document.getElementById("stat-cards").hidden            = true;
+  document.getElementById("filer-comparison-grid").hidden = false;
 
   document.getElementById("overview-donut-title").textContent =
     "Contributions by Donor Type";
@@ -796,35 +758,22 @@ function renderOverviewMultiFiler(profiles) {
     }
   });
 
-  const hasDate = state.dateStart || state.dateEnd;
-  const grid = document.getElementById("filer-comparison-grid");
-  grid.hidden = false;
-  grid.innerHTML = profiles.map(p => {
-    let totalIn, totalInKind, totalOut, cashOnHand, tranCount;
-    if (hasDate) {
-      ({ totalIn, totalInKind, totalOut, cashOnHand } = statsFromTimeline(filterMonthRows(p.timeline || [])));
-      tranCount = null;
-    } else {
-      totalIn = p.total_in; totalInKind = p.total_inkind || 0;
-      totalOut = p.total_out; cashOnHand = p.cash_on_hand; tranCount = p.tran_count;
-    }
-    return `
+  document.getElementById("filer-comparison-grid").innerHTML = profiles.map(p => `
     <div class="filer-card">
       <div class="filer-card-name">${esc(p.name)}</div>
       <div class="filer-card-stats">
         <div class="filer-card-stat-label">Cash Contributions</div>
-        <div class="filer-card-stat-value">${fmt$(totalIn)}</div>
-        <div class="filer-card-stat-label">In-Kind</div>
-        <div class="filer-card-stat-value">${fmt$(totalInKind)}</div>
-        <div class="filer-card-stat-label">Expenditures</div>
-        <div class="filer-card-stat-value">${fmt$(totalOut)}</div>
+        <div class="filer-card-stat-value">${fmt$(p.total_in)}</div>
+        <div class="filer-card-stat-label">In-Kind Received</div>
+        <div class="filer-card-stat-value">${fmt$(p.total_inkind || 0)}</div>
+        <div class="filer-card-stat-label">Total Expenditures</div>
+        <div class="filer-card-stat-value">${fmt$(p.total_out)}</div>
         <div class="filer-card-stat-label">Cash on Hand</div>
-        <div class="filer-card-stat-value">${fmt$(cashOnHand)}</div>
-        <div class="filer-card-stat-label">Transactions</div>
-        <div class="filer-card-stat-value">${tranCount !== null ? fmtNum(tranCount) : "—"}</div>
+        <div class="filer-card-stat-value">${fmt$(p.cash_on_hand)}</div>
+        <div class="filer-card-stat-label">Total Transactions</div>
+        <div class="filer-card-stat-value">${fmtNum(p.tran_count)}</div>
       </div>
-    </div>`;
-  }).join("");
+    </div>`).join("");
 }
 
 // ── Donors ────────────────────────────────────────────────────────────────────
@@ -1356,7 +1305,6 @@ const loaders = {
   overview:   loadOverview,
   donors:     loadDonors,
   recipients: loadRecipients,
-  timeline:   loadTimeline,
   search:     loadSearch,
 };
 

@@ -722,8 +722,7 @@ def aggregate(df: pd.DataFrame) -> None:
     })
 
     # ── recent_transactions.json ──────────────────────────────────────────────
-    cutoff = pd.Timestamp.now() - pd.DateOffset(months=12)
-    recent = df[df["filed_date"] >= cutoff].copy()
+    recent = df.copy()
     recent["filed_date"] = recent["filed_date"].dt.strftime("%Y-%m-%d")
     recent["amount"] = recent["amount"].round(2)
 
@@ -735,7 +734,7 @@ def aggregate(df: pd.DataFrame) -> None:
         contrib_col: "contributor_payee",
         filer_col:   "filer",
     })
-    recent = recent.sort_values("filed_date", ascending=False).head(5000)
+    recent = recent.sort_values("filed_date", ascending=False).head(10000)
     recent = recent.fillna("")
     _write_json("recent_transactions.json", recent.to_dict(orient="records"))
 

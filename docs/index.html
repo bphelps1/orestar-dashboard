@@ -35,15 +35,6 @@
         <ul class="filer-dropdown" id="filer-dropdown" role="listbox" hidden></ul>
       </div>
     </div>
-    <div class="date-range-selector">
-      <label class="filter-label">Date range</label>
-      <div class="date-inputs">
-        <input type="date" id="date-start" aria-label="Start date" />
-        <span class="date-sep">to</span>
-        <input type="date" id="date-end" aria-label="End date" />
-        <button class="filter-apply-btn" id="filter-apply-btn">Apply</button>
-      </div>
-    </div>
     <button class="filter-clear-btn" id="filter-clear-btn" hidden>Clear filters</button>
   </div>
 </div>
@@ -52,7 +43,6 @@
   <button class="tab-btn active" data-tab="overview"    role="tab" aria-selected="true">Overview</button>
   <button class="tab-btn"        data-tab="donors"      role="tab">Donors</button>
   <button class="tab-btn"        data-tab="recipients"  role="tab">Recipients</button>
-  <button class="tab-btn"        data-tab="timeline"    role="tab">Timeline</button>
   <button class="tab-btn"        data-tab="search"      role="tab">Search</button>
 </nav>
 
@@ -60,6 +50,10 @@
 
   <!-- ══════════════════════════ OVERVIEW ══════════════════════════ -->
   <section id="tab-overview" class="tab-panel active">
+    <!-- Per-filer stat cards (multi-filer mode) -->
+    <div id="filer-comparison-grid" class="filer-comparison-grid" hidden></div>
+
+    <!-- Global stat cards (single-filer or no-filer mode) -->
     <div class="stat-cards" id="stat-cards">
       <div class="card">
         <div class="card-label">Cash Contributions</div>
@@ -92,7 +86,14 @@
       <canvas id="chart-contributor-type"></canvas>
     </div>
 
-    <div id="filer-comparison-grid" class="filer-comparison-grid" hidden></div>
+    <div class="chart-box full-width" id="overview-timeline-box">
+      <div class="controls-bar" id="timeline-year-group" style="margin-bottom:8px">
+        <label for="timeline-year">Filter year:</label>
+        <select id="timeline-year"><option value="all">All years</option></select>
+      </div>
+      <h2>Monthly Cash Flow (Contributions vs. Expenditures)</h2>
+      <canvas id="chart-timeline"></canvas>
+    </div>
 
     <p class="last-updated">Last updated: <span id="last-updated">—</span></p>
   </section>
@@ -198,19 +199,6 @@
     </div>
   </section>
 
-  <!-- ══════════════════════════ TIMELINE ══════════════════════════ -->
-  <section id="tab-timeline" class="tab-panel" hidden>
-    <div class="controls-bar" id="timeline-year-group">
-      <label for="timeline-year">Filter year:</label>
-      <select id="timeline-year"><option value="all">All years</option></select>
-    </div>
-
-    <div class="chart-box full-width">
-      <h2>Monthly Cash Flow (Contributions vs. Expenditures)</h2>
-      <canvas id="chart-timeline"></canvas>
-    </div>
-  </section>
-
   <!-- ══════════════════════════ SEARCH ══════════════════════════ -->
   <section id="tab-search" class="tab-panel" hidden>
     <div class="controls-bar search-bar">
@@ -229,7 +217,7 @@
     </div>
 
     <p class="search-info">
-      Showing last 12 months of transactions (<span id="search-count">0</span> results).
+      <span id="search-count">0</span> results from 10,000 most recent transactions.
     </p>
 
     <div class="table-wrapper">
