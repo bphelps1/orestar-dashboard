@@ -27,6 +27,13 @@ const PALETTE = [
   "#68d391", "#63b3ed", "#fc8181", "#d6bcfa", "#fbd38d",
 ];
 
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 // ── Date-range filter helpers ─────────────────────────────────────────────────
 
 // Returns ["2020","2021",...] for the active date range, or null (= all years).
@@ -232,7 +239,20 @@ function makeDonutChart(canvasId, labels, values, title) {
       labels,
       datasets: [{
         data: values,
-        backgroundColor: PALETTE.slice(0, labels.length),
+        backgroundColor: (() => {
+          // Each base type gets a PALETTE color; "(out of state)" variant gets same hue at 45% opacity
+          const _baseTypes = [];
+          labels.forEach(l => {
+            const base = l.endsWith(" (out of state)") ? l.slice(0, -15) : l;
+            if (!_baseTypes.includes(base)) _baseTypes.push(base);
+          });
+          return labels.map(l => {
+            const isOOS = l.endsWith(" (out of state)");
+            const base  = isOOS ? l.slice(0, -15) : l;
+            const color = PALETTE[_baseTypes.indexOf(base) % PALETTE.length];
+            return isOOS ? hexToRgba(color, 0.45) : color;
+          });
+        })(),
         borderWidth: 2,
         borderColor: "#fff",
       }],

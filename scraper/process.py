@@ -82,6 +82,7 @@ COL_MAP = {
     "city":                     "city",
     "state":                    "state",
     "zip":                      "zip",
+    "book type":                "book_type",
 }
 
 CONTRIBUTOR_TYPE_LABELS = {
@@ -385,10 +386,19 @@ def process() -> None:
         else:
             new_df["filed_date"] = pd.NaT
 
+        if "book_type" not in new_df.columns:
+            new_df["book_type"] = ""
+        new_df["book_type"] = (
+            new_df["book_type"].fillna("").astype(str).str.strip()
+            .replace({"Candidate's Immediate Family": "Candidate & Immediate Family", "": "Other"})
+        )
+
         # ── 3. Load existing transactions and merge ───────────────────────────
         if TRANSACTIONS.exists():
             log.info("Loading existing transactions.csv.gz…")
             existing = pd.read_csv(TRANSACTIONS, compression="gzip", dtype=str)
+            if "book type" in existing.columns and "book_type" not in existing.columns:
+                existing = existing.rename(columns={"book type": "book_type"})
             # Convert amount back to float
             existing["amount"] = pd.to_numeric(existing["amount"], errors="coerce").fillna(0.0)
             existing["filed_date"] = pd.to_datetime(existing["filed_date"], errors="coerce").dt.date
@@ -468,6 +478,21 @@ def aggregate(df: pd.DataFrame) -> None:
 
     # Ensure amount is numeric
     df = df.copy()
+
+    # Normalize book_type (legacy CSV may still have raw "book type" column name)
+    if "book type" in df.columns and "book_type" not in df.columns:
+        df = df.rename(columns={"book type": "book_type"})
+    if "book_type" not in df.columns:
+        df["book_type"] = "Other"
+    else:
+        df["book_type"] = (
+            df["book_type"].fillna("").astype(str).str.strip()
+            .replace({"Candidate's Immediate Family": "Candidate & Immediate Family", "": "Other"})
+        )
+    # Out-of-state flag: non-blank state that isn't OR → True; blank or OR → False
+    _st = df["state"].fillna("").astype(str).str.strip().str.upper() if "state" in df.columns else pd.Series("", index=df.index)
+    df["is_out_of_state"] = _st.ne("") & _st.ne("OR")
+
     df["amount"] = df["amount"].apply(to_float)
     df["filed_date"] = pd.to_datetime(df["filed_date"], errors="coerce")
     df = df.dropna(subset=["filed_date"])
@@ -596,27 +621,32 @@ def aggregate(df: pd.DataFrame) -> None:
     _write_json("timeline.json", timeline.to_dict(orient="records"))
 
     # ── by_contributor_type.json ──────────────────────────────────────────────
-    type_col = "contributor_type_label" if "contributor_type_label" in cash_contribs.columns else "contributor_type"
-    by_type = (
-        cash_contribs.groupby(type_col)["amount"]
-        .sum()
-        .reset_index()
-        .rename(columns={type_col: "type", "amount": "total"})
-        .sort_values("total", ascending=False)
-    )
-    by_type["total"] = by_type["total"].round(2)
+    def _type_rows(frame):
+        """Build [{type, total}] list interleaving in-state then out-of-state per type."""
+        if frame.empty or "book_type" not in frame.columns:
+            return []
+        oos = frame["is_out_of_state"] if "is_out_of_state" in frame.columns else pd.Series(False, index=frame.index)
+        in_s  = frame[~oos].groupby("book_type")["amount"].sum()
+        out_s = frame[ oos].groupby("book_type")["amount"].sum()
+        all_types = sorted(
+            set(in_s.index) | set(out_s.index),
+            key=lambda t: -(in_s.get(t, 0) + out_s.get(t, 0)),
+        )
+        rows = []
+        for t in all_types:
+            iv = round(float(in_s.get(t, 0)), 2)
+            ov = round(float(out_s.get(t, 0)), 2)
+            if iv:
+                rows.append({"type": t, "total": iv})
+            if ov:
+                rows.append({"type": t + " (out of state)", "total": ov})
+        return rows
+
     by_type_by_year: dict[str, list] = {}
     for yr in sorted(cash_contribs["year"].dropna().unique()):
-        yr_df = cash_contribs[cash_contribs["year"] == yr]
-        bt_yr = (
-            yr_df.groupby(type_col)["amount"].sum().reset_index()
-            .rename(columns={type_col: "type", "amount": "total"})
-            .sort_values("total", ascending=False)
-        )
-        bt_yr["total"] = bt_yr["total"].round(2)
-        by_type_by_year[str(int(yr))] = bt_yr.to_dict(orient="records")
+        by_type_by_year[str(int(yr))] = _type_rows(cash_contribs[cash_contribs["year"] == yr])
     _write_json("by_contributor_type.json", {
-        "all_time": by_type.to_dict(orient="records"),
+        "all_time": _type_rows(cash_contribs),
         "by_year":  by_type_by_year,
     })
 
@@ -628,7 +658,7 @@ def aggregate(df: pd.DataFrame) -> None:
 
     keep_cols = [c for c in [
         "tran_id", "filed_date", "tran_type", "amount",
-        contrib_col, filer_col, "contributor_type_label", "purpose"
+        contrib_col, filer_col, "book_type", "purpose"
     ] if c in recent.columns]
     recent = recent[keep_cols].rename(columns={
         contrib_col: "contributor_payee",
@@ -659,11 +689,25 @@ def aggregate_filers(
     filers_dir = AGG_DIR / "filers"
     filers_dir.mkdir(parents=True, exist_ok=True)
 
-    type_col = (
-        "contributor_type_label"
-        if "contributor_type_label" in contributions.columns
-        else "contributor_type"
-    )
+    def _filer_type_rows(frame):
+        if frame.empty or "book_type" not in frame.columns:
+            return []
+        oos = frame["is_out_of_state"] if "is_out_of_state" in frame.columns else pd.Series(False, index=frame.index)
+        in_s  = frame[~oos].groupby("book_type")["amount"].sum()
+        out_s = frame[ oos].groupby("book_type")["amount"].sum()
+        all_types = sorted(
+            set(in_s.index) | set(out_s.index),
+            key=lambda t: -(in_s.get(t, 0) + out_s.get(t, 0)),
+        )
+        rows = []
+        for t in all_types:
+            iv = round(float(in_s.get(t, 0)), 2)
+            ov = round(float(out_s.get(t, 0)), 2)
+            if iv:
+                rows.append({"type": t, "total": iv})
+            if ov:
+                rows.append({"type": t + " (out of state)", "total": ov})
+        return rows
 
     # ── Build slug registry with collision handling ──────────────────────────
     all_filer_names = sorted([n for n in df[filer_col].dropna().unique() if n != ""])
@@ -794,29 +838,13 @@ def aggregate_filers(
             top_payees_by_year = {}
 
         # By contributor type — all-time and by year
-        if not filer_contrib.empty and type_col in filer_contrib.columns:
-            bt = (
-                filer_contrib.groupby(type_col)["amount"]
-                .sum().reset_index()
-                .rename(columns={type_col: "type", "amount": "total"})
-                .sort_values("total", ascending=False)
-            )
-            bt["total"] = bt["total"].round(2)
-            by_type_list = bt.to_dict(orient="records")
-            by_type_by_year_filer: dict[str, list] = {}
-            if "year" in filer_contrib.columns:
-                for yr in sorted(filer_contrib["year"].dropna().unique()):
-                    yr_df = filer_contrib[filer_contrib["year"] == yr]
-                    bt_yr = (
-                        yr_df.groupby(type_col)["amount"].sum().reset_index()
-                        .rename(columns={type_col: "type", "amount": "total"})
-                        .sort_values("total", ascending=False)
-                    )
-                    bt_yr["total"] = bt_yr["total"].round(2)
-                    by_type_by_year_filer[str(int(yr))] = bt_yr.to_dict(orient="records")
-        else:
-            by_type_list = []
-            by_type_by_year_filer = {}
+        by_type_list = _filer_type_rows(filer_contrib)
+        by_type_by_year_filer: dict[str, list] = {}
+        if "year" in filer_contrib.columns and not filer_contrib.empty:
+            for yr in sorted(filer_contrib["year"].dropna().unique()):
+                by_type_by_year_filer[str(int(yr))] = _filer_type_rows(
+                    filer_contrib[filer_contrib["year"] == yr]
+                )
 
         detail = {
             "name": name, "slug": slug,
