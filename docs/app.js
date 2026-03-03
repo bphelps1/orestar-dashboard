@@ -245,8 +245,12 @@ function fmtNum(n) {
   return Number(n).toLocaleString("en-US");
 }
 
+// _cbv is set once per page-load so in-session re-requests reuse the same version,
+// but a fresh page load always bypasses the CDN cache to get current data.
+const _cbv = Date.now();
 async function fetchJSON(path) {
-  const resp = await fetch(path);
+  const sep  = path.includes("?") ? "&" : "?";
+  const resp = await fetch(`${path}${sep}_v=${_cbv}`);
   if (!resp.ok) throw new Error(`Failed to load ${path}: ${resp.status}`);
   return resp.json();
 }
