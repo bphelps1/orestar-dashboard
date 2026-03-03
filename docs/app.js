@@ -476,10 +476,12 @@ function buildSortableTable(tableId, rows, columns) {
 // ── Filer selector ────────────────────────────────────────────────────────────
 
 function initFilerSelector() {
-  const input    = document.getElementById("filer-search-input");
-  const dropdown = document.getElementById("filer-dropdown");
-  const chipRow  = document.getElementById("chip-input-row");
-  const clearBtn = document.getElementById("filter-clear-btn");
+  const input       = document.getElementById("filer-search-input");
+  const dropdown    = document.getElementById("filer-dropdown");
+  const chipRow     = document.getElementById("chip-input-row");
+  const clearBtn    = document.getElementById("filter-clear-btn");
+  const dateStartEl = document.getElementById("date-start");
+  const dateEndEl   = document.getElementById("date-end");
 
   const fuse = new Fuse(filerIndex, { keys: ["name"], threshold: 0.3 });
 
@@ -542,7 +544,7 @@ function initFilerSelector() {
   }
 
   function updateClearBtn() {
-    clearBtn.hidden = !(state.selectedFilers.length > 0);
+    clearBtn.hidden = !(state.selectedFilers.length > 0 || state.dateStart || state.dateEnd);
   }
 
   input.addEventListener("focus", () => {
@@ -604,8 +606,27 @@ function initFilerSelector() {
     removeFiler(btn.dataset.slug);
   });
 
+  // Date inputs update state but don't trigger a re-render — use Apply for that
+  dateStartEl.addEventListener("change", () => {
+    state.dateStart = dateStartEl.value;
+    updateClearBtn();
+  });
+
+  dateEndEl.addEventListener("change", () => {
+    state.dateEnd = dateEndEl.value;
+    updateClearBtn();
+  });
+
+  document.getElementById("filter-apply-btn").addEventListener("click", () => {
+    onStateChange();
+  });
+
   clearBtn.addEventListener("click", () => {
     state.selectedFilers = [];
+    state.dateStart = "";
+    state.dateEnd   = "";
+    dateStartEl.value = "";
+    dateEndEl.value   = "";
     renderChips();
     updateClearBtn();
     onStateChange();
@@ -632,16 +653,15 @@ async function loadOverview() {
 
   if (n === 0) {
     renderOverviewGlobal();
+    await loadTimeline();
   } else if (n === 1) {
     const profile = await loadFilerProfile(state.selectedFilers[0].slug);
     renderOverviewSingleFiler(profile);
+    await loadTimeline();
   } else {
     const profiles = await Promise.all(state.selectedFilers.map(f => loadFilerProfile(f.slug)));
     renderOverviewMultiFiler(profiles);
   }
-
-  // Render timeline chart in the overview panel
-  await loadTimeline();
 }
 
 function renderOverviewGlobal() {
@@ -654,8 +674,10 @@ function renderOverviewGlobal() {
   document.getElementById("stat-range").textContent =
     `${summaryData.date_range_start} – ${summaryData.date_range_end}`;
 
-  document.getElementById("stat-cards").hidden            = false;
-  document.getElementById("filer-comparison-grid").hidden = true;
+  document.getElementById("stat-cards").hidden             = false;
+  document.getElementById("filer-comparison-grid").hidden  = true;
+  document.getElementById("overview-donut-box").hidden     = false;
+  document.getElementById("overview-timeline-box").hidden  = false;
 
   document.getElementById("overview-donut-title").textContent = "Contributions by Donor Type";
 
@@ -695,8 +717,10 @@ function renderOverviewSingleFiler(profile) {
   document.getElementById("stat-transactions").textContent  = fmtNum(profile.tran_count);
   document.getElementById("stat-range").textContent         = profile.name;
 
-  document.getElementById("stat-cards").hidden            = false;
-  document.getElementById("filer-comparison-grid").hidden = true;
+  document.getElementById("stat-cards").hidden             = false;
+  document.getElementById("filer-comparison-grid").hidden  = true;
+  document.getElementById("overview-donut-box").hidden     = false;
+  document.getElementById("overview-timeline-box").hidden  = false;
 
   document.getElementById("overview-donut-title").textContent =
     `Contributions by Donor Type — ${profile.name}`;
@@ -722,8 +746,10 @@ function renderOverviewSingleFiler(profile) {
 }
 
 function renderOverviewMultiFiler(profiles) {
-  document.getElementById("stat-cards").hidden            = true;
-  document.getElementById("filer-comparison-grid").hidden = false;
+  document.getElementById("stat-cards").hidden             = true;
+  document.getElementById("filer-comparison-grid").hidden  = false;
+  document.getElementById("overview-donut-box").hidden     = true;
+  document.getElementById("overview-timeline-box").hidden  = true;
 
   document.getElementById("overview-donut-title").textContent =
     "Contributions by Donor Type";
