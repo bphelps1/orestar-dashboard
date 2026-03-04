@@ -239,6 +239,51 @@ function mergeTypeByYear(byYear, years) {
   });
 }
 
+// Same as mergeTypeByYear but filters by the active date range at month precision.
+function mergeTypeByMonth(byMonth) {
+  const sm = state.dateStart ? state.dateStart.slice(0, 7) : null;
+  const em = state.dateEnd   ? state.dateEnd.slice(0, 7)   : null;
+  const keys = Object.keys(byMonth || {})
+    .filter(m => (!sm || m >= sm) && (!em || m <= em));
+  const totalMap = new Map();
+  const donorMap = new Map();
+  keys.forEach(mo => {
+    (byMonth[mo] || []).forEach(d => {
+      totalMap.set(d.type, (totalMap.get(d.type) || 0) + d.total);
+      if (d.top_donors && d.top_donors.length) {
+        if (!donorMap.has(d.type)) donorMap.set(d.type, new Map());
+        const dm = donorMap.get(d.type);
+        d.top_donors.forEach(donor => {
+          dm.set(donor.name, (dm.get(donor.name) || 0) + donor.total);
+        });
+      }
+    });
+  });
+  const entries = [...totalMap.entries()]
+    .map(([type, total]) => {
+      const obj = { type, total: Math.round(total * 100) / 100 };
+      if (donorMap.has(type)) {
+        obj.top_donors = [...donorMap.get(type).entries()]
+          .map(([name, t]) => ({ name, total: Math.round(t * 100) / 100 }))
+          .sort((a, b) => b.total - a.total)
+          .slice(0, 5);
+      }
+      return obj;
+    });
+  const baseTotals = new Map();
+  entries.forEach(e => {
+    const base = e.type.endsWith(" (out of state)") ? e.type.slice(0, -15) : e.type;
+    baseTotals.set(base, (baseTotals.get(base) || 0) + e.total);
+  });
+  return entries.sort((a, b) => {
+    const baseA = a.type.endsWith(" (out of state)") ? a.type.slice(0, -15) : a.type;
+    const baseB = b.type.endsWith(" (out of state)") ? b.type.slice(0, -15) : b.type;
+    const diff = (baseTotals.get(baseB) || 0) - (baseTotals.get(baseA) || 0);
+    if (diff !== 0) return diff;
+    return (a.type.endsWith(" (out of state)") ? 1 : 0) - (b.type.endsWith(" (out of state)") ? 1 : 0);
+  });
+}
+
 // Sum contributions/expenditures from a (possibly filtered) timeline array.
 function statsFromTimeline(rows) {
   const totalIn    = rows.reduce((s, r) => s + (r.contributions || 0), 0);
@@ -759,14 +804,14 @@ function renderOverviewGlobal() {
 
   document.getElementById("overview-donut-title").textContent = "Contributions by Donor Type";
 
-  // byTypeDataGlobal is now {all_time:[...], by_year:{...}}; handle old flat-array format too
-  const years = yearsInRange();
+  // byTypeDataGlobal is now {all_time:[...], by_year:{...}, by_month:{...}}
+  const hasDate = state.dateStart || state.dateEnd;
   let byTypeRows;
   if (Array.isArray(byTypeDataGlobal)) {
     byTypeRows = byTypeDataGlobal; // old cached format — show as-is
   } else if (byTypeDataGlobal) {
-    byTypeRows = years
-      ? mergeTypeByYear(byTypeDataGlobal.by_year || {}, years)
+    byTypeRows = hasDate
+      ? mergeTypeByMonth(byTypeDataGlobal.by_month || {})
       : (byTypeDataGlobal.all_time || []);
   } else {
     byTypeRows = [];
@@ -811,9 +856,9 @@ function renderOverviewSingleFiler(profile) {
   document.getElementById("overview-donut-title").textContent =
     `Contributions by Donor Type — ${profile.name}`;
 
-  const years = yearsInRange();
-  const byTypeRows = years
-    ? mergeTypeByYear(profile.by_contributor_type_by_year || {}, years)
+  const hasDate = state.dateStart || state.dateEnd;
+  const byTypeRows = hasDate
+    ? mergeTypeByMonth(profile.by_contributor_type_by_month || {})
     : (profile.by_contributor_type || []);
   resetDonutBox();
   if (byTypeRows.length) {
@@ -839,15 +884,15 @@ function renderOverviewMultiFiler(profiles) {
   document.getElementById("overview-donut-title").textContent =
     "Contributions by Donor Type";
 
-  const years = yearsInRange();
+  const hasDate = state.dateStart || state.dateEnd;
 
   // Build one donut per filer, side by side, with a single shared legend
   buildMultiDonutBox(profiles);
 
   // Collect all unique types across filers (preserving order by first appearance)
   const legendTypes = [];
-  const perFilerRows = profiles.map(p => years
-    ? mergeTypeByYear(p.by_contributor_type_by_year || {}, years)
+  const perFilerRows = profiles.map(p => hasDate
+    ? mergeTypeByMonth(p.by_contributor_type_by_month || {})
     : (p.by_contributor_type || []));
   perFilerRows.forEach(rows => {
     rows.forEach(r => { if (!legendTypes.includes(r.type)) legendTypes.push(r.type); });

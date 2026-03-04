@@ -736,9 +736,14 @@ def aggregate(df: pd.DataFrame) -> None:
     for yr in sorted(cash_contribs["year"].dropna().unique()):
         yr_rows = _type_rows(cash_contribs[cash_contribs["year"] == yr])
         by_type_by_year[str(int(yr))] = yr_rows
+    by_type_by_month: dict[str, list] = {}
+    if "month" in cash_contribs.columns:
+        for mo in sorted(cash_contribs["month"].dropna().unique()):
+            by_type_by_month[str(mo)] = _type_rows(cash_contribs[cash_contribs["month"] == mo])
     _write_json("by_contributor_type.json", {
         "all_time": _type_rows(cash_contribs),
         "by_year":  by_type_by_year,
+        "by_month": by_type_by_month,
     })
 
     # ── recent_transactions.json ──────────────────────────────────────────────
@@ -952,13 +957,18 @@ def aggregate_filers(
             top_payees_list = []
             top_payees_by_year = {}
 
-        # By contributor type — all-time (with top_donors) and by year (totals only)
+        # By contributor type — all-time (with top_donors), by year, and by month
         by_type_list = _filer_type_rows(filer_contrib)
         by_type_by_year_filer: dict[str, list] = {}
-        if "year" in filer_contrib.columns and not filer_contrib.empty:
-            for yr in sorted(filer_contrib["year"].dropna().unique()):
-                yr_rows = _filer_type_rows(filer_contrib[filer_contrib["year"] == yr])
-                by_type_by_year_filer[str(int(yr))] = yr_rows
+        by_type_by_month_filer: dict[str, list] = {}
+        if not filer_contrib.empty:
+            if "year" in filer_contrib.columns:
+                for yr in sorted(filer_contrib["year"].dropna().unique()):
+                    yr_rows = _filer_type_rows(filer_contrib[filer_contrib["year"] == yr])
+                    by_type_by_year_filer[str(int(yr))] = yr_rows
+            if "month" in filer_contrib.columns:
+                for mo in sorted(filer_contrib["month"].dropna().unique()):
+                    by_type_by_month_filer[str(mo)] = _filer_type_rows(filer_contrib[filer_contrib["month"] == mo])
 
         detail = {
             "name": name, "slug": slug,
@@ -973,6 +983,7 @@ def aggregate_filers(
             "top_payees_by_year": top_payees_by_year,
             "by_contributor_type": by_type_list,
             "by_contributor_type_by_year": by_type_by_year_filer,
+            "by_contributor_type_by_month": by_type_by_month_filer,
         }
 
         out_path = filers_dir / f"{slug}.json"
