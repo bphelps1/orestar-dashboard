@@ -770,11 +770,22 @@ function renderOverviewGlobal() {
 }
 
 function renderOverviewSingleFiler(profile) {
-  document.getElementById("stat-contributions").textContent = fmt$(profile.total_in);
-  document.getElementById("stat-inkind").textContent        = fmt$(profile.total_inkind || 0);
-  document.getElementById("stat-expenditures").textContent  = fmt$(profile.total_out);
-  document.getElementById("stat-cash-on-hand").textContent  = fmt$(profile.cash_on_hand);
-  document.getElementById("stat-transactions").textContent  = fmtNum(profile.tran_count);
+  const hasDate = state.dateStart || state.dateEnd;
+  if (hasDate) {
+    const { totalIn, totalInKind, totalOut, cashOnHand } =
+      statsFromTimeline(filterMonthRows(profile.timeline || []));
+    document.getElementById("stat-contributions").textContent = fmt$(totalIn);
+    document.getElementById("stat-inkind").textContent        = fmt$(totalInKind);
+    document.getElementById("stat-expenditures").textContent  = fmt$(totalOut);
+    document.getElementById("stat-cash-on-hand").textContent  = fmt$(cashOnHand);
+    document.getElementById("stat-transactions").textContent  = "—";
+  } else {
+    document.getElementById("stat-contributions").textContent = fmt$(profile.total_in);
+    document.getElementById("stat-inkind").textContent        = fmt$(profile.total_inkind || 0);
+    document.getElementById("stat-expenditures").textContent  = fmt$(profile.total_out);
+    document.getElementById("stat-cash-on-hand").textContent  = fmt$(profile.cash_on_hand);
+    document.getElementById("stat-transactions").textContent  = fmtNum(profile.tran_count);
+  }
   document.getElementById("stat-cards").hidden             = false;
   document.getElementById("filer-comparison-grid").hidden  = true;
   document.getElementById("overview-donut-box").hidden     = false;
@@ -843,22 +854,29 @@ function renderOverviewMultiFiler(profiles) {
     }
   });
 
-  document.getElementById("filer-comparison-grid").innerHTML = profiles.map(p => `
+  document.getElementById("filer-comparison-grid").innerHTML = profiles.map(p => {
+    const hasDate = state.dateStart || state.dateEnd;
+    const s = hasDate
+      ? statsFromTimeline(filterMonthRows(p.timeline || []))
+      : { totalIn: p.total_in, totalInKind: p.total_inkind || 0, totalOut: p.total_out, cashOnHand: p.cash_on_hand };
+    const tranCount = hasDate ? "—" : fmtNum(p.tran_count);
+    return `
     <div class="filer-card">
       <div class="filer-card-name">${esc(p.name)}</div>
       <div class="filer-card-stats">
         <div class="filer-card-stat-label">Cash Contributions</div>
-        <div class="filer-card-stat-value">${fmt$(p.total_in)}</div>
+        <div class="filer-card-stat-value">${fmt$(s.totalIn)}</div>
         <div class="filer-card-stat-label">In-Kind Received</div>
-        <div class="filer-card-stat-value">${fmt$(p.total_inkind || 0)}</div>
+        <div class="filer-card-stat-value">${fmt$(s.totalInKind)}</div>
         <div class="filer-card-stat-label">Total Expenditures</div>
-        <div class="filer-card-stat-value">${fmt$(p.total_out)}</div>
+        <div class="filer-card-stat-value">${fmt$(s.totalOut)}</div>
         <div class="filer-card-stat-label">Cash on Hand</div>
-        <div class="filer-card-stat-value">${fmt$(p.cash_on_hand)}</div>
+        <div class="filer-card-stat-value">${fmt$(s.cashOnHand)}</div>
         <div class="filer-card-stat-label">Total Transactions</div>
-        <div class="filer-card-stat-value">${fmtNum(p.tran_count)}</div>
+        <div class="filer-card-stat-value">${tranCount}</div>
       </div>
-    </div>`).join("");
+    </div>`;
+  }).join("");
 }
 
 // ── Donors ────────────────────────────────────────────────────────────────────
