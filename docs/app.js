@@ -194,16 +194,35 @@ function mergeByYear(byYear, years) {
 
 // Same as mergeByYear but uses "type" as the key (contributor-type arrays).
 // Sorts by base-type combined total so in-state/out-of-state pairs stay adjacent.
+// Also merges top_donors lists across years so tooltips work for filtered views.
 function mergeTypeByYear(byYear, years) {
   const src = years === null ? Object.keys(byYear || {}) : years;
-  const map = new Map();
+  const totalMap = new Map();
+  const donorMap = new Map(); // type → Map<name, total>
   src.forEach(yr => {
     (byYear[yr] || []).forEach(d => {
-      map.set(d.type, (map.get(d.type) || 0) + d.total);
+      totalMap.set(d.type, (totalMap.get(d.type) || 0) + d.total);
+      if (d.top_donors && d.top_donors.length) {
+        if (!donorMap.has(d.type)) donorMap.set(d.type, new Map());
+        const dm = donorMap.get(d.type);
+        d.top_donors.forEach(donor => {
+          dm.set(donor.name, (dm.get(donor.name) || 0) + donor.total);
+        });
+      }
     });
   });
+  const map = totalMap;
   const entries = [...map.entries()]
-    .map(([type, total]) => ({ type, total: Math.round(total * 100) / 100 }));
+    .map(([type, total]) => {
+      const obj = { type, total: Math.round(total * 100) / 100 };
+      if (donorMap.has(type)) {
+        obj.top_donors = [...donorMap.get(type).entries()]
+          .map(([name, t]) => ({ name, total: Math.round(t * 100) / 100 }))
+          .sort((a, b) => b.total - a.total)
+          .slice(0, 5);
+      }
+      return obj;
+    });
   // Compute combined total per base type so pairs sort together
   const baseTotals = new Map();
   entries.forEach(e => {
@@ -754,14 +773,12 @@ function renderOverviewGlobal() {
   }
   resetDonutBox();
   if (byTypeRows.length) {
-    // all_time rows carry top_donors; year-filtered rows do not
-    const tooltipRows = years ? null : byTypeRows;
     makeDonutChart(
       "chart-contributor-type",
       byTypeRows.map(r => r.type),
       byTypeRows.map(r => r.total),
       "Contributor Type",
-      tooltipRows,
+      byTypeRows,
     );
   }
 
@@ -800,14 +817,12 @@ function renderOverviewSingleFiler(profile) {
     : (profile.by_contributor_type || []);
   resetDonutBox();
   if (byTypeRows.length) {
-    // all_time (no year filter) carries top_donors; year-filtered rows do not
-    const tooltipRows = years ? null : byTypeRows;
     makeDonutChart(
       "chart-contributor-type",
       byTypeRows.map(r => r.type),
       byTypeRows.map(r => r.total),
       "Contributor Type",
-      tooltipRows,
+      byTypeRows,
     );
   }
 
@@ -842,13 +857,12 @@ function renderOverviewMultiFiler(profiles) {
   profiles.forEach((p, i) => {
     const byTypeRows = perFilerRows[i];
     if (byTypeRows.length) {
-      const tooltipRows = years ? null : byTypeRows;
       makeDonutChart(
         `chart-type-${i}`,
         byTypeRows.map(r => r.type),
         byTypeRows.map(r => r.total),
         p.name,
-        tooltipRows,
+        byTypeRows,
         false, // legend shown separately via renderMultiDonutLegend
       );
     }

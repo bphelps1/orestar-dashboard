@@ -735,9 +735,7 @@ def aggregate(df: pd.DataFrame) -> None:
     by_type_by_year: dict[str, list] = {}
     for yr in sorted(cash_contribs["year"].dropna().unique()):
         yr_rows = _type_rows(cash_contribs[cash_contribs["year"] == yr])
-        by_type_by_year[str(int(yr))] = [
-            {k: v for k, v in r.items() if k != "top_donors"} for r in yr_rows
-        ]
+        by_type_by_year[str(int(yr))] = yr_rows
     _write_json("by_contributor_type.json", {
         "all_time": _type_rows(cash_contribs),
         "by_year":  by_type_by_year,
@@ -960,9 +958,7 @@ def aggregate_filers(
         if "year" in filer_contrib.columns and not filer_contrib.empty:
             for yr in sorted(filer_contrib["year"].dropna().unique()):
                 yr_rows = _filer_type_rows(filer_contrib[filer_contrib["year"] == yr])
-                by_type_by_year_filer[str(int(yr))] = [
-                    {k: v for k, v in r.items() if k != "top_donors"} for r in yr_rows
-                ]
+                by_type_by_year_filer[str(int(yr))] = yr_rows
 
         detail = {
             "name": name, "slug": slug,
