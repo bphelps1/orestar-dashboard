@@ -561,6 +561,28 @@ def aggregate(df: pd.DataFrame) -> None:
     df["year"]  = _eff_date.dt.year.astype(int)
     df["month"] = _eff_date.dt.to_period("M").astype(str)
 
+    # ── Filer-ID-based name normalization ───────────────────────────────────
+    # All transactions for a given filer ID adopt the committee name from the
+    # most recent transaction with that ID, so renames are reflected everywhere.
+    if "filer id" in df.columns:
+        _fc = "filer_canonical" if "filer_canonical" in df.columns else "filer"
+        _fid = df["filer id"].fillna("").astype(str).str.strip()
+        _has_id = _fid.ne("")
+        _id_map = (
+            df.loc[_has_id]
+            .assign(_fid_tmp=_fid[_has_id])
+            .sort_values("filed_date")
+            .groupby("_fid_tmp")[_fc]
+            .last()
+            .to_dict()
+        )
+        _mapped = _fid.map(_id_map)
+        df["filer_canonical"] = _mapped.where(_mapped.notna(), df.get(_fc, ""))
+        log.info(
+            "Filer-ID normalization applied: %d filer IDs → %d unique canonical names",
+            len(_id_map), df["filer_canonical"].nunique(),
+        )
+
     # Use canonical names if available, fall back to raw
     contrib_col = "contributor_payee_canonical" if "contributor_payee_canonical" in df.columns else "contributor_payee"
     filer_col   = "filer_canonical" if "filer_canonical" in df.columns else "filer"
@@ -825,6 +847,13 @@ def aggregate_filers(
         return frame.groupby("month")["amount"].sum().rename(col_name)
 
     # ── Per-filer detail files ────────────────────────────────────────────────
+    # Remove stale files whose slugs are no longer in the current filer set.
+    current_slugs = set(filer_slugs.values())
+    for stale in filers_dir.glob("*.json"):
+        if stale.stem not in current_slugs:
+            stale.unlink()
+            log.debug("Removed stale filer file: %s", stale.name)
+
     index_rows = []
     log.info("Generating per-filer detail files for %d filers…", len(all_filer_names))
 
