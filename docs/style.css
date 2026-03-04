@@ -635,4 +635,25 @@ input[type="date"]:focus {
 #table-donors-by-year tr:hover td:last-child {
   background: #f0f4f8;
 }
+
+/* ── Frozen header row: donors by-year pivot ─────────────────────────────── */
+/* Give the wrapper a max-height so it scrolls vertically, which lets the
+   thead stick inside it rather than relying on viewport-level scroll.        */
+#donors-by-year-view .table-wrapper {
+  max-height: 80vh;
+  overflow-y: auto;
+}
+/* All header cells stick to the top of the scroll container */
+#table-donors-by-year thead th {
+  position: sticky;
+  top: 0;
+  z-index: 4; /* above column-sticky td (z-index:2) */
+  background: var(--color-bg);
+}
+/* Corner cells are both column-sticky and row-sticky — need highest z-index */
+#table-donors-by-year thead th:nth-child(1),
+#table-donors-by-year thead th:nth-child(2),
+#table-donors-by-year thead th:last-child {
+  z-index: 6;
+}
 .mdl-label { color: var(--color-text); }

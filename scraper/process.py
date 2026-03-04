@@ -919,7 +919,7 @@ def aggregate_filers(
         if not filer_contrib.empty and contrib_col in filer_contrib.columns:
             td = (
                 filer_contrib.groupby(contrib_col)["amount"]
-                .sum().nlargest(200).reset_index()
+                .sum().nlargest(1000).reset_index()
                 .rename(columns={contrib_col: "name", "amount": "total"})
             )
             td["total"] = td["total"].round(2)
@@ -931,7 +931,7 @@ def aggregate_filers(
                     yr_df = filer_contrib[filer_contrib["year"] == yr]
                     td_yr = (
                         yr_df.groupby(contrib_col)["amount"]
-                        .sum().nlargest(200).reset_index()
+                        .sum().nlargest(1000).reset_index()
                         .rename(columns={contrib_col: "name", "amount": "total"})
                     )
                     td_yr["total"] = td_yr["total"].round(2)
