@@ -179,16 +179,21 @@ function filterMonthRows(rows) {
 }
 
 // Merge per-year {name, total} arrays for the given years (null = all).
+// Merges case-insensitively so e.g. "DaVita" and "Davita" don't become
+// two separate rows; the first-encountered capitalisation is used for display.
 function mergeByYear(byYear, years) {
   const src = years === null ? Object.keys(byYear || {}) : years;
-  const map = new Map();
+  const totalMap = new Map(); // lowercase key → total
+  const nameMap  = new Map(); // lowercase key → display name (first seen)
   src.forEach(yr => {
     (byYear[yr] || []).forEach(d => {
-      map.set(d.name, (map.get(d.name) || 0) + d.total);
+      const key = d.name.toLowerCase();
+      totalMap.set(key, (totalMap.get(key) || 0) + d.total);
+      if (!nameMap.has(key)) nameMap.set(key, d.name);
     });
   });
-  return [...map.entries()]
-    .map(([name, total]) => ({ name, total: Math.round(total * 100) / 100 }))
+  return [...totalMap.entries()]
+    .map(([key, total]) => ({ name: nameMap.get(key), total: Math.round(total * 100) / 100 }))
     .sort((a, b) => b.total - a.total);
 }
 
