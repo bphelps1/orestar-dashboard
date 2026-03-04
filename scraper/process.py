@@ -875,11 +875,15 @@ def aggregate_filers(
         total_or        = round(float(filer_or["amount"].sum())      if not filer_or.empty      else 0.0, 2)
         total_od        = round(float(filer_od["amount"].sum())      if not filer_od.empty      else 0.0, 2)
         # cash_on_hand: include all C-type receipts and all E-type disbursements
-        # EXCEPT "Personal Expenditure for Reimbursement" — that sub_type records the
-        # obligation (candidate spent own money) but the actual cash outflow is the
-        # subsequent reimbursement "Cash Expenditure" to the candidate. Including both
-        # would double-count the amount.
-        _e_for_coh      = filer_expend[filer_expend["sub_type"] != "Personal Expenditure for Reimbursement"] if not filer_expend.empty else filer_expend
+        # EXCEPT sub_types that represent obligations not yet paid in cash:
+        #   "Personal Expenditure for Reimbursement" — records the obligation when the
+        #     candidate spends their own money; the actual cash outflow is the subsequent
+        #     reimbursement "Cash Expenditure". Including both would double-count.
+        #   "Account Payable" — an outstanding payable (money owed but not yet disbursed).
+        #     ORESTAR tracks this separately on the balance sheet; deducting it here would
+        #     understate cash on hand (verified against ORESTAR publicAccountSummary).
+        _COH_EXCLUDE = {"Personal Expenditure for Reimbursement", "Account Payable"}
+        _e_for_coh      = filer_expend[~filer_expend["sub_type"].isin(_COH_EXCLUDE)] if not filer_expend.empty else filer_expend
         _total_in_full  = round(float(filer_contrib["amount"].sum()) if not filer_contrib.empty else 0.0, 2)
         _total_out_full = round(float(_e_for_coh["amount"].sum())    if not _e_for_coh.empty    else 0.0, 2)
         cash_on_hand    = round(_total_in_full + total_or - _total_out_full - total_od, 2)
