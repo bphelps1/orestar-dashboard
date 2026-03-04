@@ -1075,13 +1075,29 @@ async function loadDonors() {
     document.getElementById("donors-multi-title").textContent =
       `Donor Comparison: ${filerNames.join(" vs ")}`;
 
+    let multiSortCol = "total";
+    let multiSortDir = "desc";
+
     const thead = document.getElementById("donors-multi-thead");
-    thead.innerHTML = `<tr>
-      <th>#</th>
-      <th>Donor</th>
-      ${filerNames.map(n => `<th class="num">${esc(n)}</th>`).join("")}
-      <th class="num">Total ($)</th>
-    </tr>`;
+
+    function buildMultiThead() {
+      thead.innerHTML = `<tr>
+        <th>#</th>
+        <th class="sortable" data-col="name">Donor</th>
+        ${filerNames.map(n => `<th class="num sortable" data-col="${esc(n)}">${esc(n)}</th>`).join("")}
+        <th class="num sortable" data-col="total">Total ($)</th>
+      </tr>`;
+      thead.querySelectorAll("th.sortable").forEach(th => {
+        if (th.dataset.col === multiSortCol) th.classList.add("sort-" + multiSortDir);
+        th.addEventListener("click", () => {
+          const col = th.dataset.col;
+          multiSortDir = multiSortCol === col && multiSortDir === "desc" ? "asc" : "desc";
+          multiSortCol = col;
+          buildMultiThead();
+          renderMultiPivot();
+        });
+      });
+    }
 
     const multiSearchEl = document.getElementById("donors-multi-search");
     if (multiSearchEl) multiSearchEl.value = "";
@@ -1089,8 +1105,18 @@ async function loadDonors() {
     function renderMultiPivot() {
       const q = multiSearchEl ? multiSearchEl.value.trim().toLowerCase() : "";
       const filtered = q ? pivotRows.filter(r => r.name.toLowerCase().includes(q)) : pivotRows;
+      const sorted = [...filtered].sort((a, b) => {
+        if (multiSortCol === "name") {
+          return multiSortDir === "asc"
+            ? a.name.localeCompare(b.name)
+            : b.name.localeCompare(a.name);
+        }
+        const va = a[multiSortCol] ?? -1;
+        const vb = b[multiSortCol] ?? -1;
+        return multiSortDir === "asc" ? va - vb : vb - va;
+      });
       const tbody = document.querySelector("#table-donors-multi tbody");
-      tbody.innerHTML = filtered.map((row, i) => `<tr>
+      tbody.innerHTML = sorted.map((row, i) => `<tr>
         <td>${i + 1}</td>
         <td>${esc(row.name)}</td>
         ${filerNames.map(n => `<td class="num">${row[n] !== undefined ? fmt$(row[n]) : "—"}</td>`).join("")}
@@ -1103,6 +1129,7 @@ async function loadDonors() {
       multiSearchEl._listenerAttached = true;
     }
 
+    buildMultiThead();
     renderMultiPivot();
   }
 }
