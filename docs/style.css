@@ -164,6 +164,20 @@ main { max-width: 1200px; margin: 32px auto; padding: 0 24px; }
   margin-bottom: 12px;
 }
 
+/* ── Table search input ─────────────────────────────────────────────────── */
+input.table-search {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  margin: 0 16px 12px;
+  padding: 6px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  background: var(--color-bg);
+}
+input.table-search:focus { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+
 /* ── Tables ─────────────────────────────────────────────────────────────── */
 .table-wrapper {
   background: var(--color-surface);

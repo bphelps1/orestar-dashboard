@@ -458,7 +458,7 @@ function makeLineChart(canvasId, labels, datasets) {
 
 // ── Sortable table helper ─────────────────────────────────────────────────────
 
-function buildSortableTable(tableId, rows, columns) {
+function buildSortableTable(tableId, rows, columns, searchEl = null) {
   // columns: [{key, label, fmt, cls}]
   const table = document.getElementById(tableId);
   if (!table) return;
@@ -466,8 +466,14 @@ function buildSortableTable(tableId, rows, columns) {
   let sortCol = columns[columns.length - 1].key;  // default sort: last column (numeric)
   let sortDir = "desc";
 
+  function visible() {
+    if (!searchEl || !searchEl.value.trim()) return rows;
+    const q = searchEl.value.trim().toLowerCase();
+    return rows.filter(r => String(r[columns[0].key] || "").toLowerCase().includes(q));
+  }
+
   function render() {
-    const sorted = [...rows].sort((a, b) => {
+    const sorted = [...visible()].sort((a, b) => {
       let va = a[sortCol], vb = b[sortCol];
       if (typeof va === "string") va = va.toLowerCase();
       if (typeof vb === "string") vb = vb.toLowerCase();
@@ -502,6 +508,11 @@ function buildSortableTable(tableId, rows, columns) {
       render();
     });
   });
+
+  if (searchEl && !searchEl._listenerAttached) {
+    searchEl.addEventListener("input", render);
+    searchEl._listenerAttached = true;
+  }
 
   render();
 }
@@ -951,25 +962,33 @@ async function loadDonors() {
     document.getElementById("untapped-donors-section").hidden = true;
 
     const profiles = await Promise.all(state.selectedFilers.map(f => loadFilerProfile(f.slug)));
+    const filerNames = profiles.map(p => p.name);
 
-    const donorMap = new Map();
-    profiles.forEach(profile => {
+    // Build a lookup map per filer: donor name (lowercased) → total
+    const filerDonorMaps = profiles.map(profile => {
       const donors = years
-        ? mergeByYear(profile.top_donors_by_year || {}, years).slice(0, 50)
+        ? mergeByYear(profile.top_donors_by_year || {}, years)
         : (profile.top_donors || []);
-      donors.forEach(d => {
-        if (!donorMap.has(d.name)) donorMap.set(d.name, {});
-        donorMap.get(d.name)[profile.name] = d.total;
-      });
+      return new Map(donors.map(d => [d.name.toLowerCase(), { name: d.name, total: d.total }]));
     });
 
-    const filerNames = profiles.map(p => p.name);
-    const pivotRows = [...donorMap.entries()]
-      .map(([name, byFiler]) => {
-        const total = Object.values(byFiler).reduce((s, v) => s + v, 0);
-        return { name, ...byFiler, total };
-      })
-      .sort((a, b) => b.total - a.total);
+    // Use global top-1000 donors as the row universe so the table reaches 1000 rows
+    const globalDonors = years
+      ? mergeByYear(donorsData.by_year || {}, years).slice(0, 1000)
+      : (donorsData.all_time || []).slice(0, 1000);
+
+    const pivotRows = globalDonors.map(d => {
+      const byFiler = {};
+      filerDonorMaps.forEach((map, i) => {
+        const hit = map.get(d.name.toLowerCase());
+        if (hit) byFiler[filerNames[i]] = hit.total;
+      });
+      const total = Object.values(byFiler).reduce((s, v) => s + v, 0);
+      return { name: d.name, ...byFiler, total };
+    }).filter(row => row.total > 0);
+
+    document.getElementById("donors-multi-title").textContent =
+      `Donor Comparison: ${filerNames.join(" vs ")}`;
 
     const thead = document.getElementById("donors-multi-thead");
     thead.innerHTML = `<tr>
@@ -979,16 +998,27 @@ async function loadDonors() {
       <th class="num">Total ($)</th>
     </tr>`;
 
-    document.getElementById("donors-multi-title").textContent =
-      `Donor Comparison: ${filerNames.join(" vs ")}`;
+    const multiSearchEl = document.getElementById("donors-multi-search");
+    if (multiSearchEl) multiSearchEl.value = "";
 
-    const tbody = document.querySelector("#table-donors-multi tbody");
-    tbody.innerHTML = pivotRows.map((row, i) => `<tr>
-      <td>${i + 1}</td>
-      <td>${esc(row.name)}</td>
-      ${filerNames.map(n => `<td class="num">${row[n] !== undefined ? fmt$(row[n]) : "—"}</td>`).join("")}
-      <td class="num">${fmt$(row.total)}</td>
-    </tr>`).join("");
+    function renderMultiPivot() {
+      const q = multiSearchEl ? multiSearchEl.value.trim().toLowerCase() : "";
+      const filtered = q ? pivotRows.filter(r => r.name.toLowerCase().includes(q)) : pivotRows;
+      const tbody = document.querySelector("#table-donors-multi tbody");
+      tbody.innerHTML = filtered.map((row, i) => `<tr>
+        <td>${i + 1}</td>
+        <td>${esc(row.name)}</td>
+        ${filerNames.map(n => `<td class="num">${row[n] !== undefined ? fmt$(row[n]) : "—"}</td>`).join("")}
+        <td class="num">${fmt$(row.total)}</td>
+      </tr>`).join("");
+    }
+
+    if (multiSearchEl && !multiSearchEl._listenerAttached) {
+      multiSearchEl.addEventListener("input", renderMultiPivot);
+      multiSearchEl._listenerAttached = true;
+    }
+
+    renderMultiPivot();
   }
 }
 
@@ -1034,8 +1064,8 @@ function renderDonorsByYear(byYear, allTime) {
     });
   });
 
-  // Rows from allTime (sorted by total desc); fill in per-year from map
-  const rows = (allTime || []).map(d => ({
+  // Rows from allTime (sorted by total desc, capped at 1000); fill in per-year from map
+  const allRows = (allTime || []).slice(0, 1000).map(d => ({
     name: d.name,
     total: d.total,
     ...Object.fromEntries(years.map(yr => [yr, donorYearMap.get(d.name)?.[yr] ?? null])),
@@ -1043,6 +1073,9 @@ function renderDonorsByYear(byYear, allTime) {
 
   let sortCol = "total";
   let sortDir = "desc";
+
+  const searchEl = document.getElementById("donors-by-year-search");
+  if (searchEl) searchEl.value = "";
 
   const thead = document.getElementById("donors-by-year-thead");
   thead.innerHTML = `<tr>
@@ -1052,7 +1085,14 @@ function renderDonorsByYear(byYear, allTime) {
     <th class="num sortable" data-col="total">All Time</th>
   </tr>`;
 
+  function getByYearRows() {
+    if (!searchEl || !searchEl.value.trim()) return allRows;
+    const q = searchEl.value.trim().toLowerCase();
+    return allRows.filter(r => r.name.toLowerCase().includes(q));
+  }
+
   function renderByYearTable() {
+    const rows = getByYearRows();
     const sorted = [...rows].sort((a, b) => {
       const va = a[sortCol] ?? -1;
       const vb = b[sortCol] ?? -1;
@@ -1083,13 +1123,18 @@ function renderDonorsByYear(byYear, allTime) {
   });
   thead.querySelector(`th[data-col="total"]`).classList.add("sort-desc");
 
+  if (searchEl && !searchEl._listenerAttached) {
+    searchEl.addEventListener("input", renderByYearTable);
+    searchEl._listenerAttached = true;
+  }
+
   renderByYearTable();
 }
 
 function renderDonors(year) {
-  const rows = year === "all"
+  const rows = (year === "all"
     ? donorsData.all_time
-    : (donorsData.by_year[year] || []);
+    : (donorsData.by_year[year] || [])).slice(0, 1000);
 
   const top20 = rows.slice(0, 20);
   makeBarChart(
@@ -1100,10 +1145,12 @@ function renderDonors(year) {
     "#3182ce",
   );
 
+  const searchEl = document.getElementById("donors-summary-search");
+  if (searchEl) searchEl.value = "";
   buildSortableTable("table-donors", rows, [
     { key: "name",  label: "Donor" },
     { key: "total", label: "Total ($)", fmt: fmt$, cls: "num" },
-  ]);
+  ], searchEl);
 }
 
 // ── Recipients ────────────────────────────────────────────────────────────────

@@ -597,7 +597,7 @@ def aggregate(df: pd.DataFrame) -> None:
     top_donors_all = (
         cash_contribs.groupby(contrib_col)["amount"]
         .sum()
-        .nlargest(500)
+        .nlargest(1000)
         .reset_index()
         .rename(columns={contrib_col: "name", "amount": "total"})
     )
@@ -609,7 +609,7 @@ def aggregate(df: pd.DataFrame) -> None:
         top = (
             yr_df.groupby(contrib_col)["amount"]
             .sum()
-            .nlargest(500)
+            .nlargest(1000)
             .reset_index()
             .rename(columns={contrib_col: "name", "amount": "total"})
         )
@@ -876,7 +876,7 @@ def aggregate_filers(
         if not filer_contrib.empty and contrib_col in filer_contrib.columns:
             td = (
                 filer_contrib.groupby(contrib_col)["amount"]
-                .sum().nlargest(50).reset_index()
+                .sum().nlargest(200).reset_index()
                 .rename(columns={contrib_col: "name", "amount": "total"})
             )
             td["total"] = td["total"].round(2)
@@ -888,7 +888,7 @@ def aggregate_filers(
                     yr_df = filer_contrib[filer_contrib["year"] == yr]
                     td_yr = (
                         yr_df.groupby(contrib_col)["amount"]
-                        .sum().nlargest(50).reset_index()
+                        .sum().nlargest(200).reset_index()
                         .rename(columns={contrib_col: "name", "amount": "total"})
                     )
                     td_yr["total"] = td_yr["total"].round(2)
@@ -901,7 +901,7 @@ def aggregate_filers(
         if not filer_expend.empty and contrib_col in filer_expend.columns:
             tp = (
                 filer_expend.groupby(contrib_col)["amount"]
-                .sum().nlargest(50).reset_index()
+                .sum().nlargest(200).reset_index()
                 .rename(columns={contrib_col: "name", "amount": "total"})
             )
             tp["total"] = tp["total"].round(2)
@@ -912,7 +912,7 @@ def aggregate_filers(
                     yr_df = filer_expend[filer_expend["year"] == yr]
                     tp_yr = (
                         yr_df.groupby(contrib_col)["amount"]
-                        .sum().nlargest(50).reset_index()
+                        .sum().nlargest(200).reset_index()
                         .rename(columns={contrib_col: "name", "amount": "total"})
                     )
                     tp_yr["total"] = tp_yr["total"].round(2)
