@@ -807,7 +807,6 @@ function renderOverviewGlobal() {
   document.getElementById("overview-donut-title").textContent = "Contributions by Donor Type";
 
   // byTypeDataGlobal is now {all_time:[...], by_year:{...}, by_month:{...}}
-  const hasDate = state.dateStart || state.dateEnd;
   let byTypeRows;
   if (Array.isArray(byTypeDataGlobal)) {
     byTypeRows = byTypeDataGlobal; // old cached format — show as-is
