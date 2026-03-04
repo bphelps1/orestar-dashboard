@@ -836,7 +836,7 @@ function renderOverviewGlobal() {
 function renderOverviewSingleFiler(profile) {
   const hasDate = state.dateStart || state.dateEnd;
   if (hasDate) {
-    const { totalIn, totalInKind, totalOut, cashOnHand } =
+    const { totalIn, totalInKind, totalOut, cashOnHand, count } =
       statsFromTimeline(filterMonthRows(profile.timeline || []));
     document.getElementById("stat-contributions").textContent = fmt$(totalIn);
     document.getElementById("stat-inkind").textContent        = fmt$(totalInKind);
@@ -858,7 +858,6 @@ function renderOverviewSingleFiler(profile) {
   document.getElementById("overview-donut-title").textContent =
     `Contributions by Donor Type — ${profile.name}`;
 
-  const hasDate = state.dateStart || state.dateEnd;
   const byTypeRows = hasDate
     ? mergeTypeByMonth(profile.by_contributor_type_by_month || {})
     : (profile.by_contributor_type || []);
