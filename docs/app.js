@@ -284,16 +284,18 @@ function mergeTypeByMonth(byMonth) {
   });
 }
 
-// Sum contributions/expenditures from a (possibly filtered) timeline array.
+// Sum contributions/expenditures/count from a (possibly filtered) timeline array.
 function statsFromTimeline(rows) {
   const totalIn    = rows.reduce((s, r) => s + (r.contributions || 0), 0);
   const totalInKind = rows.reduce((s, r) => s + (r.inkind       || 0), 0);
   const totalOut   = rows.reduce((s, r) => s + (r.expenditures  || 0), 0);
+  const count      = rows.reduce((s, r) => s + (r.count         || 0), 0);
   return {
     totalIn:     Math.round(totalIn    * 100) / 100,
     totalInKind: Math.round(totalInKind * 100) / 100,
     totalOut:    Math.round(totalOut   * 100) / 100,
     cashOnHand:  Math.round((totalIn - totalOut) * 100) / 100,
+    count,
   };
 }
 
@@ -783,12 +785,12 @@ async function loadOverview() {
 function renderOverviewGlobal() {
   const hasDate = state.dateStart || state.dateEnd;
   if (hasDate) {
-    const { totalIn, totalInKind, totalOut, cashOnHand } = statsFromTimeline(filterMonthRows(timelineData || []));
+    const { totalIn, totalInKind, totalOut, cashOnHand, count } = statsFromTimeline(filterMonthRows(timelineData || []));
     document.getElementById("stat-contributions").textContent = fmt$(totalIn);
     document.getElementById("stat-inkind").textContent        = fmt$(totalInKind);
     document.getElementById("stat-expenditures").textContent  = fmt$(totalOut);
     document.getElementById("stat-cash-on-hand").textContent  = fmt$(cashOnHand);
-    document.getElementById("stat-transactions").textContent  = "—";
+    document.getElementById("stat-transactions").textContent  = count ? fmtNum(count) : "—";
   } else {
     document.getElementById("stat-contributions").textContent = fmt$(summaryData.total_contributions);
     document.getElementById("stat-inkind").textContent        = fmt$(summaryData.total_inkind || 0);
@@ -840,7 +842,7 @@ function renderOverviewSingleFiler(profile) {
     document.getElementById("stat-inkind").textContent        = fmt$(totalInKind);
     document.getElementById("stat-expenditures").textContent  = fmt$(totalOut);
     document.getElementById("stat-cash-on-hand").textContent  = fmt$(cashOnHand);
-    document.getElementById("stat-transactions").textContent  = "—";
+    document.getElementById("stat-transactions").textContent  = count ? fmtNum(count) : "—";
   } else {
     document.getElementById("stat-contributions").textContent = fmt$(profile.total_in);
     document.getElementById("stat-inkind").textContent        = fmt$(profile.total_inkind || 0);
@@ -917,8 +919,8 @@ function renderOverviewMultiFiler(profiles) {
     const hasDate = state.dateStart || state.dateEnd;
     const s = hasDate
       ? statsFromTimeline(filterMonthRows(p.timeline || []))
-      : { totalIn: p.total_in, totalInKind: p.total_inkind || 0, totalOut: p.total_out, cashOnHand: p.cash_on_hand };
-    const tranCount = hasDate ? "—" : fmtNum(p.tran_count);
+      : { totalIn: p.total_in, totalInKind: p.total_inkind || 0, totalOut: p.total_out, cashOnHand: p.cash_on_hand, count: p.tran_count };
+    const tranCount = s.count ? fmtNum(s.count) : "—";
     return `
     <div class="filer-card">
       <div class="filer-card-name">${esc(p.name)}</div>

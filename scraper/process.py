@@ -684,16 +684,21 @@ def aggregate(df: pd.DataFrame) -> None:
         expenditures.groupby("month")["amount"].sum().reset_index()
         .rename(columns={"amount": "expenditures"})
     )
+    count_monthly = (
+        df.groupby("month").size().reset_index(name="count")
+    )
     timeline = (
         cash_monthly
         .merge(inkind_monthly, on="month", how="outer")
         .merge(expend_monthly, on="month", how="outer")
+        .merge(count_monthly,  on="month", how="outer")
         .fillna(0)
         .sort_values("month")
     )
     timeline["contributions"] = timeline["contributions"].round(2)
     timeline["inkind"]        = timeline["inkind"].round(2)
     timeline["expenditures"]  = timeline["expenditures"].round(2)
+    timeline["count"]         = timeline["count"].astype(int)
     _write_json("timeline.json", timeline.to_dict(orient="records"))
 
     # ── by_contributor_type.json ──────────────────────────────────────────────
@@ -897,13 +902,15 @@ def aggregate_filers(
         c_monthly = monthly_sum(filer_contrib, "contributions")
         i_monthly = monthly_sum(filer_inkind,  "inkind")
         e_monthly = monthly_sum(_e_for_coh,    "expenditures")
-        tl_df = pd.concat([c_monthly, i_monthly, e_monthly], axis=1).fillna(0).sort_index()
+        count_monthly_filer = filer_all.groupby("month").size().rename("count")
+        tl_df = pd.concat([c_monthly, i_monthly, e_monthly, count_monthly_filer], axis=1).fillna(0).sort_index()
         timeline = [
             {
                 "month": m,
                 "contributions": round(float(row.get("contributions", 0)), 2),
                 "inkind":        round(float(row.get("inkind",        0)), 2),
                 "expenditures":  round(float(row.get("expenditures",  0)), 2),
+                "count":         int(row.get("count", 0)),
             }
             for m, row in tl_df.iterrows()
         ]
