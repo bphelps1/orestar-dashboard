@@ -811,9 +811,13 @@ function renderOverviewGlobal() {
   if (Array.isArray(byTypeDataGlobal)) {
     byTypeRows = byTypeDataGlobal; // old cached format — show as-is
   } else if (byTypeDataGlobal) {
-    byTypeRows = hasDate
-      ? mergeTypeByMonth(byTypeDataGlobal.by_month || {})
-      : (byTypeDataGlobal.all_time || []);
+    if (hasDate && byTypeDataGlobal.by_month) {
+      byTypeRows = mergeTypeByMonth(byTypeDataGlobal.by_month);
+    } else if (hasDate) {
+      byTypeRows = mergeTypeByYear(byTypeDataGlobal.by_year || {}, yearsInRange());
+    } else {
+      byTypeRows = byTypeDataGlobal.all_time || [];
+    }
   } else {
     byTypeRows = [];
   }
@@ -857,9 +861,11 @@ function renderOverviewSingleFiler(profile) {
   document.getElementById("overview-donut-title").textContent =
     `Contributions by Donor Type — ${profile.name}`;
 
-  const byTypeRows = hasDate
-    ? mergeTypeByMonth(profile.by_contributor_type_by_month || {})
-    : (profile.by_contributor_type || []);
+  const byTypeRows = hasDate && profile.by_contributor_type_by_month
+    ? mergeTypeByMonth(profile.by_contributor_type_by_month)
+    : hasDate
+      ? mergeTypeByYear(profile.by_contributor_type_by_year || {}, yearsInRange())
+      : (profile.by_contributor_type || []);
   resetDonutBox();
   if (byTypeRows.length) {
     makeDonutChart(
@@ -891,9 +897,11 @@ function renderOverviewMultiFiler(profiles) {
 
   // Collect all unique types across filers (preserving order by first appearance)
   const legendTypes = [];
-  const perFilerRows = profiles.map(p => hasDate
-    ? mergeTypeByMonth(p.by_contributor_type_by_month || {})
-    : (p.by_contributor_type || []));
+  const perFilerRows = profiles.map(p => hasDate && p.by_contributor_type_by_month
+    ? mergeTypeByMonth(p.by_contributor_type_by_month)
+    : hasDate
+      ? mergeTypeByYear(p.by_contributor_type_by_year || {}, yearsInRange())
+      : (p.by_contributor_type || []));
   perFilerRows.forEach(rows => {
     rows.forEach(r => { if (!legendTypes.includes(r.type)) legendTypes.push(r.type); });
   });

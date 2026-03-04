@@ -637,11 +637,11 @@ input[type="date"]:focus {
 }
 
 /* ── Frozen header row: donors by-year pivot ─────────────────────────────── */
-/* Give the wrapper a max-height so it scrolls vertically, which lets the
-   thead stick inside it rather than relying on viewport-level scroll.        */
-#donors-by-year-view .table-wrapper {
-  max-height: 80vh;
-  overflow-y: auto;
+/* The inner scroll container holds only the table, so the title and search
+   bar (above it) stay visible while the table scrolls in both directions.   */
+.by-year-scroll {
+  overflow: auto;
+  max-height: 70vh;
 }
 /* All header cells stick to the top of the scroll container */
 #table-donors-by-year thead th {
