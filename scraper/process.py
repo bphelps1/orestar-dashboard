@@ -890,11 +890,17 @@ def aggregate_filers(
         #   "Account Payable" — an outstanding payable (money owed but not yet disbursed).
         #     ORESTAR tracks this separately on the balance sheet; deducting it here would
         #     understate cash on hand (verified against ORESTAR publicAccountSummary).
-        _COH_EXCLUDE = {"Personal Expenditure for Reimbursement", "Account Payable"}
-        _e_for_coh      = filer_expend[~filer_expend["sub_type"].isin(_COH_EXCLUDE)] if not filer_expend.empty else filer_expend
+        #   "Account Payable Rescinded" — reverses a previously recorded payable; no cash
+        #     changes hands. Classified as O-type (other receipt) by ORESTAR but must be
+        #     excluded to match the ORESTAR Account Summary ending balance.
+        _COH_EXCLUDE_E  = {"Personal Expenditure for Reimbursement", "Account Payable"}
+        _COH_EXCLUDE_OR = {"Account Payable Rescinded"}
+        _e_for_coh      = filer_expend[~filer_expend["sub_type"].isin(_COH_EXCLUDE_E)] if not filer_expend.empty else filer_expend
+        _or_for_coh     = filer_or[~filer_or["sub_type"].isin(_COH_EXCLUDE_OR)] if not filer_or.empty else filer_or
         _total_in_full  = round(float(filer_contrib["amount"].sum()) if not filer_contrib.empty else 0.0, 2)
         _total_out_full = round(float(_e_for_coh["amount"].sum())    if not _e_for_coh.empty    else 0.0, 2)
-        cash_on_hand    = round(_total_in_full + total_or - _total_out_full - total_od, 2)
+        _total_or_coh   = round(float(_or_for_coh["amount"].sum())   if not _or_for_coh.empty   else 0.0, 2)
+        cash_on_hand    = round(_total_in_full + _total_or_coh - _total_out_full - total_od, 2)
         tran_count    = int(len(filer_all))
 
         # Timeline — use _e_for_coh so personal-expenditure-for-reimbursement
