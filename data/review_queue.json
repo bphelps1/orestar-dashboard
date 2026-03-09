@@ -1,21 +1,36 @@
 [
   {
-    "a": "Oregon Education Association",
-    "b": "Vernonia Education Association",
-    "score": 86.2
+    "a": "SEIU Local 113",
+    "b": "SEIU Local 503",
+    "score": 85.7
   },
   {
-    "a": "Eugene Education Association - PAC (59)",
+    "a": "National Education Association - PAC",
     "b": "Oregon Education Association",
     "score": 85.7
   },
   {
-    "a": "Citi Political Action Committee",
-    "b": "Oregon Realtors Political Action Committee (191)",
-    "score": 91.2
+    "a": "Corvallis Education Association",
+    "b": "Oregon Education Association",
+    "score": 85.7
+  },
+  {
+    "a": "Oregon Education Association",
+    "b": "Roseburg Education Association",
+    "score": 85.7
+  },
+  {
+    "a": "Nevada State Education Association",
+    "b": "Oregon Education Association",
+    "score": 85.7
   },
   {
     "a": "Crown Political Action Committee",
+    "b": "Oregon Realtors Political Action Committee (191)",
+    "score": 89.7
+  },
+  {
+    "a": "Eagle Political Action Committee",
     "b": "Oregon Realtors Political Action Committee (191)",
     "score": 89.7
   },
@@ -30,334 +45,84 @@
     "score": 88.0
   },
   {
-    "a": "Oregon Faculties Political Action Committee (145)",
-    "b": "Oregon Realtors Political Action Committee (191)",
-    "score": 86.6
-  },
-  {
-    "a": "Oregon Gun Owners Political Action Committee (159)",
+    "a": "Oregon Laborers Political Action Committee (16480)",
     "b": "Oregon Realtors Political Action Committee (191)",
     "score": 85.7
   },
   {
-    "a": "UCFW Local 555",
-    "b": "UFCW Local 555",
-    "score": 92.9
-  },
-  {
-    "a": "Independent Insurance Agents & Brokers of Oregon",
-    "b": "Independent Party of Oregon",
-    "score": 87.5
-  },
-  {
-    "a": "Independent Party of Oregon",
-    "b": "Oregon Association of Independent Accountants PAC (123)",
-    "score": 87.5
-  },
-  {
-    "a": "Friends of Mark Hass",
-    "b": "Friends of Mark Richman",
-    "score": 85.7
-  },
-  {
-    "a": "Oregon Federation of College Republicans",
-    "b": "Young Republicans of Oregon",
-    "score": 87.5
-  },
-  {
-    "a": "Michael Marsh",
-    "b": "Michael Mesarch",
-    "score": 85.7
-  },
-  {
-    "a": "Michael Marsh",
-    "b": "Michael Masters",
-    "score": 85.7
-  },
-  {
-    "a": "Benton County Democratic Central Committee",
-    "b": "Polk County Democratic Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Benton County Democratic Central Committee",
-    "b": "Yamhill County Democratic Central Committee",
-    "score": 90.9
-  },
-  {
-    "a": "Benton County Democratic Central Committee",
-    "b": "Marion County Democratic Central Committee",
-    "score": 90.9
-  },
-  {
-    "a": "Benton County Democratic Central Committee",
-    "b": "Washington County Democratic Central Committee",
-    "score": 90.9
-  },
-  {
-    "a": "Benton County Democratic Central Committee",
-    "b": "Clackamas County Democratic Central Committee",
-    "score": 90.9
-  },
-  {
-    "a": "Benton County Democratic Central Committee",
-    "b": "Clatsop County Democratic Central Committee",
-    "score": 90.9
-  },
-  {
-    "a": "Benton County Democratic Central Committee",
-    "b": "Josephine County Democratic Central Committee",
-    "score": 90.9
-  },
-  {
-    "a": "Benton County Democratic Central Committee",
-    "b": "Deschutes County Democratic Central Committee",
-    "score": 90.9
-  },
-  {
-    "a": "Benton County Democratic Central Committee",
-    "b": "Wallowa County Democratic Central Committee",
-    "score": 90.9
-  },
-  {
-    "a": "Benton County Republican Central Committee",
-    "b": "Lane County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Klamath County Republican Central Committee",
-    "b": "Lane County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Lane County Republican Central Committee",
-    "b": "Polk County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Lane County Republican Central Committee",
-    "b": "Wasco County Republican Central Committee",
-    "score": 93.3
+    "a": "Professional Firefighters PAC #3219",
+    "b": "Salem Professional Firefighters",
+    "score": 89.3
   },
   {
     "a": "Coos County Republican Central Committee",
-    "b": "Lane County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Deschutes County Republican Central Committee",
-    "b": "Lane County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Hood River County Republican Central Committee",
-    "b": "Lane County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Benton County Republican Central Committee",
-    "b": "Polk County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Benton County Republican Central Committee",
-    "b": "Coos County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Benton County Republican Central Committee",
-    "b": "Linn County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Benton County Republican Central Committee",
-    "b": "Lake County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Benton County Republican Central Committee",
-    "b": "Wasco County Republican Central Committee",
-    "score": 92.1
-  },
-  {
-    "a": "Benton County Republican Central Committee",
-    "b": "Curry County Republican Central Committee",
-    "score": 92.1
-  },
-  {
-    "a": "Benton County Republican Central Committee",
-    "b": "Klamath County Republican Central Committee",
-    "score": 90.9
-  },
-  {
-    "a": "Benton County Republican Central Committee",
-    "b": "Deschutes County Republican Central Committee",
-    "score": 90.9
-  },
-  {
-    "a": "Central Oregonians for Affordable Housing",
-    "b": "Yes for Affordable Housing",
-    "score": 91.7
-  },
-  {
-    "a": "Affordable Housing for Oregon",
-    "b": "Central Oregonians for Affordable Housing",
-    "score": 86.3
-  },
-  {
-    "a": "Oregonians for Affordable Housing",
-    "b": "Yes for Affordable Housing",
-    "score": 91.7
-  },
-  {
-    "a": "Affordable Housing for Oregon",
-    "b": "Yes for Affordable Housing",
-    "score": 91.7
-  },
-  {
-    "a": "Yes for Affordable Homes",
-    "b": "Yes for Affordable Housing",
-    "score": 88.0
-  },
-  {
-    "a": "AGC Committee for Action",
-    "b": "Oregon Action Committee for Rural Electrification",
-    "score": 90.9
-  },
-  {
-    "a": "Oregon Republican Mainstream Committee",
-    "b": "Oregon Republican Party",
-    "score": 85.0
-  },
-  {
-    "a": "Oregon Republican Mainstream Committee (2058)",
-    "b": "Oregon Republican Party",
-    "score": 85.0
-  },
-  {
-    "a": "Central Oregon Federation of Republican Women",
-    "b": "Oregon Republican Party",
-    "score": 85.0
-  },
-  {
-    "a": "Hillsboro Professional Fire Fighters PAC",
-    "b": "Oregon Professional Fire Fighters PAC",
-    "score": 89.6
-  },
-  {
-    "a": "Friends of Bill Hays",
-    "b": "Friends of Bill Kennemer",
-    "score": 85.7
-  },
-  {
-    "a": "Oregon Right to Life Action PAC",
-    "b": "Oregon Right to Life Issues PAC (1615)",
-    "score": 87.3
-  },
-  {
-    "a": "Coalition For A Healthy Oregon",
-    "b": "Coalition for a Healthy Oregon PAC",
-    "score": 90.6
-  },
-  {
-    "a": "Oregon Beverage PAC",
-    "b": "Oregon Beverage Recycling Coorperative",
-    "score": 88.2
-  },
-  {
-    "a": "Coalition For A Healthy Oregon",
-    "b": "Coalition for a Healthy Oregon",
-    "score": 93.3
-  },
-  {
-    "a": "Joint Council of Teamsters No. 37 -  PAC # 80",
-    "b": "Joint Council of Teamsters No. 37 Political Fund",
-    "score": 85.7
-  },
-  {
-    "a": "Eli for Portland",
-    "b": "United for Portland",
-    "score": 85.7
-  },
-  {
-    "a": "Senate Democratic Leadership Fund",
-    "b": "The Leadership Fund",
-    "score": 88.2
-  },
-  {
-    "a": "Klamath County Republican Central Committee",
-    "b": "Polk County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Coos County Republican Central Committee",
-    "b": "Klamath County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Klamath County Republican Central Committee",
-    "b": "Linn County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Klamath County Republican Central Committee",
-    "b": "Lake County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Klamath County Republican Central Committee",
-    "b": "Wasco County Republican Central Committee",
-    "score": 92.1
-  },
-  {
-    "a": "Curry County Republican Central Committee",
-    "b": "Klamath County Republican Central Committee",
-    "score": 92.1
-  },
-  {
-    "a": "Deschutes County Republican Central Committee",
-    "b": "Klamath County Republican Central Committee",
-    "score": 89.7
-  },
-  {
-    "a": "Friends of Lee Beyer",
-    "b": "Friends of Terry Beyer",
-    "score": 88.9
-  },
-  {
-    "a": "Polk County Republican Central Committee",
-    "b": "Wasco County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Coos County Republican Central Committee",
-    "b": "Polk County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Deschutes County Republican Central Committee",
-    "b": "Polk County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Hood River County Republican Central Committee",
-    "b": "Polk County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Josephine County Republican Central Committee",
-    "b": "Polk County Republican Central Committee",
+    "b": "Umatilla County Republican Central Committee",
     "score": 93.3
   },
   {
     "a": "Linn County Republican Central Committee",
-    "b": "Polk County Republican Central Committee",
+    "b": "Umatilla County Republican Central Committee",
     "score": 93.3
   },
   {
-    "a": "Citizens for Fairness and Ethics in Government",
-    "b": "Citizens for Good Government",
-    "score": 90.2
+    "a": "Lane County Republican Central Committee",
+    "b": "Umatilla County Republican Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Polk County Republican Central Committee",
+    "b": "Umatilla County Republican Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Curry County Republican Central Committee",
+    "b": "Umatilla County Republican Central Committee",
+    "score": 92.1
+  },
+  {
+    "a": "Umatilla County Republican Central Committee",
+    "b": "Wasco County Republican Central Committee",
+    "score": 92.1
+  },
+  {
+    "a": "Benton County Republican Central Committee",
+    "b": "Umatilla County Republican Central Committee",
+    "score": 90.9
+  },
+  {
+    "a": "Klamath County Republican Central Committee",
+    "b": "Umatilla County Republican Central Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Josephine County Republican Central Committee",
+    "b": "Umatilla County Republican Central Committee",
+    "score": 88.6
+  },
+  {
+    "a": "Friends of Deb Barnes",
+    "b": "Friends of Lew Barnes",
+    "score": 90.5
+  },
+  {
+    "a": "Alek For Oregon",
+    "b": "Alek for Oregon",
+    "score": 93.3
+  },
+  {
+    "a": "Campaign for the Restoration and Regulation of Hemp (CRRH)",
+    "b": "Campaign for the Restoration and Regulation of Hemp in Oregon",
+    "score": 93.6
+  },
+  {
+    "a": "Denise Bacon for County Commissioner",
+    "b": "Rust for Commissioner",
+    "score": 86.5
+  },
+  {
+    "a": "Yes for 4J Schools",
+    "b": "Yes for Hillsboro Schools",
+    "score": 90.9
   },
   {
     "a": "Yes for 4J Schools",
@@ -365,42 +130,102 @@
     "score": 90.9
   },
   {
-    "a": "Friends of Bill Bradbury",
-    "b": "Friends of Bill Hays",
+    "a": "Yes for 4J Schools",
+    "b": "Yes for Myrtle Point Schools",
+    "score": 90.9
+  },
+  {
+    "a": "Yes for 4J Schools",
+    "b": "Yes for Sherwood Schools",
+    "score": 90.9
+  },
+  {
+    "a": "Yes for 4J Schools",
+    "b": "Yes for Hillsboro Schools (18748)",
+    "score": 90.9
+  },
+  {
+    "a": "Yes for 4J Schools",
+    "b": "Yes for Oregon City Schools (19585)",
+    "score": 90.9
+  },
+  {
+    "a": "Yes for 4J Schools",
+    "b": "Yes for Gladstone Schools",
+    "score": 90.9
+  },
+  {
+    "a": "Friends of Mark Hass",
+    "b": "Friends of Mark Richman",
     "score": 85.7
   },
   {
-    "a": "Coos County Republican Central Committee",
-    "b": "Wasco County Republican Central Committee",
-    "score": 93.3
+    "a": "Friends of Mark Hass",
+    "b": "Friends of Mark Vincent",
+    "score": 85.7
   },
   {
-    "a": "Linn County Republican Central Committee",
-    "b": "Wasco County Republican Central Committee",
-    "score": 93.3
+    "a": "Friends of Mark Hass",
+    "b": "Friends of Mark McKelvey for Coos County Commissioner (15413)",
+    "score": 85.7
   },
   {
-    "a": "Lake County Republican Central Committee",
-    "b": "Wasco County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Deschutes County Republican Central Committee",
-    "b": "Wasco County Republican Central Committee",
-    "score": 92.1
-  },
-  {
-    "a": "Hood River County Republican Central Committee",
-    "b": "Wasco County Republican Central Committee",
-    "score": 92.1
-  },
-  {
-    "a": "Citi Political Action Committee",
-    "b": "Oregon Realtors Political Action Committee",
+    "a": "Democratic Party of Coos County",
+    "b": "Democratic Party of Lane County",
     "score": 91.2
   },
   {
+    "a": "Blue Horizon Fund of the Democratic Party of Washington County",
+    "b": "Democratic Party of Coos County",
+    "score": 91.2
+  },
+  {
+    "a": "Coos County Republican Central Committee",
+    "b": "Klamath County Republican Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Klamath County Republican Central Committee",
+    "b": "Linn County Republican Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Klamath County Republican Central Committee",
+    "b": "Lane County Republican Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Klamath County Republican Central Committee",
+    "b": "Polk County Republican Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Curry County Republican Central Committee",
+    "b": "Klamath County Republican Central Committee",
+    "score": 92.1
+  },
+  {
+    "a": "Klamath County Republican Central Committee",
+    "b": "Wasco County Republican Central Committee",
+    "score": 92.1
+  },
+  {
+    "a": "Benton County Republican Central Committee",
+    "b": "Klamath County Republican Central Committee",
+    "score": 90.9
+  },
+  {
+    "a": "Josephine County Republican Central Committee",
+    "b": "Klamath County Republican Central Committee",
+    "score": 89.7
+  },
+  {
     "a": "Crown Political Action Committee",
+    "b": "Oregon Realtors Political Action Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Eagle Political Action Committee",
     "b": "Oregon Realtors Political Action Committee",
     "score": 89.7
   },
@@ -415,64 +240,104 @@
     "score": 88.0
   },
   {
-    "a": "Oregon Faculties Political Action Committee (145)",
+    "a": "Oregon Laborers Political Action Committee (16480)",
     "b": "Oregon Realtors Political Action Committee",
     "score": 88.0
   },
   {
-    "a": "Oregon Gun Owners Political Action Committee (159)",
+    "a": "Oregon Realtors Political Action Committee",
+    "b": "Wells Fargo & Co. Oregon Political Action Committee (3495)",
+    "score": 88.0
+  },
+  {
+    "a": "Oregon Realtors Political Action Committee",
+    "b": "Wells Fargo & Co. Oregon Political Action Committee",
+    "score": 88.0
+  },
+  {
+    "a": "Asian Pacific American Network of Oregon Political Action Committee (5535)",
     "b": "Oregon Realtors Political Action Committee",
     "score": 88.0
   },
   {
-    "a": "Polk County Democratic Central Committee",
-    "b": "Yamhill County Democratic Central Committee",
-    "score": 93.3
+    "a": "Friends of Chris Garrett",
+    "b": "Friends of Chris Harker",
+    "score": 85.1
   },
   {
-    "a": "Marion County Democratic Central Committee",
-    "b": "Yamhill County Democratic Central Committee",
-    "score": 90.9
+    "a": "Hillsboro Professional Fire Fighters PAC",
+    "b": "Oregon Professional Fire Fighters PAC",
+    "score": 89.6
   },
   {
-    "a": "Wallowa County Democratic Central Committee",
-    "b": "Yamhill County Democratic Central Committee",
-    "score": 90.7
+    "a": "Mitch Greenlick for State Legislature",
+    "b": "Mitch Greenlick for State Legislature/3362",
+    "score": 93.7
   },
   {
-    "a": "Washington County Democratic Central Committee",
-    "b": "Yamhill County Democratic Central Committee",
+    "a": "Friends of Dan Lucas",
+    "b": "Friends of Dan Mason",
+    "score": 85.0
+  },
+  {
+    "a": "Affordable Housing for Oregon",
+    "b": "Oregonians for Affordable Housing",
+    "score": 93.5
+  },
+  {
+    "a": "Affordable Housing for Oregon",
+    "b": "Yes for Affordable Housing",
+    "score": 91.7
+  },
+  {
+    "a": "Affordable Housing for Oregon",
+    "b": "Central Oregonians for Affordable Housing",
+    "score": 86.3
+  },
+  {
+    "a": "Affordable Housing for Oregon",
+    "b": "Oregonians for Affordable Housing  (2069)",
+    "score": 86.3
+  },
+  {
+    "a": "Committee to Elect Vicki Walker",
+    "b": "Committee to Elect Wally Hicks",
+    "score": 85.2
+  },
+  {
+    "a": "Achieving the American Dream Coalition",
+    "b": "Asian American Coalition",
+    "score": 85.7
+  },
+  {
+    "a": "Oregon Federation of College Republicans",
+    "b": "Young Republicans of Oregon",
+    "score": 87.5
+  },
+  {
+    "a": "Mike Schaufler for State Representative",
+    "b": "Schaufler, Mike, for State Representative (4454)",
     "score": 89.7
   },
   {
-    "a": "Clackamas County Democratic Central Committee",
-    "b": "Yamhill County Democratic Central Committee",
+    "a": "Central Oregon Business Forum",
+    "b": "Central Oregon Small Business PAC",
+    "score": 88.5
+  },
+  {
+    "a": "Yes for Affordable Homes",
+    "b": "Yes for Affordable Housing",
+    "score": 88.0
+  },
+  {
+    "a": "Crown Political Action Committee",
+    "b": "Foresight Ophthalmology Political Action Committee",
     "score": 89.7
   },
   {
-    "a": "Clatsop County Democratic Central Committee",
-    "b": "Yamhill County Democratic Central Committee",
+    "a": "Eagle Political Action Committee",
+    "b": "Foresight Ophthalmology Political Action Committee",
     "score": 89.7
-  },
-  {
-    "a": "Josephine County Democratic Central Committee",
-    "b": "Yamhill County Democratic Central Committee",
-    "score": 89.7
-  },
-  {
-    "a": "Deschutes County Democratic Central Committee",
-    "b": "Yamhill County Democratic Central Committee",
-    "score": 89.7
-  },
-  {
-    "a": "Coos County Republican Central Committee",
-    "b": "Deschutes County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Coos County Republican Central Committee",
-    "b": "Hood River County Republican Central Committee",
-    "score": 93.3
   },
   {
     "a": "Coos County Republican Central Committee",
@@ -480,49 +345,39 @@
     "score": 93.3
   },
   {
-    "a": "Coos County Republican Central Committee",
+    "a": "Josephine County Republican Central Committee",
     "b": "Linn County Republican Central Committee",
     "score": 93.3
   },
   {
-    "a": "Marion County Democratic Central Committee",
-    "b": "Polk County Democratic Central Committee",
+    "a": "Josephine County Republican Central Committee",
+    "b": "Lane County Republican Central Committee",
     "score": 93.3
   },
   {
-    "a": "Polk County Democratic Central Committee",
-    "b": "Washington County Democratic Central Committee",
+    "a": "Josephine County Republican Central Committee",
+    "b": "Polk County Republican Central Committee",
     "score": 93.3
   },
   {
-    "a": "Clackamas County Democratic Central Committee",
-    "b": "Polk County Democratic Central Committee",
-    "score": 93.3
+    "a": "Curry County Republican Central Committee",
+    "b": "Josephine County Republican Central Committee",
+    "score": 92.1
   },
   {
-    "a": "Clatsop County Democratic Central Committee",
-    "b": "Polk County Democratic Central Committee",
-    "score": 93.3
+    "a": "Josephine County Republican Central Committee",
+    "b": "Wasco County Republican Central Committee",
+    "score": 92.1
   },
   {
-    "a": "Josephine County Democratic Central Committee",
-    "b": "Polk County Democratic Central Committee",
-    "score": 93.3
+    "a": "Benton County Republican Central Committee",
+    "b": "Josephine County Republican Central Committee",
+    "score": 90.9
   },
   {
-    "a": "Deschutes County Democratic Central Committee",
-    "b": "Polk County Democratic Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Polk County Democratic Central Committee",
-    "b": "Wallowa County Democratic Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Medford Firefighters Association PAC",
-    "b": "Springfield Professional Firefighters Association PAC (4937)",
-    "score": 87.5
+    "a": "Michael Marsh",
+    "b": "Michael Morasch",
+    "score": 85.7
   },
   {
     "a": "Baker County Republican Women",
@@ -530,89 +385,24 @@
     "score": 88.5
   },
   {
-    "a": "JWA Public Affairs",
-    "b": "Oregon Optometric Public Affairs Council",
-    "score": 87.5
+    "a": "Plumbers & Steamfitters Local 290",
+    "b": "Plumbers & Steamfitters PAC",
+    "score": 92.0
   },
   {
-    "a": "Citi Political Action Committee",
-    "b": "Oregon Hospital Political Action Committee",
-    "score": 91.2
-  },
-  {
-    "a": "Crown Political Action Committee",
-    "b": "Oregon Hospital Political Action Committee",
-    "score": 89.7
-  },
-  {
-    "a": "Oregon Hospital Political Action Committee",
-    "b": "Regence Oregon Political Action Committee",
-    "score": 89.2
-  },
-  {
-    "a": "Oregon Faculties Political Action Committee (145)",
-    "b": "Oregon Hospital Political Action Committee",
-    "score": 88.0
-  },
-  {
-    "a": "Oregon Gun Owners Political Action Committee (159)",
-    "b": "Oregon Hospital Political Action Committee",
-    "score": 88.0
-  },
-  {
-    "a": "Yes for 4J Schools",
-    "b": "Yes for Hillsboro Schools",
-    "score": 90.9
-  },
-  {
-    "a": "Yes for 4J Schools",
-    "b": "Yes for Myrtle Point Schools",
-    "score": 90.9
-  },
-  {
-    "a": "Yes for 4J Schools",
-    "b": "Yes for Hermiston Schools (13489)",
-    "score": 90.9
-  },
-  {
-    "a": "Oregon Business Alliance",
-    "b": "Oregon Hunters Alliance",
-    "score": 85.1
-  },
-  {
-    "a": "Deschutes County Republican Central Committee",
-    "b": "Linn County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Deschutes County Republican Central Committee",
-    "b": "Lake County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Curry County Republican Central Committee",
-    "b": "Deschutes County Republican Central Committee",
-    "score": 92.1
-  },
-  {
-    "a": "Friends of Chris Edwards",
-    "b": "Friends of David Edwards",
+    "a": "Kate Brown Committee",
+    "b": "The Committee to Elect Susan Brown",
     "score": 85.7
   },
   {
-    "a": "Marion County Democratic Central Committee",
-    "b": "Washington County Democratic Central Committee",
-    "score": 90.9
+    "a": "Kate Brown Committee",
+    "b": "The Committee to Elect Susan Brown (15375)",
+    "score": 85.7
   },
   {
-    "a": "Clackamas County Democratic Central Committee",
-    "b": "Marion County Democratic Central Committee",
-    "score": 90.9
-  },
-  {
-    "a": "Clatsop County Democratic Central Committee",
-    "b": "Marion County Democratic Central Committee",
-    "score": 90.9
+    "a": "Josephine County Democratic Central Committee",
+    "b": "Polk County Democratic Central Committee",
+    "score": 93.3
   },
   {
     "a": "Josephine County Democratic Central Committee",
@@ -620,28 +410,23 @@
     "score": 90.9
   },
   {
-    "a": "Deschutes County Democratic Central Committee",
-    "b": "Marion County Democratic Central Committee",
+    "a": "Benton County Democratic Central Committee",
+    "b": "Josephine County Democratic Central Committee",
     "score": 90.9
   },
   {
-    "a": "Marion County Democratic Central Committee",
-    "b": "Wallowa County Democratic Central Committee",
+    "a": "Harney County Democratic Central Committee",
+    "b": "Josephine County Democratic Central Committee",
     "score": 90.9
   },
   {
-    "a": "Taxpayer Defense Fund",
-    "b": "Taxpayer Defense Project PAC",
-    "score": 86.5
-  },
-  {
-    "a": "Clatsop County Democratic Central Committee",
-    "b": "Washington County Democratic Central Committee",
+    "a": "Josephine County Democratic Central Committee",
+    "b": "Yamhill County Democratic Central Committee",
     "score": 89.7
   },
   {
-    "a": "Wallowa County Democratic Central Committee",
-    "b": "Washington County Democratic Central Committee",
+    "a": "Clatsop County Democratic Central Committee",
+    "b": "Josephine County Democratic Central Committee",
     "score": 89.7
   },
   {
@@ -651,158 +436,8 @@
   },
   {
     "a": "Clackamas County Democratic Central Committee",
-    "b": "Washington County Democratic Central Committee",
-    "score": 87.5
-  },
-  {
-    "a": "Deschutes County Democratic Central Committee",
-    "b": "Washington County Democratic Central Committee",
-    "score": 87.5
-  },
-  {
-    "a": "Hood River County Republican Central Committee",
-    "b": "Linn County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Hood River County Republican Central Committee",
-    "b": "Lake County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Curry County Republican Central Committee",
-    "b": "Hood River County Republican Central Committee",
-    "score": 92.1
-  },
-  {
-    "a": "Benton County Republican Central Committee",
-    "b": "Hood River County Republican Central Committee",
-    "score": 90.9
-  },
-  {
-    "a": "Hood River County Republican Central Committee",
-    "b": "Klamath County Republican Central Committee",
-    "score": 89.7
-  },
-  {
-    "a": "Josephine County Republican Central Committee",
-    "b": "Lane County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Josephine County Republican Central Committee",
-    "b": "Linn County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Josephine County Republican Central Committee",
-    "b": "Lake County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Josephine County Republican Central Committee",
-    "b": "Wasco County Republican Central Committee",
-    "score": 92.1
-  },
-  {
-    "a": "Curry County Republican Central Committee",
-    "b": "Josephine County Republican Central Committee",
-    "score": 92.1
-  },
-  {
-    "a": "Benton County Republican Central Committee",
-    "b": "Josephine County Republican Central Committee",
-    "score": 90.9
-  },
-  {
-    "a": "Josephine County Republican Central Committee",
-    "b": "Klamath County Republican Central Committee",
-    "score": 89.7
-  },
-  {
-    "a": "Clackamas County Democratic Central Committee",
-    "b": "Clatsop County Democratic Central Committee",
-    "score": 90.9
-  },
-  {
-    "a": "Clackamas County Democratic Central Committee",
-    "b": "Wallowa County Democratic Central Committee",
-    "score": 89.7
-  },
-  {
-    "a": "Clackamas County Democratic Central Committee",
     "b": "Josephine County Democratic Central Committee",
     "score": 87.5
-  },
-  {
-    "a": "Clackamas County Democratic Central Committee",
-    "b": "Deschutes County Democratic Central Committee",
-    "score": 87.5
-  },
-  {
-    "a": "Friends of Andy Olson/4831",
-    "b": "Olson, Andy, Friends of",
-    "score": 85.7
-  },
-  {
-    "a": "Achieving the American Dream Coalition",
-    "b": "Asian American Coalition",
-    "score": 85.7
-  },
-  {
-    "a": "Elect Kerry Atherton",
-    "b": "Kerry B Atherton",
-    "score": 93.3
-  },
-  {
-    "a": "Friends of Andy Olson",
-    "b": "Friends of Andy Olson/4831",
-    "score": 89.4
-  },
-  {
-    "a": "Stand for Children Leadership Center",
-    "b": "Stand for Children PAC",
-    "score": 90.0
-  },
-  {
-    "a": "Stand for Children Inc",
-    "b": "Stand for Children PAC",
-    "score": 90.0
-  },
-  {
-    "a": "Friends of Mark Hass",
-    "b": "Friends of Mark Vincent",
-    "score": 85.7
-  },
-  {
-    "a": "Engineers Political Education Committee",
-    "b": "Oregon American Federation of Labor-Congress of Industrial Organizations Committee on Political Education",
-    "score": 85.3
-  },
-  {
-    "a": "Jessica George Community Fund",
-    "b": "Jessica J George",
-    "score": 93.3
-  },
-  {
-    "a": "Clatsop County Democratic Central Committee",
-    "b": "Josephine County Democratic Central Committee",
-    "score": 89.7
-  },
-  {
-    "a": "Clatsop County Democratic Central Committee",
-    "b": "Deschutes County Democratic Central Committee",
-    "score": 89.7
-  },
-  {
-    "a": "Clatsop County Democratic Central Committee",
-    "b": "Wallowa County Democratic Central Committee",
-    "score": 89.7
-  },
-  {
-    "a": "Josephine County Democratic Central Committee",
-    "b": "Wallowa County Democratic Central Committee",
-    "score": 89.7
   },
   {
     "a": "Deschutes County Democratic Central Committee",
@@ -810,202 +445,97 @@
     "score": 87.5
   },
   {
-    "a": "Citi Political Action Committee",
-    "b": "Foresight Ophthalmology Political Action Committee",
-    "score": 91.2
+    "a": "Friends of Lindsay Berschauer (18526)",
+    "b": "Friends of Shawn Lindsay",
+    "score": 85.7
   },
   {
-    "a": "Crown Political Action Committee",
-    "b": "Foresight Ophthalmology Political Action Committee",
-    "score": 89.7
+    "a": "AGC Committee for Action",
+    "b": "Oregon Action Committee for Rural Electrification",
+    "score": 90.9
   },
   {
-    "a": "Jefferson County Republican Central Committee",
-    "b": "Lane County Republican Central Committee",
+    "a": "Marion County Democratic Central Committee",
+    "b": "Polk County Democratic Central Committee",
     "score": 93.3
   },
   {
-    "a": "Jefferson County Republican Central Committee",
-    "b": "Polk County Republican Central Committee",
+    "a": "Harney County Democratic Central Committee",
+    "b": "Marion County Democratic Central Committee",
+    "score": 92.9
+  },
+  {
+    "a": "Marion County Democratic Central Committee",
+    "b": "Yamhill County Democratic Central Committee",
+    "score": 90.9
+  },
+  {
+    "a": "Clackamas County Democratic Central Committee",
+    "b": "Marion County Democratic Central Committee",
+    "score": 90.9
+  },
+  {
+    "a": "Benton County Democratic Central Committee",
+    "b": "Marion County Democratic Central Committee",
+    "score": 90.9
+  },
+  {
+    "a": "Marion County Democratic Central Committee",
+    "b": "Washington County Democratic Central Committee",
+    "score": 90.9
+  },
+  {
+    "a": "Deschutes County Democratic Central Committee",
+    "b": "Marion County Democratic Central Committee",
+    "score": 90.9
+  },
+  {
+    "a": "Clatsop County Democratic Central Committee",
+    "b": "Marion County Democratic Central Committee",
+    "score": 90.9
+  },
+  {
+    "a": "Oregonians for Affordable Housing",
+    "b": "Yes for Affordable Housing",
+    "score": 91.7
+  },
+  {
+    "a": "Central Oregonians for Affordable Housing",
+    "b": "Yes for Affordable Housing",
+    "score": 91.7
+  },
+  {
+    "a": "Oregonians for Affordable Housing  (2069)",
+    "b": "Yes for Affordable Housing",
+    "score": 91.7
+  },
+  {
+    "a": "Friends of Chris Edwards",
+    "b": "Friends of David Edwards",
+    "score": 85.7
+  },
+  {
+    "a": "Friends of Blue Mountain Community College (16431)",
+    "b": "Friends of Lane Community College",
+    "score": 91.8
+  },
+  {
+    "a": "Coos County Republican Central Committee",
+    "b": "Deschutes County Republican Central Committee",
     "score": 93.3
   },
   {
     "a": "Coos County Republican Central Committee",
-    "b": "Jefferson County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Jefferson County Republican Central Committee",
     "b": "Linn County Republican Central Committee",
     "score": 93.3
   },
   {
-    "a": "Jefferson County Republican Central Committee",
-    "b": "Lake County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Jefferson County Republican Central Committee",
-    "b": "Wasco County Republican Central Committee",
-    "score": 92.1
-  },
-  {
-    "a": "Curry County Republican Central Committee",
-    "b": "Jefferson County Republican Central Committee",
-    "score": 92.1
-  },
-  {
-    "a": "Benton County Republican Central Committee",
-    "b": "Jefferson County Republican Central Committee",
-    "score": 90.9
-  },
-  {
-    "a": "Jefferson County Republican Central Committee",
-    "b": "Klamath County Republican Central Committee",
-    "score": 89.7
-  },
-  {
-    "a": "Boylston for Oregon",
-    "b": "Holton for Oregon",
-    "score": 88.9
-  },
-  {
-    "a": "Committee to Elect Jeff Kruse",
-    "b": "Committee to Elect Jeff Wenholz",
-    "score": 88.5
-  },
-  {
-    "a": "Citi Political Action Committee",
-    "b": "Crown Political Action Committee",
-    "score": 91.2
-  },
-  {
-    "a": "Crown Political Action Committee",
-    "b": "The Roseburg Area Chamber Political Action Committee (13156)",
-    "score": 89.7
-  },
-  {
-    "a": "Crown Political Action Committee",
-    "b": "Regence Oregon Political Action Committee",
-    "score": 89.7
-  },
-  {
-    "a": "Crown Political Action Committee",
-    "b": "The Travelers Companies Inc. Political Action Committee",
-    "score": 89.7
-  },
-  {
-    "a": "Crown Political Action Committee",
-    "b": "Sustainable Agriculture and Energy Political Action Committee",
-    "score": 89.7
-  },
-  {
-    "a": "Affordable Housing for Oregon",
-    "b": "Oregonians for Affordable Housing",
-    "score": 93.5
-  },
-  {
-    "a": "Friends of Patrick Castles (20450)",
-    "b": "Friends of Patrick Iler",
-    "score": 87.8
-  },
-  {
-    "a": "Basic Rights Oregon Equality PAC",
-    "b": "My Oregon Rights PAC",
-    "score": 91.9
-  },
-  {
-    "a": "Sam Palmer",
-    "b": "Sara Palmer",
-    "score": 85.7
-  },
-  {
-    "a": "Friends of Deb Barnes",
-    "b": "Friends of Lew Barnes",
-    "score": 90.5
-  },
-  {
-    "a": "Friends of Chris Garrett",
-    "b": "Friends of Chris Harker",
-    "score": 85.1
-  },
-  {
-    "a": "Friends of Chris Garrett",
-    "b": "Friends of Chris Gorsek",
-    "score": 85.1
-  },
-  {
-    "a": "David S Nelson",
-    "b": "Friends of David Nelson",
-    "score": 92.3
-  },
-  {
-    "a": "Democratic Party of Coos County",
-    "b": "Democratic Party of Lane County",
-    "score": 91.2
-  },
-  {
-    "a": "Central Oregon Small Business PAC",
-    "b": "Fox Central Oregon",
-    "score": 87.5
-  },
-  {
-    "a": "Citi Political Action Committee",
-    "b": "The Roseburg Area Chamber Political Action Committee (13156)",
-    "score": 91.2
-  },
-  {
-    "a": "Gary Coe for State Senate",
-    "b": "Larry George for State Senate",
-    "score": 85.2
-  },
-  {
-    "a": "Friends of Dave Hunt",
-    "b": "Friends of Dave McCall (18997)",
-    "score": 85.7
-  },
-  {
-    "a": "Committee to Elect Bill Elfering",
-    "b": "Committee to Elect Bill Garrard",
-    "score": 85.2
-  },
-  {
-    "a": "Building Schools * Building Futures (6785)",
-    "b": "Building Schools, Building Futures",
-    "score": 86.8
-  },
-  {
-    "a": "Friends of Elizabeth Steiner (15255)",
-    "b": "Friends of Elizabeth Steiner Hayward",
-    "score": 87.5
-  },
-  {
-    "a": "Boquist Leadership Fund",
-    "b": "The Leadership Fund",
-    "score": 88.2
-  },
-  {
-    "a": "Engineers Political Education Committee",
-    "b": "Oregon American Federation of Labor-Congress of Industrial Organizations Committee on Political Education II",
-    "score": 85.3
-  },
-  {
-    "a": "Oregon United for Marriage",
-    "b": "Oregon United to Marriage",
-    "score": 94.1
-  },
-  {
-    "a": "Deschutes County Democratic Central Committee",
-    "b": "Wallowa County Democratic Central Committee",
-    "score": 89.7
-  },
-  {
-    "a": "Curry County Republican Central Committee",
+    "a": "Coos County Republican Central Committee",
     "b": "Lane County Republican Central Committee",
     "score": 93.3
   },
   {
-    "a": "Curry County Republican Central Committee",
+    "a": "Coos County Republican Central Committee",
     "b": "Polk County Republican Central Committee",
     "score": 93.3
   },
@@ -1015,1543 +545,2153 @@
     "score": 93.3
   },
   {
+    "a": "Coos County Republican Central Committee",
+    "b": "Wasco County Republican Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Deschutes County Republican Central Committee",
+    "b": "Linn County Republican Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Deschutes County Republican Central Committee",
+    "b": "Lane County Republican Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Deschutes County Republican Central Committee",
+    "b": "Polk County Republican Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Curry County Republican Central Committee",
+    "b": "Deschutes County Republican Central Committee",
+    "score": 92.1
+  },
+  {
+    "a": "Deschutes County Republican Central Committee",
+    "b": "Wasco County Republican Central Committee",
+    "score": 92.1
+  },
+  {
+    "a": "Benton County Republican Central Committee",
+    "b": "Deschutes County Republican Central Committee",
+    "score": 90.9
+  },
+  {
+    "a": "Deschutes County Republican Central Committee",
+    "b": "Klamath County Republican Central Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Deschutes County Republican Central Committee",
+    "b": "Umatilla County Republican Central Committee",
+    "score": 88.6
+  },
+  {
+    "a": "Oregonian For Affordable Housing",
+    "b": "Oregonians for Affordable Housing",
+    "score": 86.2
+  },
+  {
+    "a": "Chuck Burley for State Representative",
+    "b": "Chuck Burley for State Representative/4727",
+    "score": 93.7
+  },
+  {
+    "a": "Friends of Sharon Freeman",
+    "b": "Friends of Tim Freeman",
+    "score": 90.0
+  },
+  {
+    "a": "BOMA Oregon",
+    "b": "Oregon IMA",
+    "score": 85.7
+  },
+  {
+    "a": "Boquist Leadership Fund",
+    "b": "The Leadership Fund",
+    "score": 88.2
+  },
+  {
+    "a": "Oregon Optometric Public Affairs Council",
+    "b": "Public Affairs Inc",
+    "score": 87.5
+  },
+  {
+    "a": "Polk County Democratic Central Committee",
+    "b": "Yamhill County Democratic Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Benton County Democratic Central Committee",
+    "b": "Yamhill County Democratic Central Committee",
+    "score": 90.9
+  },
+  {
+    "a": "Harney County Democratic Central Committee",
+    "b": "Yamhill County Democratic Central Committee",
+    "score": 90.9
+  },
+  {
+    "a": "Clackamas County Democratic Central Committee",
+    "b": "Yamhill County Democratic Central Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Washington County Democratic Central Committee",
+    "b": "Yamhill County Democratic Central Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Deschutes County Democratic Central Committee",
+    "b": "Yamhill County Democratic Central Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Clatsop County Democratic Central Committee",
+    "b": "Yamhill County Democratic Central Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Senate Democratic Leadership Fund",
+    "b": "The Leadership Fund",
+    "score": 88.2
+  },
+  {
+    "a": "Committee to Re-Elect Bob Jenson",
+    "b": "Committee to ReElect Bob Jenson (2362)",
+    "score": 88.6
+  },
+  {
+    "a": "Citizens for Fairness and Ethics in Government",
+    "b": "Citizens for Good Government",
+    "score": 90.2
+  },
+  {
+    "a": "Carolyn Tomei for State Rep",
+    "b": "Carolyn Tomei for State Representative",
+    "score": 92.0
+  },
+  {
+    "a": "Crown Political Action Committee",
+    "b": "Oregon Hospital Political Action Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Eagle Political Action Committee",
+    "b": "Oregon Hospital Political Action Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Oregon Hospital Political Action Committee",
+    "b": "Regence Oregon Political Action Committee",
+    "score": 89.2
+  },
+  {
+    "a": "Oregon Hospital Political Action Committee",
+    "b": "Oregon Laborers Political Action Committee (16480)",
+    "score": 88.0
+  },
+  {
+    "a": "Oregon Hospital Political Action Committee",
+    "b": "Wells Fargo & Co. Oregon Political Action Committee (3495)",
+    "score": 88.0
+  },
+  {
+    "a": "Oregon Hospital Political Action Committee",
+    "b": "Wells Fargo & Co. Oregon Political Action Committee",
+    "score": 88.0
+  },
+  {
+    "a": "Asian Pacific American Network of Oregon Political Action Committee (5535)",
+    "b": "Oregon Hospital Political Action Committee",
+    "score": 88.0
+  },
+  {
+    "a": "Clackamas County Democratic Central Committee",
+    "b": "Polk County Democratic Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Benton County Democratic Central Committee",
+    "b": "Clackamas County Democratic Central Committee",
+    "score": 90.9
+  },
+  {
+    "a": "Clackamas County Democratic Central Committee",
+    "b": "Clatsop County Democratic Central Committee",
+    "score": 90.9
+  },
+  {
+    "a": "Clackamas County Democratic Central Committee",
+    "b": "Harney County Democratic Central Committee",
+    "score": 90.9
+  },
+  {
+    "a": "Clackamas County Democratic Central Committee",
+    "b": "Washington County Democratic Central Committee",
+    "score": 87.5
+  },
+  {
+    "a": "Clackamas County Democratic Central Committee",
+    "b": "Deschutes County Democratic Central Committee",
+    "score": 87.5
+  },
+  {
+    "a": "Crown Political Action Committee",
+    "b": "The Roseburg Area Chamber Political Action Committee (13156)",
+    "score": 89.7
+  },
+  {
+    "a": "Eagle Political Action Committee",
+    "b": "The Roseburg Area Chamber Political Action Committee (13156)",
+    "score": 89.7
+  },
+  {
+    "a": "The Leadership Fund",
+    "b": "The Leadership fund",
+    "score": 94.7
+  },
+  {
+    "a": "Great Plains Leadership Fund",
+    "b": "The Leadership Fund",
+    "score": 88.2
+  },
+  {
+    "a": "Crown Political Action Committee",
+    "b": "Regence Oregon Political Action Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Crown Political Action Committee",
+    "b": "Recology Inc. Political Action Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Crown Political Action Committee",
+    "b": "Oregon Laborers Political Action Committee (16480)",
+    "score": 89.7
+  },
+  {
+    "a": "Crown Political Action Committee",
+    "b": "Mednax, Inc. - Federal Political Action Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Oregon Republican Party",
+    "b": "Oregon Republican Party/379",
+    "score": 92.0
+  },
+  {
+    "a": "Oregon Republican Mainstream Committee",
+    "b": "Oregon Republican Party",
+    "score": 85.0
+  },
+  {
+    "a": "Oregon Republican Fourth Congressional District",
+    "b": "Oregon Republican Party",
+    "score": 85.0
+  },
+  {
+    "a": "Oregon Republican Mainstream Committee (2058)",
+    "b": "Oregon Republican Party",
+    "score": 85.0
+  },
+  {
+    "a": "Benton County Democratic Central Committee",
+    "b": "Polk County Democratic Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Benton County Democratic Central Committee",
+    "b": "Washington County Democratic Central Committee",
+    "score": 90.9
+  },
+  {
+    "a": "Benton County Democratic Central Committee",
+    "b": "Deschutes County Democratic Central Committee",
+    "score": 90.9
+  },
+  {
+    "a": "Benton County Democratic Central Committee",
+    "b": "Clatsop County Democratic Central Committee",
+    "score": 90.9
+  },
+  {
+    "a": "Benton County Democratic Central Committee",
+    "b": "Harney County Democratic Central Committee",
+    "score": 90.9
+  },
+  {
+    "a": "Kathleen Bricken",
+    "b": "Kathleen O'Brien",
+    "score": 87.5
+  },
+  {
+    "a": "Friends of Lee Beyer",
+    "b": "Friends of Terry Beyer",
+    "score": 88.9
+  },
+  {
+    "a": "Linn County Republican Central Committee",
+    "b": "Polk County Republican Central Committee",
+    "score": 93.3
+  },
+  {
     "a": "Curry County Republican Central Committee",
     "b": "Linn County Republican Central Committee",
     "score": 93.3
   },
   {
-    "a": "Curry County Republican Central Committee",
-    "b": "Lake County Republican Central Committee",
+    "a": "Linn County Republican Central Committee",
+    "b": "Wasco County Republican Central Committee",
     "score": 93.3
   },
   {
-    "a": "Curry County Republican Central Committee",
-    "b": "Wasco County Republican Central Committee",
-    "score": 92.1
+    "a": "Central Oregonians for Affordable Housing",
+    "b": "Oregonians for Affordable Housing  (2069)",
+    "score": 90.4
   },
   {
-    "a": "Ed Washington",
-    "b": "Washington County Ignite",
-    "score": 87.0
+    "a": "Polk County Democratic Central Committee",
+    "b": "Washington County Democratic Central Committee",
+    "score": 93.3
   },
   {
-    "a": "Democratic Party of Coos County",
-    "b": "Democratic Party of Lane County (324)",
-    "score": 91.2
+    "a": "Deschutes County Democratic Central Committee",
+    "b": "Polk County Democratic Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Clatsop County Democratic Central Committee",
+    "b": "Polk County Democratic Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Harney County Democratic Central Committee",
+    "b": "Polk County Democratic Central Committee",
+    "score": 93.3
   },
   {
     "a": "Lane County Republican Central Committee",
-    "b": "Umatilla County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Polk County Republican Central Committee",
-    "b": "Umatilla County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Coos County Republican Central Committee",
-    "b": "Umatilla County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Linn County Republican Central Committee",
-    "b": "Umatilla County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Lake County Republican Central Committee",
-    "b": "Umatilla County Republican Central Committee",
-    "score": 93.3
-  },
-  {
-    "a": "Umatilla County Republican Central Committee",
-    "b": "Wasco County Republican Central Committee",
-    "score": 92.1
-  },
-  {
-    "a": "Curry County Republican Central Committee",
-    "b": "Umatilla County Republican Central Committee",
-    "score": 92.1
-  },
-  {
-    "a": "Benton County Republican Central Committee",
-    "b": "Umatilla County Republican Central Committee",
-    "score": 90.9
-  },
-  {
-    "a": "Klamath County Republican Central Committee",
-    "b": "Umatilla County Republican Central Committee",
-    "score": 89.7
-  },
-  {
-    "a": "Friends of Val Hoyle",
-    "b": "Friends of Val Hoyle/13967",
-    "score": 87.0
-  },
-  {
-    "a": "Professional Firefighters PAC #3219",
-    "b": "Springfield Professional Firefighters Association PAC (4937)",
-    "score": 90.6
-  },
-  {
-    "a": "Ed Washington",
-    "b": "Libertarian Party of Washington County",
-    "score": 87.0
-  },
-  {
-    "a": "Friends of Deb Barnes",
-    "b": "Friends of Lew Barnes (15610)",
-    "score": 89.5
-  },
-  {
-    "a": "Citi Political Action Committee",
-    "b": "Regence Oregon Political Action Committee",
-    "score": 91.2
-  },
-  {
-    "a": "Oregon Faculties Political Action Committee (145)",
-    "b": "Regence Oregon Political Action Committee",
-    "score": 89.2
-  },
-  {
-    "a": "Oregon Gun Owners Political Action Committee (159)",
-    "b": "Regence Oregon Political Action Committee",
-    "score": 89.2
-  },
-  {
-    "a": "Ed Washington",
-    "b": "Washington County Safe Communities",
-    "score": 87.0
-  },
-  {
-    "a": "Heather Parmley",
-    "b": "Heather Prime",
-    "score": 85.7
-  },
-  {
-    "a": "Bear Electric, Inc.",
-    "b": "Enders Electric, Inc.",
-    "score": 85.0
-  },
-  {
-    "a": "Brandon Kearney",
-    "b": "Brandon Partney",
-    "score": 86.7
-  },
-  {
-    "a": "Grant Rusin",
-    "b": "Justin Grant",
-    "score": 87.0
-  },
-  {
-    "a": "Jeffrey Norman",
-    "b": "Jeffrey Soderman",
-    "score": 86.7
-  },
-  {
-    "a": "Jonathan Beeler",
-    "b": "Jonathan Belcher",
-    "score": 90.3
-  },
-  {
-    "a": "Robert Frost",
-    "b": "Robert Post",
-    "score": 87.0
-  },
-  {
-    "a": "Michael McNally",
-    "b": "Michael Nealy",
-    "score": 85.7
-  },
-  {
-    "a": "Oxley & Associates, Inc.",
-    "b": "Shaw Snow & Associates, Inc.",
-    "score": 85.7
-  },
-  {
-    "a": "Jonathan Cable",
-    "b": "Jonathan Case",
-    "score": 88.9
-  },
-  {
-    "a": "Nathan Haberman",
-    "b": "Nathan Karman",
-    "score": 85.7
-  },
-  {
-    "a": "Community Newspapers Portland Tribune",
-    "b": "Community Newspapers Portland Tribune-Newberg Graphic",
-    "score": 87.9
-  },
-  {
-    "a": "Joe Morris",
-    "b": "John Morris",
-    "score": 85.7
-  },
-  {
-    "a": "West Hills Development Company",
-    "b": "West Hills Land Development LLC",
-    "score": 85.2
-  },
-  {
-    "a": "Gudman for Lake Oswego City Council",
-    "b": "Justin Luber for Lake Oswego City Council",
-    "score": 88.9
-  },
-  {
-    "a": "Ed Brockman for Lake Oswego City Council",
-    "b": "Gudman for Lake Oswego City Council",
-    "score": 88.9
-  },
-  {
-    "a": "2D Photography",
-    "b": "David Gibb Photography",
-    "score": 88.0
-  },
-  {
-    "a": "US Postal Service - Portland Main Office",
-    "b": "US Postal Service - Salem Main",
-    "score": 88.9
-  },
-  {
-    "a": "US Postal Service - 9600",
-    "b": "US Postal Service - Salem Main",
-    "score": 88.4
-  },
-  {
-    "a": "US Postal Service - 1705",
-    "b": "US Postal Service - Salem Main",
-    "score": 88.4
-  },
-  {
-    "a": "Black Butte Realty Group",
-    "b": "NW Realty Group",
-    "score": 88.9
-  },
-  {
-    "a": "The Tresidder Co",
-    "b": "Tresidder Company, The",
-    "score": 89.7
-  },
-  {
-    "a": "CAS Enterprises LLC",
-    "b": "RAF Enterprises LLC",
-    "score": 89.5
-  },
-  {
-    "a": "JKJK Enterprises LLC",
-    "b": "RAF Enterprises LLC",
-    "score": 88.2
-  },
-  {
-    "a": "Michael Daly",
-    "b": "Michael Nealy",
-    "score": 88.0
-  },
-  {
-    "a": "Friends of Daniel Crowe",
-    "b": "Friends of Daniel Nguyen",
-    "score": 85.0
-  },
-  {
-    "a": "Sharon Davidson",
-    "b": "Shaun Davidson",
-    "score": 89.7
-  },
-  {
-    "a": "Oxley & Associates, Inc.",
-    "b": "Philco & Associates, Inc.",
-    "score": 85.7
-  },
-  {
-    "a": "Brothers Pizza Inc",
-    "b": "Brothers Pizza, Inc., DBA Bellagios Pizza",
-    "score": 87.5
-  },
-  {
-    "a": "Christopher Paren",
-    "b": "Christopher Perez",
-    "score": 88.2
-  },
-  {
-    "a": "Patricia Hogan",
-    "b": "Patricia Morgan",
-    "score": 89.7
-  },
-  {
-    "a": "William B McNae",
-    "b": "William McNamee",
-    "score": 86.7
-  },
-  {
-    "a": "Michael Schwartz",
-    "b": "Michael Schwartzel",
-    "score": 94.1
-  },
-  {
-    "a": "Michael Schwab",
-    "b": "Michael Schwartz",
-    "score": 86.7
-  },
-  {
-    "a": "Oxley & Associates, Inc.",
-    "b": "Riley & Associates, Inc..",
-    "score": 89.8
-  },
-  {
-    "a": "Corey Benson Insurance Agency, Inc.",
-    "b": "KPD Insurance Inc.",
-    "score": 87.5
-  },
-  {
-    "a": "Kathleen Cina",
-    "b": "Kathleen Medina",
-    "score": 85.7
-  },
-  {
-    "a": "Financial Insurance Factors, Inc",
-    "b": "SDR Financial Inc",
-    "score": 86.7
-  },
-  {
-    "a": "Oregon State Council of Service employees",
-    "b": "SEIU, Oregon State Council",
-    "score": 87.0
-  },
-  {
-    "a": "Christina Garner",
-    "b": "Christina Wander",
-    "score": 87.5
-  },
-  {
-    "a": "Riverhouse Restaurant",
-    "b": "Rivershore Restaurant",
-    "score": 90.5
-  },
-  {
-    "a": "DBG Properties LLC",
-    "b": "Melvin Mark Properties LLC",
-    "score": 87.5
-  },
-  {
-    "a": "Melvin Mark Properties LLC",
-    "b": "PMT Properties LLC",
-    "score": 87.5
-  },
-  {
-    "a": "2D Photography",
-    "b": "Shannon O Hara Photography",
-    "score": 88.0
-  },
-  {
-    "a": "Gary Lewis",
-    "b": "Mary Lewis",
-    "score": 90.0
-  },
-  {
-    "a": "Bush Elementary LSAC",
-    "b": "Lee Elementary LSAC",
-    "score": 88.2
-  },
-  {
-    "a": "Keith Howell Insurance Agency, Inc",
-    "b": "W.H.A. Insurance Agency, Inc",
-    "score": 85.7
-  },
-  {
-    "a": "Linda Le",
-    "b": "Linda Lee",
-    "score": 94.1
-  },
-  {
-    "a": "Craig D Anderson, MD",
-    "b": "Craig L. Anderson, MD",
-    "score": 94.7
-  },
-  {
-    "a": "Michael Daly",
-    "b": "Michael Daole",
-    "score": 88.0
-  },
-  {
-    "a": "Bigfoot Equipment Rental & Supply LLC",
-    "b": "Roses Equipment & Supply",
-    "score": 85.7
-  },
-  {
-    "a": "Cerner Corporation PAC",
-    "b": "Convergys Corporation PAC",
-    "score": 85.1
-  },
-  {
-    "a": "Liberty Mutual Co. PAC",
-    "b": "Liberty Mutual Insurance co PAC",
-    "score": 90.0
-  },
-  {
-    "a": "Jacqueline Arn",
-    "b": "Jacqueline Avant",
-    "score": 86.7
-  },
-  {
-    "a": "Ed Washington",
-    "b": "University of Washington Publication Office",
-    "score": 87.0
-  },
-  {
-    "a": "Committee to Elect Bob Martin",
-    "b": "Committee to Elect Bob Sherwin",
-    "score": 88.1
-  },
-  {
-    "a": "Andr?s Oswill",
-    "b": "Andres Oswill",
-    "score": 92.3
-  },
-  {
-    "a": "Allcities Property Management LLC",
-    "b": "Smith Property Management",
-    "score": 86.4
-  },
-  {
-    "a": "Citi Political Action Committee",
-    "b": "The Travelers Companies Inc. Political Action Committee",
-    "score": 91.2
-  },
-  {
-    "a": "2D Photography",
-    "b": "Jeremy Pair Photography",
-    "score": 88.0
-  },
-  {
-    "a": "2D Photography",
-    "b": "Photography By Reba",
-    "score": 88.0
-  },
-  {
-    "a": "BNK Construction, Inc.",
-    "b": "R.D. Reeves Construction, Inc.",
-    "score": 90.0
-  },
-  {
-    "a": "UCFW Local 555",
-    "b": "UFCW, Local 555",
-    "score": 89.7
-  },
-  {
-    "a": "James Hunt",
-    "b": "James Kuntz",
-    "score": 85.7
-  },
-  {
-    "a": "Ed Washington",
-    "b": "Washington County Democratic Central Committee",
-    "score": 87.0
-  },
-  {
-    "a": "Ed Washington",
-    "b": "Washington County Police Association",
-    "score": 87.0
-  },
-  {
-    "a": "Ed Washington",
-    "b": "Library Foundation of Washington County",
-    "score": 87.0
-  },
-  {
-    "a": "Ed Washington",
-    "b": "Max Wall for Washington County",
-    "score": 87.0
-  },
-  {
-    "a": "Ed Washington",
-    "b": "Washington CO. Elections",
-    "score": 87.0
-  },
-  {
-    "a": "OR Mutual Ins. Co.",
-    "b": "Oregon Mutual Ins. Co.",
-    "score": 90.9
-  },
-  {
-    "a": "David Hill Vineyards & Winery",
-    "b": "David K Hill",
-    "score": 90.9
-  },
-  {
-    "a": "Jaime Anderson",
-    "b": "Jamie Anderson",
-    "score": 92.9
-  },
-  {
-    "a": "Black Southern Oregon Alliance",
-    "b": "Southern Oregon Resource Alliance",
-    "score": 88.9
-  },
-  {
-    "a": "JWA Public Affairs",
-    "b": "McKenzie Public Affairs",
-    "score": 87.5
-  },
-  {
-    "a": "John Scheirman",
-    "b": "John Sherman",
-    "score": 92.3
-  },
-  {
-    "a": "J Douglas McKay",
-    "b": "J. Douglas Macy",
-    "score": 86.7
-  },
-  {
-    "a": "Wedy B Oliver",
-    "b": "Wendy Beth Oliver",
-    "score": 86.7
-  },
-  {
-    "a": "315623 SHERIDAN CARE CENTER",
-    "b": "DOVER MANAGEMENT:  SHERIDAN CARE CENTER",
-    "score": 85.1
-  },
-  {
-    "a": "Andrea Watkins",
-    "b": "DeAndre Watkins",
-    "score": 89.7
-  },
-  {
-    "a": "Protect Oregon's Priorities (15360)",
-    "b": "Protect Oregon's Priorities II",
-    "score": 94.7
-  },
-  {
-    "a": "Robert Lanphere Jr.",
-    "b": "W Lanphere",
-    "score": 88.9
-  },
-  {
-    "a": "Eli for Portland",
-    "b": "Jim Middaugh for Portland City Council (12636)",
-    "score": 85.7
-  },
-  {
-    "a": "Troy Beltz",
-    "b": "Troy Betz",
-    "score": 94.7
-  },
-  {
-    "a": "Moody Business Solutions",
-    "b": "ODP Business Solutions",
-    "score": 90.0
-  },
-  {
-    "a": "Thomas Dwyer",
-    "b": "Thomas Sawyer",
-    "score": 88.0
-  },
-  {
-    "a": "Gary Phillips",
-    "b": "Ray Phillips",
-    "score": 88.0
-  },
-  {
-    "a": "James Bell",
-    "b": "James Beltz",
-    "score": 85.7
-  },
-  {
-    "a": "Myron Reed",
-    "b": "Myron Steed",
-    "score": 85.7
-  },
-  {
-    "a": "Hailey Thomas",
-    "b": "Thomas A Bailey",
-    "score": 85.7
-  },
-  {
-    "a": "Carole Thatcher",
-    "b": "Karl Thatcher",
-    "score": 85.7
-  },
-  {
-    "a": "Engineers Political Education Committee",
-    "b": "NW Dairyman's Political Education Committee (FED)",
-    "score": 85.3
-  },
-  {
-    "a": "The UPS Store # 1837",
-    "b": "The UPS Store #3873",
-    "score": 87.2
-  },
-  {
-    "a": "Michael Hale",
-    "b": "Michael Hazen",
-    "score": 88.0
-  },
-  {
-    "a": "Stand for Children Inc",
-    "b": "Stand for Children Leadership Center",
-    "score": 90.0
-  },
-  {
-    "a": "Thomas N Petersen",
-    "b": "Thomas Pedersen",
-    "score": 87.5
-  },
-  {
-    "a": "Committee to Elect Jason Carr",
-    "b": "Committee to Elect Jason Conger (#13926)",
-    "score": 90.6
-  },
-  {
-    "a": "CATHERINE EAST",
-    "b": "CATHERINE FAST",
-    "score": 92.9
-  },
-  {
-    "a": "Jan Williamson",
-    "b": "Jean Williams",
-    "score": 88.9
-  },
-  {
-    "a": "Edward Epstein",
-    "b": "Howard Epstein",
-    "score": 85.7
-  },
-  {
-    "a": "Friends of Ken Moore",
-    "b": "Friends of Sheri Moore",
-    "score": 88.9
-  },
-  {
-    "a": "Michael Brand",
-    "b": "Michael Brian",
-    "score": 92.3
-  },
-  {
-    "a": "Michael Brand",
-    "b": "Michael Bratland",
-    "score": 89.7
-  },
-  {
-    "a": "Michael B Grant",
-    "b": "Michael Brand",
-    "score": 85.7
-  },
-  {
-    "a": "Michael Brand",
-    "b": "Michael O'Brian",
-    "score": 85.7
-  },
-  {
-    "a": "Erin Baker",
-    "b": "Erin Barber",
-    "score": 85.7
-  },
-  {
-    "a": "CTS Holdings LLC",
-    "b": "MAB Holdings LLC",
-    "score": 85.7
-  },
-  {
-    "a": "Crown Holdings LLC",
-    "b": "MAB Holdings LLC",
-    "score": 85.7
-  },
-  {
-    "a": "K&R Holdings II, LLC",
-    "b": "MAB Holdings LLC",
-    "score": 85.7
-  },
-  {
-    "a": "Fortify Holdings LLC",
-    "b": "MAB Holdings LLC",
-    "score": 85.7
-  },
-  {
-    "a": "Jane E Williams",
-    "b": "Jean Williams",
-    "score": 85.7
-  },
-  {
-    "a": "Walter A Miller",
-    "b": "Walter D Miller",
-    "score": 93.3
-  },
-  {
-    "a": "Mark Davie",
-    "b": "Mary Davies",
-    "score": 85.7
-  },
-  {
-    "a": "Central Oregon Building Trades and Construction Council",
-    "b": "LCCD Building & Construction Trades Council",
-    "score": 91.1
-  },
-  {
-    "a": "LCCD Building & Construction Trades Council",
-    "b": "R & H Construction",
-    "score": 87.5
-  },
-  {
-    "a": "Hiscox Insurance Company Inc.",
-    "b": "KPD Insurance Inc.",
-    "score": 87.5
-  },
-  {
-    "a": "OREGON SECRETARY OF STATE CORPORATION DIVISION",
-    "b": "OREGON SECRETARY OF STATE ELECTIONS DIVISION",
-    "score": 88.9
-  },
-  {
-    "a": "Scott Wiener",
-    "b": "Scott Wittenberg",
-    "score": 85.7
-  },
-  {
-    "a": "Kellen Russell",
-    "b": "Russell Kelley",
-    "score": 92.9
-  },
-  {
-    "a": "Fair Market Value Money",
-    "b": "Items Sold at Fair Market Value",
-    "score": 85.0
-  },
-  {
-    "a": "K & R Holdings, LLC",
-    "b": "Yeh K Holdings, LLC - Talent Mobile Estates",
-    "score": 88.2
-  },
-  {
-    "a": "Citi Political Action Committee",
-    "b": "Sustainable Agriculture and Energy Political Action Committee",
-    "score": 91.2
-  },
-  {
-    "a": "Central Oregon Eyecare PC",
-    "b": "Fox Central Oregon",
-    "score": 87.5
-  },
-  {
-    "a": "International House Portland",
-    "b": "Portland International Airport",
-    "score": 88.0
-  },
-  {
-    "a": "James Dinger",
-    "b": "James Singer",
-    "score": 91.7
-  },
-  {
-    "a": "LNG Development Company",
-    "b": "West Hills Development Company",
-    "score": 90.5
-  },
-  {
-    "a": "West Hills Development Company",
-    "b": "West Hills Land Development",
-    "score": 89.8
-  },
-  {
-    "a": "Joshua Cox",
-    "b": "Joshua Coy",
-    "score": 90.0
-  },
-  {
-    "a": "Alex Samarin",
-    "b": "Alex Shamari",
-    "score": 91.7
-  },
-  {
-    "a": "Citi Political Action Committee",
-    "b": "Shady Cove Matters Political Action Committee",
-    "score": 91.2
-  },
-  {
-    "a": "Crown Political Action Committee",
-    "b": "Shady Cove Matters Political Action Committee",
-    "score": 89.7
-  },
-  {
-    "a": "Engineers Political Education Committee",
-    "b": "IUPAT Political Action Togeter, Legislative Education Committee",
-    "score": 85.3
-  },
-  {
-    "a": "CHRISTINE EAKIN",
-    "b": "CHRISTINE KAIN",
-    "score": 89.7
-  },
-  {
-    "a": "Jason Wood",
-    "b": "Jon Wood",
-    "score": 88.9
-  },
-  {
-    "a": "Ana Kennedy",
-    "b": "Anita Kennedy",
-    "score": 91.7
-  },
-  {
-    "a": "A & B Enterprises Inc.",
-    "b": "A&B Enterprises Inc",
-    "score": 87.8
-  },
-  {
-    "a": "John Atkin",
-    "b": "John Atkinson",
-    "score": 87.0
-  },
-  {
-    "a": "DBG Properties LLC",
-    "b": "VanHaverbeke Properties LLC",
-    "score": 87.5
-  },
-  {
-    "a": "PMT Properties LLC",
-    "b": "VanHaverbeke Properties LLC",
-    "score": 87.5
-  },
-  {
-    "a": "Republican Senate Leadership Committee",
-    "b": "Republican State Leadership Committee Corporate Account",
-    "score": 89.9
-  },
-  {
-    "a": "2D Photography",
-    "b": "Lyn Howlett Photography",
-    "score": 88.0
-  },
-  {
-    "a": "IUPAT Politcial Action Together Political Committee",
-    "b": "IUPAT Political Action Together PAC",
-    "score": 93.9
-  },
-  {
-    "a": "Thomas Eckert",
-    "b": "Tom Eckert",
-    "score": 87.0
-  },
-  {
-    "a": "Grants Pass Water Lab",
-    "b": "Grants Pass Water Laboratory, Inc.",
-    "score": 89.5
-  },
-  {
-    "a": "Blumenauer For Congress",
-    "b": "Blumenauer for Congrass",
-    "score": 91.3
-  },
-  {
-    "a": "CTS Holdings LLC",
-    "b": "Crown Holdings LLC",
-    "score": 85.7
-  },
-  {
-    "a": "CTS Holdings LLC",
-    "b": "K&R Holdings II, LLC",
-    "score": 85.7
-  },
-  {
-    "a": "CTS Holdings LLC",
-    "b": "Fortify Holdings LLC",
-    "score": 85.7
-  },
-  {
-    "a": "Kimberly Combs",
-    "b": "Kimberly Cross",
-    "score": 85.7
-  },
-  {
-    "a": "R & H Construction",
-    "b": "R and H Construction Co.",
-    "score": 94.1
-  },
-  {
-    "a": "CHRISTINE EAKIN",
-    "b": "CHRISTINE EVI",
-    "score": 85.7
-  },
-  {
-    "a": "Mohlis Consulting, LLC",
-    "b": "SPG Consulting, LLC",
-    "score": 88.2
-  },
-  {
-    "a": "2D Photography",
-    "b": "April Davis Photography",
-    "score": 88.0
-  },
-  {
-    "a": "Michael Brown",
-    "b": "Michael Brownson",
-    "score": 89.7
-  },
-  {
-    "a": "US Postal Service - 9600",
-    "b": "US Postal Service - Pringle Park Station",
-    "score": 88.4
-  },
-  {
-    "a": "US Postal Service - 1705",
-    "b": "US Postal Service - Pringle Park Station",
-    "score": 88.4
-  },
-  {
-    "a": "Christopher Burr",
-    "b": "Christopher Butler",
-    "score": 88.2
-  },
-  {
-    "a": "Alan Scott",
-    "b": "Scott Asla",
-    "score": 90.0
-  },
-  {
-    "a": "Michael Brian",
-    "b": "Michael O'Brian",
-    "score": 92.9
-  },
-  {
-    "a": "Michael B Grant",
-    "b": "Michael Brian",
-    "score": 85.7
-  },
-  {
-    "a": "AM: PM PR",
-    "b": "AM:PM PR",
-    "score": 94.1
-  },
-  {
-    "a": "US Postal Service - 9600",
-    "b": "US Postal Service - Albany",
-    "score": 88.4
-  },
-  {
-    "a": "US Postal Service - 1705",
-    "b": "US Postal Service - Albany",
-    "score": 88.4
-  },
-  {
-    "a": "2D Photography",
-    "b": "Amit Photography",
-    "score": 88.0
-  },
-  {
-    "a": "2D Photography",
-    "b": "Fremouw Photography and Design",
-    "score": 88.0
-  },
-  {
-    "a": "2D Photography",
-    "b": "Jason Miller Photography",
-    "score": 88.0
-  },
-  {
-    "a": "William Oben",
-    "b": "William Owen",
-    "score": 91.7
-  },
-  {
-    "a": "United Food & Commercial Workers Intl Union, AFL-CIO, CLC",
-    "b": "United Food and Commercial Workers Int'l Union AFL CIO",
-    "score": 86.5
-  },
-  {
-    "a": "Jay Martin",
-    "b": "Jean Martin",
-    "score": 85.7
-  },
-  {
-    "a": "Central Oregon Radiology Associates, Pc",
-    "b": "Fox Central Oregon",
-    "score": 87.5
-  },
-  {
-    "a": "NFIB/National Federation of Independent Business",
-    "b": "National Federation of Independ Business",
-    "score": 90.9
-  },
-  {
-    "a": "Daniel J Gatti",
-    "b": "Daniel Jon Gatti Living Trust",
-    "score": 92.3
-  },
-  {
-    "a": "Eugene Education Assoc PAC",
-    "b": "Eugene Education Association - PAC (59)",
-    "score": 87.0
-  },
-  {
-    "a": "Douglas County Democratic Central Commit",
-    "b": "Polk County Democratic Central Committee",
-    "score": 87.5
-  },
-  {
-    "a": "Integrity Insurance & Bonding Inc.",
-    "b": "KPD Insurance Inc.",
-    "score": 87.5
-  },
-  {
-    "a": "Airport Rotary Foundation",
-    "b": "Rotary Coos Foundation",
-    "score": 87.2
-  },
-  {
-    "a": "CAS Enterprises LLC",
-    "b": "JKJK Enterprises LLC",
-    "score": 88.2
-  },
-  {
-    "a": "John A Fennessey",
-    "b": "John Hennessey",
-    "score": 86.7
-  },
-  {
-    "a": "Philip Holt Barnhart",
-    "b": "Philip Neal Barnhart",
-    "score": 85.7
-  },
-  {
-    "a": "Barbara Pahl",
-    "b": "Barbara Sah",
-    "score": 87.0
-  },
-  {
-    "a": "Mowry Consulting, LLC",
-    "b": "SPG Consulting, LLC",
-    "score": 88.2
-  },
-  {
-    "a": "Mars Consulting LLC",
-    "b": "Mowry Consulting, LLC",
-    "score": 85.0
-  },
-  {
-    "a": "Accion Politica PCUNista PAC",
-    "b": "PCUN Accion Politica PCUNista",
-    "score": 94.7
-  },
-  {
-    "a": "Richard Mason",
-    "b": "Richard Masterson",
-    "score": 86.7
-  },
-  {
-    "a": "Richard Gleason",
-    "b": "Richard Mason",
-    "score": 85.7
-  },
-  {
-    "a": "Eli for Portland",
-    "b": "United for Portland (21023)",
-    "score": 85.7
-  },
-  {
-    "a": "DBG Properties LLC",
-    "b": "Perlenfein Properties LLC",
-    "score": 87.5
-  },
-  {
-    "a": "PMT Properties LLC",
-    "b": "Perlenfein Properties LLC",
-    "score": 87.5
-  },
-  {
-    "a": "Citi Political Action Committee",
-    "b": "HNTB Holdings Ltd. Political Action Committee",
-    "score": 91.2
-  },
-  {
-    "a": "Crown Political Action Committee",
-    "b": "HNTB Holdings Ltd. Political Action Committee",
-    "score": 89.7
-  },
-  {
-    "a": "HMS Holdings Corp. Political Action Committee",
-    "b": "HNTB Holdings Ltd. Political Action Committee",
-    "score": 87.5
-  },
-  {
-    "a": "Peter Davis",
-    "b": "Peter Jarvis",
-    "score": 87.0
-  },
-  {
-    "a": "Citi Political Action Committee",
-    "b": "IUPAT Politcial Action Together Political Committee",
-    "score": 91.2
-  },
-  {
-    "a": "Crown Political Action Committee",
-    "b": "IUPAT Politcial Action Together Political Committee",
-    "score": 89.7
-  },
-  {
-    "a": "BNK Construction, Inc.",
-    "b": "Claudio Alvarez Construction, Inc.",
-    "score": 90.0
-  },
-  {
-    "a": "Emmert Development Company",
-    "b": "LNG Development Company",
-    "score": 90.5
-  },
-  {
-    "a": "Iron Workers Local 14",
-    "b": "Iron Workers Local 516",
-    "score": 93.0
-  },
-  {
-    "a": "Cool Printing and Copies",
-    "b": "DocuMart Copies and Printing",
-    "score": 88.4
-  },
-  {
-    "a": "BARBARA AMRINE",
-    "b": "BARBARA BARNES",
-    "score": 85.7
-  },
-  {
-    "a": "Craig Kelson",
-    "b": "Craig Olson",
-    "score": 87.0
-  },
-  {
-    "a": "Jennifer Hang",
-    "b": "Jennifer Langan",
-    "score": 85.7
-  },
-  {
-    "a": "Cheryl A Martin",
-    "b": "Chrys A. Martin",
-    "score": 86.7
-  },
-  {
-    "a": "Johh E Swanson",
-    "b": "John E Swanson",
-    "score": 92.9
-  },
-  {
-    "a": "J. Douglas Macy",
-    "b": "James Douglas Macy",
-    "score": 88.9
-  },
-  {
-    "a": "Astellas Pharma US",
-    "b": "Astellas Pharma US, Inc",
-    "score": 90.9
-  },
-  {
-    "a": "US Postal Service - 9600",
-    "b": "US Postal Service - Portland Main Office",
-    "score": 88.4
-  },
-  {
-    "a": "US Postal Service - 1705",
-    "b": "US Postal Service - 9600",
-    "score": 88.4
-  },
-  {
-    "a": "Cal Thomas",
-    "b": "Dale Thomas",
-    "score": 85.7
-  },
-  {
-    "a": "Alpha Broadcasting, LLC",
-    "b": "Meadows Broadcasting, LLC",
-    "score": 85.0
-  },
-  {
-    "a": "Larry George for State Senate (5107)",
-    "b": "Larry George for State Senate PAC #5107",
-    "score": 90.7
-  },
-  {
-    "a": "Dan Hanson",
-    "b": "Dean Hansen",
-    "score": 85.7
-  },
-  {
-    "a": "Cathy Johnson",
-    "b": "Charity Johnson",
-    "score": 85.7
-  },
-  {
-    "a": "Michael Ramos",
-    "b": "Michael Ross",
-    "score": 88.0
-  },
-  {
-    "a": "Oregon Bank PAC (125)",
-    "b": "Oregon Bankers PAC 125",
-    "score": 88.4
-  },
-  {
-    "a": "Political Data Intelligence (PDI)",
-    "b": "WPA Intelligence",
-    "score": 85.7
-  },
-  {
-    "a": "Casey Cooper",
-    "b": "Casey Hooper",
-    "score": 91.7
-  },
-  {
-    "a": "7th Circle Designs",
-    "b": "Circle K",
-    "score": 85.7
-  },
-  {
-    "a": "Jere Hudson",
-    "b": "Jesse Hudson",
-    "score": 87.0
-  },
-  {
-    "a": "Central Oregon Prosperity PAC (19693)",
-    "b": "Fox Central Oregon",
-    "score": 87.5
-  },
-  {
-    "a": "Cara Hanson",
-    "b": "Carla Hansen",
-    "score": 87.0
-  },
-  {
-    "a": "Covanta Energy Corp.",
-    "b": "Covanta Energy Group",
-    "score": 85.0
-  },
-  {
-    "a": "Insurance Services Northwest",
-    "b": "Northwest Mail Services",
-    "score": 87.8
-  },
-  {
-    "a": "Richard Gleason",
-    "b": "Richard Olson",
-    "score": 85.7
-  },
-  {
-    "a": "US Postal Service - 1705",
-    "b": "US Postal Service - Portland Main Office",
-    "score": 88.4
-  },
-  {
-    "a": "Michael Hailey",
-    "b": "Michael Hale",
-    "score": 92.3
-  },
-  {
-    "a": "NW Grassroots Communications, Inc.",
-    "b": "Text Communications, Inc.",
-    "score": 88.9
-  },
-  {
-    "a": "NW Grassroots & Communications",
-    "b": "NW Grassroots Communications, Inc.",
-    "score": 87.5
-  },
-  {
-    "a": "Lake County Republican Central Committee",
     "b": "Polk County Republican Central Committee",
     "score": 93.3
   },
   {
-    "a": "Coos County Republican Central Committee",
-    "b": "Lake County Republican Central Committee",
+    "a": "Curry County Republican Central Committee",
+    "b": "Lane County Republican Central Committee",
     "score": 93.3
   },
   {
-    "a": "Markowitz, Herbold, Glade & Mehlaf P C",
-    "b": "Markowitz, Herbold, Glade & Mehlhaf PC",
-    "score": 94.7
+    "a": "Lane County Republican Central Committee",
+    "b": "Wasco County Republican Central Committee",
+    "score": 93.3
   },
   {
-    "a": "Northwest Political Consulting, LLC",
-    "b": "SPG Consulting, LLC",
-    "score": 88.2
+    "a": "Harney County Democratic Central Committee",
+    "b": "Washington County Democratic Central Committee",
+    "score": 90.9
   },
   {
-    "a": "2D Photography",
-    "b": "Andi Petkus Photography",
-    "score": 88.0
-  },
-  {
-    "a": "Michael Daole",
-    "b": "Michael Hale",
-    "score": 88.0
-  },
-  {
-    "a": "American Federation of Teachers-Oregon Candidate Political Action Committee (113)",
-    "b": "Citi Political Action Committee",
-    "score": 91.2
-  },
-  {
-    "a": "American Federation of Teachers-Oregon Candidate Political Action Committee (113)",
-    "b": "Crown Political Action Committee",
+    "a": "Clatsop County Democratic Central Committee",
+    "b": "Washington County Democratic Central Committee",
     "score": 89.7
   },
   {
-    "a": "David Backholer",
-    "b": "David Bracher",
-    "score": 85.7
-  },
-  {
-    "a": "Kramer's Metro Mail Service",
-    "b": "Kramer's Metro Mailing Service",
-    "score": 94.7
-  },
-  {
-    "a": "Gerald D Morgan, Jr",
-    "b": "Gerald Morgan, Jr.",
-    "score": 91.9
-  },
-  {
-    "a": "Citi Political Action Committee",
-    "b": "Oregon Faculties Political Action Committee (145)",
-    "score": 91.2
-  },
-  {
-    "a": "Crown Political Action Committee",
-    "b": "Oregon Faculties Political Action Committee (145)",
-    "score": 89.7
-  },
-  {
-    "a": "Committee to Elect Jeri Lynn Thompson",
-    "b": "Committee to Elect Lynn Howe",
-    "score": 90.2
-  },
-  {
-    "a": "Ed Washington",
-    "b": "NUCA of Oregon & SW Washington PAC - Northwest Utility Contractors Association PAC (4747)",
-    "score": 87.0
-  },
-  {
-    "a": "Citi Political Action Committee",
-    "b": "IUPAT Political Action Togeter, Legislative Education Committee",
-    "score": 91.2
-  },
-  {
-    "a": "Crown Political Action Committee",
-    "b": "IUPAT Political Action Togeter, Legislative Education Committee",
-    "score": 89.7
-  },
-  {
-    "a": "Eli for Portland",
-    "b": "Nabil for Portland",
-    "score": 85.7
-  },
-  {
-    "a": "Central Oregon Youth Investment Foundation",
-    "b": "Fox Central Oregon",
+    "a": "Deschutes County Democratic Central Committee",
+    "b": "Washington County Democratic Central Committee",
     "score": 87.5
   },
   {
-    "a": "Gateway Center Foundation",
-    "b": "The Center Foundation",
-    "score": 89.5
+    "a": "Builders Future Inc.",
+    "b": "Future PAC, House Builders",
+    "score": 85.7
   },
   {
-    "a": "Thomas Curphey",
-    "b": "Thomas Murphy",
+    "a": "Curry County Republican Central Committee",
+    "b": "Polk County Republican Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Polk County Republican Central Committee",
+    "b": "Wasco County Republican Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Blue Horizon Fund of the Democratic Party of Washington County",
+    "b": "Democratic Party of Lane County",
+    "score": 91.2
+  },
+  {
+    "a": "Friends of Margaret Doherty",
+    "b": "Friends of Margaret Doherty(13907)",
+    "score": 88.5
+  },
+  {
+    "a": "Curry County Republican Central Committee",
+    "b": "Wasco County Republican Central Committee",
+    "score": 92.1
+  },
+  {
+    "a": "Oregon Ambulatory Surgery Center Assn.",
+    "b": "Oregon Ambulatory Surgery Center Association",
+    "score": 91.4
+  },
+  {
+    "a": "Portland Association of Teachers PAC",
+    "b": "Taxpayers Association of Oregon Portland PAC (23658)",
+    "score": 85.7
+  },
+  {
+    "a": "Portland Association of Teachers PAC",
+    "b": "Portland Metropolitan Association of Realtors PAC",
+    "score": 85.7
+  },
+  {
+    "a": "Oregon Restaurant Association (00193)",
+    "b": "Oregon Restaurant Association PAC",
+    "score": 93.5
+  },
+  {
+    "a": "OX Restaurant",
+    "b": "Oregon Restaurant Association PAC",
+    "score": 87.0
+  },
+  {
+    "a": "Coos County Republican Central Committee",
+    "b": "Jefferson County Republican Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Jefferson County Republican Central Committee",
+    "b": "Linn County Republican Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Jefferson County Republican Central Committee",
+    "b": "Lane County Republican Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Jefferson County Republican Central Committee",
+    "b": "Polk County Republican Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Curry County Republican Central Committee",
+    "b": "Jefferson County Republican Central Committee",
+    "score": 92.1
+  },
+  {
+    "a": "Jefferson County Republican Central Committee",
+    "b": "Wasco County Republican Central Committee",
+    "score": 92.1
+  },
+  {
+    "a": "Benton County Republican Central Committee",
+    "b": "Jefferson County Republican Central Committee",
+    "score": 90.9
+  },
+  {
+    "a": "Jefferson County Republican Central Committee",
+    "b": "Klamath County Republican Central Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Jefferson County Republican Central Committee",
+    "b": "Umatilla County Republican Central Committee",
+    "score": 88.6
+  },
+  {
+    "a": "Deschutes County Democratic Central Committee",
+    "b": "Harney County Democratic Central Committee",
+    "score": 90.9
+  },
+  {
+    "a": "Clatsop County Democratic Central Committee",
+    "b": "Deschutes County Democratic Central Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Benton County Republican Central Committee",
+    "b": "Coos County Republican Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Benton County Republican Central Committee",
+    "b": "Linn County Republican Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Benton County Republican Central Committee",
+    "b": "Lane County Republican Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Benton County Republican Central Committee",
+    "b": "Polk County Republican Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Benton County Republican Central Committee",
+    "b": "Curry County Republican Central Committee",
+    "score": 92.1
+  },
+  {
+    "a": "Benton County Republican Central Committee",
+    "b": "Wasco County Republican Central Committee",
+    "score": 92.1
+  },
+  {
+    "a": "Coos County Republican Central Committee",
+    "b": "Hood River County Republican Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Hood River County Republican Central Committee",
+    "b": "Linn County Republican Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Hood River County Republican Central Committee",
+    "b": "Lane County Republican Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Hood River County Republican Central Committee",
+    "b": "Polk County Republican Central Committee",
+    "score": 93.3
+  },
+  {
+    "a": "Curry County Republican Central Committee",
+    "b": "Hood River County Republican Central Committee",
+    "score": 92.1
+  },
+  {
+    "a": "Hood River County Republican Central Committee",
+    "b": "Wasco County Republican Central Committee",
+    "score": 92.1
+  },
+  {
+    "a": "Benton County Republican Central Committee",
+    "b": "Hood River County Republican Central Committee",
+    "score": 90.9
+  },
+  {
+    "a": "Hood River County Republican Central Committee",
+    "b": "Klamath County Republican Central Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Hood River County Republican Central Committee",
+    "b": "Umatilla County Republican Central Committee",
+    "score": 88.6
+  },
+  {
+    "a": "Committee to Elect Brad Avakian",
+    "b": "Committee to Elect Brad O'Dell Douglas County Sheriff",
+    "score": 85.2
+  },
+  {
+    "a": "Clatsop County Democratic Central Committee",
+    "b": "Harney County Democratic Central Committee",
+    "score": 90.9
+  },
+  {
+    "a": "Friends of Allen Alley (12878)",
+    "b": "Friends of Rich Allen",
+    "score": 86.5
+  },
+  {
+    "a": "Rust for Commissioner",
+    "b": "Trent Tidwell for Clackamas County Commissioner",
+    "score": 86.5
+  },
+  {
+    "a": "Friends of Dave Drotzmann (23000)",
+    "b": "Friends of Dave Hunt",
+    "score": 85.7
+  },
+  {
+    "a": "Eagle Political Action Committee",
+    "b": "Regence Oregon Political Action Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Oregon Laborers Political Action Committee (16480)",
+    "b": "Regence Oregon Political Action Committee",
+    "score": 89.2
+  },
+  {
+    "a": "Regence Oregon Political Action Committee",
+    "b": "Wells Fargo & Co. Oregon Political Action Committee (3495)",
+    "score": 89.2
+  },
+  {
+    "a": "Regence Oregon Political Action Committee",
+    "b": "Wells Fargo & Co. Oregon Political Action Committee",
+    "score": 89.2
+  },
+  {
+    "a": "Asian Pacific American Network of Oregon Political Action Committee (5535)",
+    "b": "Regence Oregon Political Action Committee",
+    "score": 89.2
+  },
+  {
+    "a": "MATTHEW HAWES",
+    "b": "MATTHEW WEST",
+    "score": 88.0
+  },
+  {
+    "a": "PATRICK CHANEY",
+    "b": "PATRICK HANLEY",
+    "score": 92.9
+  },
+  {
+    "a": "Joan C Williams",
+    "b": "Jon Williams",
     "score": 88.9
   },
   {
-    "a": "East Main Street Insurance Services Inc.",
-    "b": "KPD Insurance Inc.",
-    "score": 87.5
-  },
-  {
-    "a": "Citi Political Action Committee",
-    "b": "HDR Proffessional Political Action Committee",
-    "score": 91.2
-  },
-  {
-    "a": "Crown Political Action Committee",
-    "b": "HDR Proffessional Political Action Committee",
-    "score": 89.7
-  },
-  {
-    "a": "Timothy J Park Photography",
-    "b": "Timothy J. Park Photography, Inc.",
-    "score": 88.1
-  },
-  {
-    "a": "News Register Publishing Co.",
-    "b": "News-Register Publishing Company",
-    "score": 86.7
-  },
-  {
-    "a": "Crooked River Round Up",
-    "b": "Crooked River Roundup",
-    "score": 93.0
-  },
-  {
-    "a": "Confederated Tribes UM",
-    "b": "The Confederated Tribes of the Grand Ronde Community",
-    "score": 92.7
-  },
-  {
-    "a": "Oregon Secretary Of State",
-    "b": "Secretary of State, State of Oregon Elections Division",
-    "score": 93.6
-  },
-  {
-    "a": "Oregon Secretary of State, elections division",
-    "b": "Secretary of State, State of Oregon Elections Division",
-    "score": 89.6
-  },
-  {
-    "a": "Pearl Consulting, LLC",
-    "b": "SPG Consulting, LLC",
-    "score": 88.2
-  },
-  {
-    "a": "Mars Consulting LLC",
-    "b": "Pearl Consulting, LLC",
-    "score": 85.0
-  },
-  {
-    "a": "Committee to Elect Bob Martin",
-    "b": "The Committee to Elect Bob Wolfe Sheriff",
-    "score": 86.3
-  },
-  {
-    "a": "Ed Washington",
-    "b": "Washington County Justice Initiative PAC",
-    "score": 87.0
-  },
-  {
-    "a": "2D Photography",
-    "b": "Posy Quarterman Photography",
+    "a": "Charles Hill",
+    "b": "Charles Still",
     "score": 88.0
   },
   {
-    "a": "DBG Properties LLC",
-    "b": "Russell Fellows Properties LLC",
-    "score": 87.5
-  },
-  {
-    "a": "PMT Properties LLC",
-    "b": "Russell Fellows Properties LLC",
-    "score": 87.5
-  },
-  {
-    "a": "Central Oregon Federation of Republican Women",
-    "b": "Fox Central Oregon",
-    "score": 87.5
-  },
-  {
-    "a": "Oregon State Capitol Foundation",
-    "b": "Oregon State Capitol Store",
-    "score": 87.0
-  },
-  {
-    "a": "Kramer's Metro Mail Service",
-    "b": "Kramers Metro Mailing Services",
-    "score": 91.2
-  },
-  {
-    "a": "Michael Ross",
-    "b": "Michael Roy",
-    "score": 87.0
-  },
-  {
-    "a": "Eliza Williams",
-    "b": "Elizabeth Williams",
-    "score": 87.5
-  },
-  {
-    "a": "2D Photography",
-    "b": "Goc Photography",
-    "score": 88.0
-  },
-  {
-    "a": "Citi Political Action Committee",
-    "b": "HMS Holdings Corp. Political Action Committee",
-    "score": 91.2
-  },
-  {
-    "a": "Crown Political Action Committee",
-    "b": "HMS Holdings Corp. Political Action Committee",
-    "score": 89.7
-  },
-  {
-    "a": "Citi Political Action Committee",
-    "b": "School Libraries Political Action Committee",
-    "score": 91.2
-  },
-  {
-    "a": "Crown Political Action Committee",
-    "b": "School Libraries Political Action Committee",
-    "score": 89.7
-  },
-  {
-    "a": "Central Oregon Building Trades and Construction Council",
-    "b": "Fox Central Oregon",
-    "score": 87.5
-  },
-  {
-    "a": "DBG Properties LLC",
-    "b": "PMT Properties LLC",
-    "score": 87.5
-  },
-  {
-    "a": "Citi Political Action Committee",
-    "b": "Oregon Gun Owners Political Action Committee (159)",
-    "score": 91.2
-  },
-  {
-    "a": "Crown Political Action Committee",
-    "b": "Oregon Gun Owners Political Action Committee (159)",
-    "score": 89.7
-  },
-  {
-    "a": "Citi Political Action Committee",
-    "b": "Low Income Dental Political Action Committee",
-    "score": 91.2
-  },
-  {
-    "a": "Crown Political Action Committee",
-    "b": "Low Income Dental Political Action Committee",
-    "score": 89.7
-  },
-  {
-    "a": "California Dental Political Action Committee",
-    "b": "Low Income Dental Political Action Committee",
+    "a": "Park Street Cafe",
+    "b": "V Street",
     "score": 85.7
   },
   {
-    "a": "Citi Political Action Committee",
-    "b": "Rogue Valley Association of Realtors, Inc Political Action Committee",
-    "score": 91.2
-  },
-  {
-    "a": "Crown Political Action Committee",
-    "b": "Rogue Valley Association of Realtors, Inc Political Action Committee",
+    "a": "Eagle Political Action Committee",
+    "b": "Recology Inc. Political Action Committee",
     "score": 89.7
   },
   {
-    "a": "California Dental Political Action Committee",
-    "b": "Citi Political Action Committee",
-    "score": 91.2
+    "a": "Mednax, Inc. - Federal Political Action Committee",
+    "b": "Recology Inc. Political Action Committee",
+    "score": 87.3
   },
   {
-    "a": "California Dental Political Action Committee",
+    "a": "Enterprise Holdings Inc. Political Action Committee",
+    "b": "Recology Inc. Political Action Committee",
+    "score": 87.3
+  },
+  {
+    "a": "SDS Lumber Company",
+    "b": "Starfire Lumber Company",
+    "score": 87.5
+  },
+  {
+    "a": "Mike Shirtcliff, DMD",
+    "b": "R. Mike Shirtcliff, D.M.D.",
+    "score": 88.9
+  },
+  {
+    "a": "Crowne Plaza Lake Oswego/Portland",
+    "b": "Crowne Plaza Portland - Lake Oswego",
+    "score": 94.1
+  },
+  {
+    "a": "Barroway Topaz Kessler Meltzer & Check",
+    "b": "Barroway Topaz Kessler Meltzer & Check, LLP",
+    "score": 93.8
+  },
+  {
+    "a": "Stanley  Anthony Shulster",
+    "b": "Stanley A Shulster",
+    "score": 94.1
+  },
+  {
+    "a": "Maria G Maurer",
+    "b": "Maria Mauer",
+    "score": 88.0
+  },
+  {
+    "a": "HDR Engineering, Inc.",
+    "b": "TEAM Engineering, Inc.",
+    "score": 89.5
+  },
+  {
+    "a": "Eagle Political Action Committee",
+    "b": "Oregon Laborers Political Action Committee (16480)",
+    "score": 89.7
+  },
+  {
+    "a": "Brian Young",
+    "b": "Erin Young",
+    "score": 85.7
+  },
+  {
+    "a": "Duckwall Pooley Fruit Company",
+    "b": "Duckwall-Pooley Fruit Co.",
+    "score": 85.2
+  },
+  {
+    "a": "Austin Sayer",
+    "b": "Justin Sawyer",
+    "score": 88.0
+  },
+  {
+    "a": "Michael Schaufler",
+    "b": "Michael Schuller",
+    "score": 90.9
+  },
+  {
+    "a": "VB Construction, Inc.",
+    "b": "VB Consulting, Inc.",
+    "score": 85.0
+  },
+  {
+    "a": "Clackamas County Fairgrounds and Event Center",
+    "b": "Lake County Fairgrounds",
+    "score": 87.8
+  },
+  {
+    "a": "Greta Etecht",
+    "b": "Greta Utecht",
+    "score": 91.7
+  },
+  {
+    "a": "OX Restaurant",
+    "b": "Sweetwaters Restaurant",
+    "score": 87.0
+  },
+  {
+    "a": "OX Restaurant",
+    "b": "Oregon Restaurant Association (00193)",
+    "score": 87.0
+  },
+  {
+    "a": "El Catrin Mexican Restaurant",
+    "b": "OX Restaurant",
+    "score": 87.0
+  },
+  {
+    "a": "OX Restaurant",
+    "b": "Restaurant & Lodging Association",
+    "score": 87.0
+  },
+  {
+    "a": "La Sierra Restaurant",
+    "b": "OX Restaurant",
+    "score": 87.0
+  },
+  {
+    "a": "OX Restaurant",
+    "b": "Wild Pear Restaurant",
+    "score": 87.0
+  },
+  {
+    "a": "JHBC Inc DBA McDonalds Restaurant",
+    "b": "OX Restaurant",
+    "score": 87.0
+  },
+  {
+    "a": "Darsalam Restaurant",
+    "b": "OX Restaurant",
+    "score": 87.0
+  },
+  {
+    "a": "Eagle Political Action Committee",
+    "b": "Mednax, Inc. - Federal Political Action Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Kellie Walters",
+    "b": "Shelli Walters",
+    "score": 85.7
+  },
+  {
+    "a": "Conkling, Fiskim & McCormick, Inc",
+    "b": "Conkling, Fiskum & McCormick Inc.",
+    "score": 93.9
+  },
+  {
+    "a": "Envision Communications Inc",
+    "b": "Top Communications",
+    "score": 87.5
+  },
+  {
+    "a": "Daryl Nicholson",
+    "b": "Harry Nicholson",
+    "score": 86.7
+  },
+  {
+    "a": "Anthony J Aceti dbs Hay Depot",
+    "b": "Hay Depot Toni Aceti",
+    "score": 85.7
+  },
+  {
+    "a": "Michael Beeler",
+    "b": "Michael Brewer",
+    "score": 85.7
+  },
+  {
+    "a": "Brooke Communications Inc",
+    "b": "Brooks Communications, Inc.",
+    "score": 92.3
+  },
+  {
+    "a": "Brooks Communications",
+    "b": "Brooks Communications, Inc.",
+    "score": 87.5
+  },
+  {
+    "a": "Brooks Communications, Inc.",
+    "b": "Swift Communications, Inc.",
+    "score": 87.0
+  },
+  {
+    "a": "Adept Communications, Inc.",
+    "b": "Brooks Communications, Inc.",
+    "score": 87.0
+  },
+  {
+    "a": "Brooks Communications, Inc.",
+    "b": "NW Grassroots & Communications, Inc.",
+    "score": 85.1
+  },
+  {
+    "a": "Brad Young",
+    "b": "Brian Young",
+    "score": 85.7
+  },
+  {
+    "a": "Jeff Robberson",
+    "b": "Jefferey Robberson",
+    "score": 87.5
+  },
+  {
+    "a": "Kristen Collins",
+    "b": "Kristine Collins",
+    "score": 90.3
+  },
+  {
+    "a": "Rachel Harrell",
+    "b": "Rachel Martell",
+    "score": 85.7
+  },
+  {
+    "a": "Committee to Elect Eleanor Walters",
+    "b": "Committee to Elect Justice Martha L. Walters",
+    "score": 86.7
+  },
+  {
+    "a": "GRS - Government Relations Strategies",
+    "b": "Government Releations Strategies, Inc.",
+    "score": 85.3
+  },
+  {
+    "a": "TRAVIS JOHNSON",
+    "b": "TRISHA JOHNSON",
+    "score": 85.7
+  },
+  {
+    "a": "4R Equipment, LLC",
+    "b": "AHO Equipment, LLC",
+    "score": 90.3
+  },
+  {
+    "a": "WILLIAM CHANDLER",
+    "b": "WILLIAM GANDER",
+    "score": 86.7
+  },
+  {
+    "a": "Don Williams",
+    "b": "Jon Williams",
+    "score": 91.7
+  },
+  {
+    "a": "Cash & Carry Store # 577",
+    "b": "Cash & Carry Store #540",
+    "score": 89.4
+  },
+  {
+    "a": "Frank Morgan",
+    "b": "Frank Morin",
+    "score": 87.0
+  },
+  {
+    "a": "Mahonia Public Affairs LLC",
+    "b": "Public Affairs Inc",
+    "score": 87.5
+  },
+  {
+    "a": "Public Affairs Inc",
+    "b": "chevron Policy Govt & Public Affairs",
+    "score": 87.5
+  },
+  {
+    "a": "Leading Edge Public Affairs LLC",
+    "b": "Public Affairs Inc",
+    "score": 87.5
+  },
+  {
+    "a": "Barbara Carter",
+    "b": "Barbara Warner",
+    "score": 85.7
+  },
+  {
+    "a": "Daniel Kistler",
+    "b": "Daniel Koster",
+    "score": 88.9
+  },
+  {
+    "a": "Johnny Waggoner , Sr",
+    "b": "Johnny Waggoner, SR",
+    "score": 87.2
+  },
+  {
+    "a": "Johann Miller",
+    "b": "John Miller",
+    "score": 91.7
+  },
+  {
+    "a": "Christopher Berg",
+    "b": "Christopher George",
+    "score": 88.2
+  },
+  {
+    "a": "Ask Lori",
+    "b": "Lori Askew",
+    "score": 88.9
+  },
+  {
+    "a": "State Farm Fire & Casulty",
+    "b": "State Farm Fire and Casualty",
+    "score": 86.8
+  },
+  {
+    "a": "Crown Political Action Committee",
+    "b": "Wells Fargo & Co. Oregon Political Action Committee (3495)",
+    "score": 89.7
+  },
+  {
+    "a": "Eagle Political Action Committee",
+    "b": "Wells Fargo & Co. Oregon Political Action Committee (3495)",
+    "score": 89.7
+  },
+  {
+    "a": "Carl K King",
+    "b": "Carl L King",
+    "score": 90.9
+  },
+  {
+    "a": "Carl K. King",
+    "b": "Carl L King",
+    "score": 90.0
+  },
+  {
+    "a": "Jeffrey B Johnson",
+    "b": "Jeffrey Johnston",
+    "score": 90.9
+  },
+  {
+    "a": "Phelan Enterprises LLC",
+    "b": "STB Enterprises LLC",
+    "score": 88.2
+  },
+  {
+    "a": "Daniel Hare",
+    "b": "Daniel Hayes",
+    "score": 87.0
+  },
+  {
+    "a": "John Miller",
+    "b": "John Willer",
+    "score": 90.9
+  },
+  {
+    "a": "Robert Cleland",
+    "b": "Robert Ireland",
+    "score": 85.7
+  },
+  {
+    "a": "Susan E Jones",
+    "b": "Suzan E Jones",
+    "score": 92.3
+  },
+  {
+    "a": "Deborah Gordon",
+    "b": "Deborah Grogan",
+    "score": 85.7
+  },
+  {
+    "a": "Top Communications",
+    "b": "Zoom Video Communications - ZoomUS",
+    "score": 87.5
+  },
+  {
+    "a": "Jon Fischer",
+    "b": "Sony Fischer",
+    "score": 87.0
+  },
+  {
+    "a": "Oregon Secretary of State/ elections division",
+    "b": "Oregon Secretary of State/elections",
+    "score": 87.5
+  },
+  {
+    "a": "Oregon Secretary of State, elections division",
+    "b": "Oregon Secretary of State/elections",
+    "score": 85.0
+  },
+  {
+    "a": "A & B Enterprises Inc.",
+    "b": "R & R Enterprises",
+    "score": 92.9
+  },
+  {
+    "a": "Christina Done",
+    "b": "Christina Lane",
+    "score": 85.7
+  },
+  {
+    "a": "Plus Communications LLC",
+    "b": "Top Communications",
+    "score": 87.5
+  },
+  {
+    "a": "Stephanie Noll",
+    "b": "Stephanie Nolte",
+    "score": 89.7
+  },
+  {
+    "a": "Committee to Retain Judge Erious Johnson Jr.",
+    "b": "Committee to Retain Judge Silver",
+    "score": 87.7
+  },
+  {
+    "a": "Christopher Foote",
+    "b": "Christopher Koomen",
+    "score": 85.7
+  },
+  {
+    "a": "John Paull",
+    "b": "John Pullen",
+    "score": 85.7
+  },
+  {
+    "a": "Bayer Richard",
+    "b": "Richard Bassler",
+    "score": 85.7
+  },
+  {
+    "a": "Friends of Jerred Taylor",
+    "b": "Friends of Louis Taylor",
+    "score": 85.0
+  },
+  {
+    "a": "Barbara Sibley",
+    "b": "Barbara Silvey",
+    "score": 92.9
+  },
+  {
+    "a": "Barbara Sibley",
+    "b": "Barbara Silver",
+    "score": 85.7
+  },
+  {
+    "a": "Newell Clarno for Crook County Commissioner (12831)",
+    "b": "Rust for Commissioner",
+    "score": 86.5
+  },
+  {
+    "a": "C 4 Cattle Company LLC",
+    "b": "Veterans Cattle Company LLC",
+    "score": 90.0
+  },
+  {
+    "a": "AFSCME Local 189",
+    "b": "AFSCME Local 3997",
+    "score": 85.7
+  },
+  {
+    "a": "Green Springs Box R Ranch",
+    "b": "Mt. Springs Ranch",
+    "score": 86.7
+  },
+  {
+    "a": "Todd Crawford",
+    "b": "Tom Crawford",
+    "score": 88.0
+  },
+  {
+    "a": "Brooks Communications",
+    "b": "Top Communications",
+    "score": 87.5
+  },
+  {
+    "a": "Brooke Communications Inc",
+    "b": "Brooks Communications",
+    "score": 87.0
+  },
+  {
+    "a": "B & R Reliable Transportation Services, LLC",
+    "b": "CSX Transportation",
+    "score": 87.5
+  },
+  {
+    "a": "Friends of Barb Campbell",
+    "b": "Friends of Eric Campbell",
+    "score": 88.4
+  },
+  {
+    "a": "Alexandria Williams",
+    "b": "Arlanda Williams",
+    "score": 85.7
+  },
+  {
+    "a": "Friends of Brian Adams  (16037)",
+    "b": "Friends of Sam Adams",
+    "score": 88.9
+  },
+  {
+    "a": "Brian Fawcett for Port Commissioner",
+    "b": "Rust for Commissioner",
+    "score": 86.5
+  },
+  {
+    "a": "Lanphere Enterprises, Inc.",
+    "b": "Leathers Enterprises, Inc.",
+    "score": 88.5
+  },
+  {
+    "a": "Kampfer Enterprises, Inc.",
+    "b": "Lanphere Enterprises, Inc.",
+    "score": 86.3
+  },
+  {
+    "a": "Michael S McDermott",
+    "b": "Michael S Wu",
+    "score": 85.7
+  },
+  {
+    "a": "Country Estates MHC, LLC",
+    "b": "Country Village Estates LLC",
+    "score": 88.4
+  },
+  {
+    "a": "Country Mobile Estates LLC",
+    "b": "Country Village Estates LLC",
+    "score": 86.8
+  },
+  {
+    "a": "Charles Walter",
+    "b": "Charles c Walker",
+    "score": 86.7
+  },
+  {
+    "a": "Michael Brady",
+    "b": "Michael Grady",
+    "score": 92.3
+  },
+  {
+    "a": "Colleen Roberts for County Commissioner",
+    "b": "Rust for Commissioner",
+    "score": 86.5
+  },
+  {
+    "a": "Mary Ann Barrows",
+    "b": "Mary Ann Brown",
+    "score": 86.7
+  },
+  {
+    "a": "Damascus Communications",
+    "b": "Top Communications",
+    "score": 87.5
+  },
+  {
+    "a": "Stephanie Barr",
+    "b": "Stephanie Karri",
+    "score": 89.7
+  },
+  {
+    "a": "Mike Williams",
+    "b": "Vickie Williams",
+    "score": 85.7
+  },
+  {
+    "a": "Don Tankersley",
+    "b": "Robin Tankersley",
+    "score": 86.7
+  },
+  {
+    "a": "B Hunter",
+    "b": "Hunter Yost",
+    "score": 85.7
+  },
+  {
+    "a": "B Hunter",
+    "b": "Nicholas Hunter",
+    "score": 85.7
+  },
+  {
+    "a": "B Hunter",
+    "b": "PJ Hunter",
+    "score": 85.7
+  },
+  {
+    "a": "B Hunter",
+    "b": "Scott Hunter",
+    "score": 85.7
+  },
+  {
+    "a": "B Hunter",
+    "b": "Eleanore Hunter",
+    "score": 85.7
+  },
+  {
+    "a": "Brian Boquist for State Senate",
+    "b": "Brian J Boquist",
+    "score": 92.9
+  },
+  {
+    "a": "United Food & Commercial Workers (UFCW)",
+    "b": "United Food and Commercial Workers Union, Local 555",
+    "score": 87.0
+  },
+  {
+    "a": "AFSCME Local 189",
+    "b": "AFSCME Local 2067",
+    "score": 85.7
+  },
+  {
+    "a": "KBND Combined Communications",
+    "b": "Top Communications",
+    "score": 87.5
+  },
+  {
+    "a": "Crown Political Action Committee",
+    "b": "Wells Fargo & Co. Oregon Political Action Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Eagle Political Action Committee",
+    "b": "Wells Fargo & Co. Oregon Political Action Committee",
+    "score": 89.7
+  },
+  {
+    "a": "United Food & Commercial Workers (UFCW Local 555)",
+    "b": "United Food & Commercial Workers (UFCW)",
+    "score": 90.1
+  },
+  {
+    "a": "Dan Nicholson",
+    "b": "Daryl Nicholson",
+    "score": 85.7
+  },
+  {
+    "a": "Tower Marketing",
+    "b": "Towers Marketing Inc",
+    "score": 85.7
+  },
+  {
+    "a": "Architectural Foundation of Oregon",
+    "b": "Oregon Zoo Foundation",
+    "score": 89.5
+  },
+  {
+    "a": "Conkling Fiskum & McCormick Inc. (2731)",
+    "b": "Conkling, Fiskum & McCormick Inc.",
+    "score": 88.9
+  },
+  {
+    "a": "Anheuser-Busch Cos",
+    "b": "Anheuser-Busch Cos, Inc.",
+    "score": 87.5
+  },
+  {
+    "a": "Loren Davis",
+    "b": "Lurena Davis",
+    "score": 87.0
+  },
+  {
+    "a": "Clark Nelson",
+    "b": "Nelson C Clarke",
+    "score": 88.9
+  },
+  {
+    "a": "IUEC Political Account",
+    "b": "PCI Political Account",
+    "score": 89.5
+  },
+  {
+    "a": "Troy Anderson",
+    "b": "Trygve Anderson",
+    "score": 85.7
+  },
+  {
+    "a": "Shaun Thomas",
+    "b": "Thomas Shay",
+    "score": 87.0
+  },
+  {
+    "a": "Friends of Mark McKelvey for Coos County Commissioner (15413)",
+    "b": "Rust for Commissioner",
+    "score": 86.5
+  },
+  {
+    "a": "Kathleen Giles",
+    "b": "Kathleen Iles",
+    "score": 88.9
+  },
+  {
+    "a": "Michael Bendickson",
+    "b": "Michael Benson",
+    "score": 87.5
+  },
+  {
+    "a": "Country Estates MHC, LLC",
+    "b": "Country Mobile Estates LLC",
+    "score": 88.4
+  },
+  {
+    "a": "Cottage Street Investments",
+    "b": "V Street",
+    "score": 85.7
+  },
+  {
+    "a": "Promote Oregon Leadership PAC (#682)",
+    "b": "Promote Oregon Leadership- PAC",
+    "score": 87.9
+  },
+  {
+    "a": "Mary Closson - Closson Communications",
+    "b": "Top Communications",
+    "score": 87.5
+  },
+  {
+    "a": "Clear Channel Outdoor",
+    "b": "Clear Channel Outdoor, Inc",
+    "score": 89.4
+  },
+  {
+    "a": "A-1 Logging, Inc.",
+    "b": "Estremado Logging, Inc.",
+    "score": 86.7
+  },
+  {
+    "a": "Targetsmart Communications",
+    "b": "Top Communications",
+    "score": 87.5
+  },
+  {
+    "a": "Western Properties",
+    "b": "Westone Properties",
+    "score": 88.9
+  },
+  {
+    "a": "Michael E Gray",
+    "b": "Michael Grady",
+    "score": 88.9
+  },
+  {
+    "a": "Jennifer Coyle",
+    "b": "Jennifer Noble",
+    "score": 85.7
+  },
+  {
+    "a": "Renaissance DC",
+    "b": "Renaissance Development corp",
+    "score": 88.0
+  },
+  {
+    "a": "Delta Property Co",
+    "b": "Delta Property Company",
+    "score": 90.3
+  },
+  {
+    "a": "West Coast BC",
+    "b": "West Coast Loaders",
+    "score": 87.0
+  },
+  {
+    "a": "Lane County Elections",
+    "b": "Multnomah County Elections Divison",
+    "score": 86.5
+  },
+  {
+    "a": "Swift Communications",
+    "b": "Top Communications",
+    "score": 87.5
+  },
+  {
+    "a": "Swift Communications",
+    "b": "Swift Communications, Inc.",
+    "score": 87.0
+  },
+  {
+    "a": "3rd Street Pizza",
+    "b": "V Street",
+    "score": 85.7
+  },
+  {
+    "a": "Dan McDonald",
+    "b": "Dena McDonald",
+    "score": 88.0
+  },
+  {
+    "a": "D&S Properties",
+    "b": "WDC Properties",
+    "score": 85.7
+  },
+  {
+    "a": "James Bean",
+    "b": "James Beard",
+    "score": 85.7
+  },
+  {
+    "a": "Cara Hughes",
+    "b": "Carol Hughes",
+    "score": 87.0
+  },
+  {
+    "a": "Barbara Silver",
+    "b": "Barbara Silvey",
+    "score": 92.9
+  },
+  {
+    "a": "CADEN STEWART",
+    "b": "CHAD STEWART",
+    "score": 88.0
+  },
+  {
+    "a": "Green Building Services, Inc.",
+    "b": "Millennium Building Services, Inc.",
+    "score": 88.5
+  },
+  {
+    "a": "Daniel Davis",
+    "b": "Dannell Davis",
+    "score": 88.0
+  },
+  {
+    "a": "NW Senior & Boomer News",
+    "b": "Senior and Boomer News",
+    "score": 90.0
+  },
+  {
+    "a": "Crown Political Action Committee",
+    "b": "Eli Lilly and Company Political Action Committee (Federal)",
+    "score": 89.7
+  },
+  {
+    "a": "Eagle Political Action Committee",
+    "b": "Eli Lilly and Company Political Action Committee (Federal)",
+    "score": 89.7
+  },
+  {
+    "a": "Friends of Kevin Jeffries for McMinnville City Council",
+    "b": "Kevin P. Jeffries",
+    "score": 90.3
+  },
+  {
+    "a": "Iron Workers Dist. Council of the Pacific Northwest",
+    "b": "Iron Workers District Council of Pacific Northwest",
+    "score": 93.1
+  },
+  {
+    "a": "Capitol On Ramp",
+    "b": "Capitol Onramp",
+    "score": 89.7
+  },
+  {
+    "a": "Asian Pacific American Network of Oregon Political Action Committee (5535)",
     "b": "Crown Political Action Committee",
     "score": 89.7
   },
   {
-    "a": "2D Photography",
-    "b": "Timothy J Park Photography",
+    "a": "Asian Pacific American Network of Oregon Political Action Committee (5535)",
+    "b": "Eagle Political Action Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Grant County Chamber of Commerce",
+    "b": "Prineville-Crook County Chamber of Commerce and Visitors Cen",
+    "score": 89.7
+  },
+  {
+    "a": "Klamath County Chamber of Commerce",
+    "b": "Prineville-Crook County Chamber of Commerce and Visitors Cen",
+    "score": 86.7
+  },
+  {
+    "a": "Jennifer Muhm",
+    "b": "Jennifer Murphy",
+    "score": 85.7
+  },
+  {
+    "a": "Kerani Mitchell",
+    "b": "Kris Mitchell",
+    "score": 85.7
+  },
+  {
+    "a": "Grant County Chamber of Commerce",
+    "b": "South Columbia County Chamber of Commerce",
+    "score": 89.7
+  },
+  {
+    "a": "Grant County Chamber of Commerce",
+    "b": "Klamath County Chamber of Commerce",
+    "score": 89.7
+  },
+  {
+    "a": "Richard Reamer",
+    "b": "Richard Recker",
+    "score": 85.7
+  },
+  {
+    "a": "NW Grassroots & Communications, Inc.",
+    "b": "Swift Communications, Inc.",
+    "score": 87.0
+  },
+  {
+    "a": "Adept Communications, Inc.",
+    "b": "Swift Communications, Inc.",
+    "score": 87.0
+  },
+  {
+    "a": "State Street Solutions Inc.",
+    "b": "V Street",
+    "score": 85.7
+  },
+  {
+    "a": "Committee to Elect Sean VanGordon",
+    "b": "Sean M VanGordon",
+    "score": 93.3
+  },
+  {
+    "a": "Committee to Elect Sean Van Gordon",
+    "b": "Committee to Elect Sean VanGordon",
+    "score": 89.6
+  },
+  {
+    "a": "William Hoelscher",
+    "b": "William Tescher",
+    "score": 87.5
+  },
+  {
+    "a": "Christian Martin",
+    "b": "Christina Martinez",
+    "score": 88.2
+  },
+  {
+    "a": "Steve Kaser",
+    "b": "Steve Kramer",
+    "score": 87.0
+  },
+  {
+    "a": "Donald Jensen",
+    "b": "Ronald Jensen",
+    "score": 92.3
+  },
+  {
+    "a": "JD Fulwiler & Co.",
+    "b": "JD Fulwiler & Company",
+    "score": 86.7
+  },
+  {
+    "a": "R & R Enterprises",
+    "b": "RAF Enterprises",
+    "score": 86.7
+  },
+  {
+    "a": "LINDA RYAN",
+    "b": "MELINDA RYAN",
+    "score": 90.9
+  },
+  {
+    "a": "Bronson Lumber Company",
+    "b": "SDS Lumber Company",
+    "score": 87.5
+  },
+  {
+    "a": "RBS Investments Inc",
+    "b": "Saba Investments Inc.",
+    "score": 85.0
+  },
+  {
+    "a": "A4 Media, LLC",
+    "b": "Survival Media, LLC",
+    "score": 87.0
+  },
+  {
+    "a": "Michael Guzman",
+    "b": "Michael S Gutman",
+    "score": 86.7
+  },
+  {
+    "a": "Michael S Gutman",
+    "b": "Michael S Wu",
+    "score": 85.7
+  },
+  {
+    "a": "Crown Political Action Committee",
+    "b": "Florida Film Political Action Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Eagle Political Action Committee",
+    "b": "Florida Film Political Action Committee",
+    "score": 89.7
+  },
+  {
+    "a": "CSB Northwest Inc.",
+    "b": "MC Northwest Inc.",
+    "score": 91.4
+  },
+  {
+    "a": "MC Northwest Inc.",
+    "b": "Northwest Print, Inc. - Portland Observer",
+    "score": 90.3
+  },
+  {
+    "a": "Cummins Northwest Inc.",
+    "b": "MC Northwest Inc.",
+    "score": 90.3
+  },
+  {
+    "a": "Oregon Zoo Foundation",
+    "b": "Seafood Oregon Foundation",
+    "score": 89.5
+  },
+  {
+    "a": "Katherine Durham",
+    "b": "Katherine Graham",
+    "score": 87.5
+  },
+  {
+    "a": "Frank Amato Publications",
+    "b": "LAC Publications",
+    "score": 85.7
+  },
+  {
+    "a": "LAC Publications",
+    "b": "Patriot Publications",
+    "score": 85.7
+  },
+  {
+    "a": "Gene Whitaker Inc",
+    "b": "Gene Whitaker Investments LLC",
+    "score": 86.7
+  },
+  {
+    "a": "El Vaquero Restaurant",
+    "b": "OX Restaurant",
+    "score": 87.0
+  },
+  {
+    "a": "Keam Communications",
+    "b": "Top Communications",
+    "score": 87.5
+  },
+  {
+    "a": "Clear Communications",
+    "b": "Keam Communications",
+    "score": 87.2
+  },
+  {
+    "a": "Keam Communications",
+    "b": "WebCom Communications",
+    "score": 85.0
+  },
+  {
+    "a": "Adams & Company",
+    "b": "Adams and Company {c}",
+    "score": 92.9
+  },
+  {
+    "a": "Jan Becker",
+    "b": "John Becker",
+    "score": 85.7
+  },
+  {
+    "a": "Crown Political Action Committee",
+    "b": "Health Insurance Political Action Committee (73)",
+    "score": 89.7
+  },
+  {
+    "a": "Eagle Political Action Committee",
+    "b": "Health Insurance Political Action Committee (73)",
+    "score": 89.7
+  },
+  {
+    "a": "Michael Larson",
+    "b": "Michael Mason",
+    "score": 88.9
+  },
+  {
+    "a": "OX Restaurant",
+    "b": "Windy River Restaurant & Lounge, Inc.",
+    "score": 87.0
+  },
+  {
+    "a": "Crown Political Action Committee",
+    "b": "School Libraries Political Action Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Eagle Political Action Committee",
+    "b": "School Libraries Political Action Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Friends of Regan Molatore (16227)",
+    "b": "Regan  A Molatore",
+    "score": 93.3
+  },
+  {
+    "a": "Friends of Ken Moore (16685)",
+    "b": "Friends of Rita Moore",
+    "score": 86.5
+  },
+  {
+    "a": "Crown Political Action Committee",
+    "b": "Stability in Government Political Action Committee (15997)",
+    "score": 89.7
+  },
+  {
+    "a": "Eagle Political Action Committee",
+    "b": "Stability in Government Political Action Committee (15997)",
+    "score": 89.7
+  },
+  {
+    "a": "Crown Political Action Committee",
+    "b": "JP Morgan Chase & Co Political Action Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Eagle Political Action Committee",
+    "b": "JP Morgan Chase & Co Political Action Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Rust for Commissioner",
+    "b": "Steve Kramer for Wasco County Commissioner #2 (15739)",
+    "score": 86.5
+  },
+  {
+    "a": "Barbara Carter",
+    "b": "Barbara Castor",
+    "score": 85.7
+  },
+  {
+    "a": "Harrison Robert",
+    "b": "Robert Harmon",
+    "score": 85.7
+  },
+  {
+    "a": "Hugh Development LLC",
+    "b": "Lanphere Construction & Development LLC",
+    "score": 85.7
+  },
+  {
+    "a": "Jonathan Kennedy",
+    "b": "Nathan Kennedy",
+    "score": 86.7
+  },
+  {
+    "a": "Dan Weaver",
+    "b": "Jane Weaver",
+    "score": 85.7
+  },
+  {
+    "a": "William B Brady",
+    "b": "William J Brady",
+    "score": 93.3
+  },
+  {
+    "a": "Nancy V Ward",
+    "b": "Nancy Ward Fischer",
+    "score": 90.9
+  },
+  {
+    "a": "Mary Stern for County Commissioner",
+    "b": "Rust for Commissioner",
+    "score": 86.5
+  },
+  {
+    "a": "Committee to Elect Gary Malone for EWEB Commissioner (17652)",
+    "b": "Rust for Commissioner",
+    "score": 86.5
+  },
+  {
+    "a": "Andrew Cole",
+    "b": "Andrew Roles",
+    "score": 87.0
+  },
+  {
+    "a": "Warren Davidson",
+    "b": "Wren Davidson",
+    "score": 92.9
+  },
+  {
+    "a": "Benton County Fairgrounds #2",
+    "b": "Lake County Fairgrounds",
+    "score": 87.8
+  },
+  {
+    "a": "Jeffrey Rice",
+    "b": "Jeffrey Richter",
+    "score": 88.9
+  },
+  {
+    "a": "Brooke Communications Inc",
+    "b": "Top Communications",
+    "score": 87.5
+  },
+  {
+    "a": "Blue Line Transportation Co., Inc.",
+    "b": "CSX Transportation",
+    "score": 87.5
+  },
+  {
+    "a": "Blue Line Transportation Co., Inc.",
+    "b": "Blue Line Transportation Company",
+    "score": 85.7
+  },
+  {
+    "a": "Roland Adams",
+    "b": "Ron Adams",
+    "score": 85.7
+  },
+  {
+    "a": "DIANE PHILLIPS",
+    "b": "JANIE PHILLIPS",
+    "score": 85.7
+  },
+  {
+    "a": "Caleb Peterson",
+    "b": "Carl Petterson",
+    "score": 85.7
+  },
+  {
+    "a": "Jeremy Hoff",
+    "b": "Jeremy Wolff",
+    "score": 87.0
+  },
+  {
+    "a": "OX Restaurant",
+    "b": "Wheezy's Restaurant and Bar",
+    "score": 87.0
+  },
+  {
+    "a": "US Postal Service - 1573",
+    "b": "US Postal Service - 7034",
+    "score": 91.7
+  },
+  {
+    "a": "Comcast Cable Communications Group",
+    "b": "Top Communications",
+    "score": 87.5
+  },
+  {
+    "a": "Jennifer Saxon",
+    "b": "Jennifer Stone",
+    "score": 85.7
+  },
+  {
+    "a": "Promote Oregon Leadership PAC # 682",
+    "b": "Promote Oregon Leadership- PAC",
+    "score": 89.2
+  },
+  {
+    "a": "Rich Duncan Construction, Inc.",
+    "b": "VB Construction, Inc.",
+    "score": 92.3
+  },
+  {
+    "a": "William Gary",
+    "b": "William Ray",
+    "score": 87.0
+  },
+  {
+    "a": "Adept Communications, Inc.",
+    "b": "NW Grassroots & Communications, Inc.",
+    "score": 87.0
+  },
+  {
+    "a": "Bristol Meyers Squibb Company",
+    "b": "Briston-Myers Squibb Company",
+    "score": 91.2
+  },
+  {
+    "a": "Jere White",
+    "b": "Jerome White",
+    "score": 90.9
+  },
+  {
+    "a": "Chris Meadows",
+    "b": "Christine Meadows",
+    "score": 86.7
+  },
+  {
+    "a": "Charles Dukes",
+    "b": "Charles Dyke",
     "score": 88.0
   },
   {
-    "a": "John Bell",
-    "b": "Johnell Bell",
+    "a": "Fish Construction NW, Inc.",
+    "b": "Gores Construction Inc.",
+    "score": 85.0
+  },
+  {
+    "a": "Jennifer Creedon",
+    "b": "Jennifer Green",
+    "score": 86.7
+  },
+  {
+    "a": "Clackamas CO Elections",
+    "b": "Clackamas County Elecions",
+    "score": 85.1
+  },
+  {
+    "a": "Jeffrey Levine",
+    "b": "Jeffrey Nevin",
+    "score": 88.9
+  },
+  {
+    "a": "Eacle Newspapers, Inc",
+    "b": "Eagle Newspaper, Inc",
+    "score": 92.7
+  },
+  {
+    "a": "Eacle Newspapers, Inc",
+    "b": "Eagle Newspaper, Inc.",
+    "score": 90.5
+  },
+  {
+    "a": "Jessica Holland",
+    "b": "Tessa Holland",
     "score": 85.7
+  },
+  {
+    "a": "Matthew Sztelle",
+    "b": "Matthew sztelle",
+    "score": 93.3
+  },
+  {
+    "a": "Headwaters Restaurant",
+    "b": "OX Restaurant",
+    "score": 87.0
+  },
+  {
+    "a": "Bank of Amercia",
+    "b": "Bank of America",
+    "score": 93.3
+  },
+  {
+    "a": "Crown Political Action Committee",
+    "b": "Enterprise Holdings Inc. Political Action Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Eagle Political Action Committee",
+    "b": "Enterprise Holdings Inc. Political Action Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Ryan Garvey",
+    "b": "Ryan Geary",
+    "score": 85.7
+  },
+  {
+    "a": "TargetSmart Communications",
+    "b": "Top Communications",
+    "score": 87.5
+  },
+  {
+    "a": "Top Communications",
+    "b": "WebCom Communications",
+    "score": 87.5
+  },
+  {
+    "a": "John Powell & Associates, Inc",
+    "b": "John Powell & Association Inc.",
+    "score": 88.1
+  },
+  {
+    "a": "Klamath County Chamber of Commerce",
+    "b": "South Columbia County Chamber of Commerce",
+    "score": 86.7
+  },
+  {
+    "a": "Top Communications",
+    "b": "Vogel Communications",
+    "score": 87.5
+  },
+  {
+    "a": "Crown Political Action Committee",
+    "b": "Eli Lilly and Company Political Action Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Eagle Political Action Committee",
+    "b": "Eli Lilly and Company Political Action Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Brian Chan",
+    "b": "Brian Crane",
+    "score": 85.7
+  },
+  {
+    "a": "Ken Jansen",
+    "b": "Ken Janson",
+    "score": 90.0
+  },
+  {
+    "a": "CSB Northwest Inc.",
+    "b": "Northwest Print, Inc. - Portland Observer",
+    "score": 87.5
+  },
+  {
+    "a": "CSB Northwest Inc.",
+    "b": "Cummins Northwest Inc.",
+    "score": 87.5
+  },
+  {
+    "a": "Airpart Development LLC",
+    "b": "Hugh Development LLC",
+    "score": 85.7
+  },
+  {
+    "a": "Crown Political Action Committee",
+    "b": "IP PAC/International Paper Political Action Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Eagle Political Action Committee",
+    "b": "IP PAC/International Paper Political Action Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Alessandros Restaurant",
+    "b": "OX Restaurant",
+    "score": 87.0
+  },
+  {
+    "a": "Blue Line Transportation Company",
+    "b": "CSX Transportation",
+    "score": 87.5
+  },
+  {
+    "a": "Christopher Lowry",
+    "b": "Christopher Moudry",
+    "score": 85.7
+  },
+  {
+    "a": "Jeff Stuart",
+    "b": "Jeff Stuhr",
+    "score": 85.7
+  },
+  {
+    "a": "Jack A Roberts",
+    "b": "Jack R Roberts",
+    "score": 92.9
+  },
+  {
+    "a": "Jeni Roberts",
+    "b": "Joe Roberts",
+    "score": 87.0
+  },
+  {
+    "a": "Home Builders Associaton of Metropolitan Portland",
+    "b": "Portland Youth Builders",
+    "score": 85.0
+  },
+  {
+    "a": "Crown Political Action Committee",
+    "b": "Eagle Political Action Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Mary Paap",
+    "b": "Mary Pape",
+    "score": 88.9
+  },
+  {
+    "a": "Oregon Secretary of State Elections Divison",
+    "b": "Secretary of State Election Division",
+    "score": 88.6
+  },
+  {
+    "a": "OX Restaurant",
+    "b": "Truck 'N Travel Restaurant",
+    "score": 87.0
+  },
+  {
+    "a": "Hugh Development LLC",
+    "b": "Key Development & Asset Management, LLC",
+    "score": 85.7
+  },
+  {
+    "a": "Beaverton Area Chamber of Commerce Political Action Committee",
+    "b": "Crown Political Action Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Beaverton Area Chamber of Commerce Political Action Committee",
+    "b": "Eagle Political Action Committee",
+    "score": 89.7
+  },
+  {
+    "a": "Clear Communications",
+    "b": "Top Communications",
+    "score": 87.5
+  },
+  {
+    "a": "OX Restaurant",
+    "b": "Restaurant/Marco Polo  Global Restaurant",
+    "score": 87.0
+  },
+  {
+    "a": "Drew A Layda",
+    "b": "Friends of Drew A. Layda (21610)",
+    "score": 90.9
+  },
+  {
+    "a": "Lynn Lundquist for County Commissioner",
+    "b": "Rust for Commissioner",
+    "score": 86.5
+  },
+  {
+    "a": "1715 Associates, Inc.",
+    "b": "Shenandoah Associates, Inc.",
+    "score": 86.5
+  },
+  {
+    "a": "A.L.A. Strategies, LLC",
+    "b": "FP1 Strategies, LLC",
+    "score": 88.2
+  },
+  {
+    "a": "CSX Transportation",
+    "b": "Columbia Fresh Transportation Services",
+    "score": 87.5
+  },
+  {
+    "a": "Crown Political Action Committee",
+    "b": "Service Employees Political Action Committee (3175)",
+    "score": 89.7
+  },
+  {
+    "a": "Eagle Political Action Committee",
+    "b": "Service Employees Political Action Committee (3175)",
+    "score": 89.7
+  },
+  {
+    "a": "OX Restaurant",
+    "b": "Sally's Restaurant",
+    "score": 87.0
+  },
+  {
+    "a": "Norm J Smith",
+    "b": "Norman J Smith",
+    "score": 92.3
   }
 ]
