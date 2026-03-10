@@ -36,6 +36,9 @@ jobs:
       - name: Install Xvfb (virtual display for headed browser)
         run: sudo apt-get install -y xvfb
 
+      - name: Check for split-window gaps and repair
+        run: python scraper/fetch.py --mode=check-gaps
+
       - name: Fetch last 14 days from ORESTAR
         run: xvfb-run --auto-servernum python scraper/fetch.py --mode=incremental --days=14
 
@@ -49,8 +52,6 @@ jobs:
           mkdir -p docs/data/aggregated
           cp -r data/aggregated/. docs/data/aggregated/
           git add data/ docs/data/
-          git restore --staged data/fetched_windows.json  # not needed for incremental; avoids merge conflicts
-          git restore data/fetched_windows.json           # also discard working tree changes so rebase doesn't abort
           git diff --cached --quiet || git commit -m "chore: daily data refresh $(date -u +%Y-%m-%d)"
           for attempt in 1 2 3 4 5; do
             git pull --rebase -X ours && git push && break
