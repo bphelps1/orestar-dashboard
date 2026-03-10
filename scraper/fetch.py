@@ -389,10 +389,16 @@ def _fetch_range(start: date, end: date, date_field: str = "filed") -> None:
                             tasks.insert(ins, sub)
                             total += 1
                             ins += 1
-                    # Mark original window done (its 4999 rows are valid; sub-windows
-                    # will fetch the remainder and process.py deduplicates by tran_id)
-                    fetched.add(key)
-                    _save_fetched(fetched, log_file)
+                    # Only mark the original window as fetched if both
+                    # sub-windows are already done.  This prevents data loss
+                    # when the scraper stops (rate-limit) before finishing
+                    # the second sub-window — the original stays "unfetched"
+                    # so the next run will re-split and pick up the remainder.
+                    sub1_key = (sub1[0], str(sub1[1]), str(sub1[2]))
+                    sub2_key = (sub2[0], str(sub2[1]), str(sub2[2]))
+                    if sub1_key in fetched and sub2_key in fetched:
+                        fetched.add(key)
+                        _save_fetched(fetched, log_file)
                     i += 1
                     continue
 
