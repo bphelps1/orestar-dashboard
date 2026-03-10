@@ -403,9 +403,18 @@ def _fetch_range(start: date, end: date, date_field: str = "filed") -> None:
                     continue
 
                 i += 1
-                # Record as fetched (file saved OR empty results — both are "done")
-                fetched.add(key)
-                _save_fetched(fetched, log_file)
+                if result is not None:
+                    # Only mark as fetched when a file was actually saved.
+                    # download_week() returns None on failure (timeout, CSRF
+                    # error, etc.) — leave those windows unfetched so the next
+                    # run retries them.
+                    fetched.add(key)
+                    _save_fetched(fetched, log_file)
+                else:
+                    log.warning(
+                        "Download returned None for %s %s→%s — will retry next run",
+                        tran_type, w_start, w_end,
+                    )
             except SessionExpiredError as exc:
                 consecutive_restarts += 1
                 log.warning(
