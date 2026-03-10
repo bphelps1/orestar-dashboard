@@ -37,14 +37,16 @@ jobs:
         run: sudo apt-get install -y xvfb
 
       - name: Check for split-window gaps and repair
-        id: gap_check
-        run: |
-          gaps=$(python scraper/fetch.py --mode=check-gaps)
-          echo "gaps=$gaps" >> "$GITHUB_OUTPUT"
+        run: python scraper/fetch.py --mode=check-gaps
 
-      - name: Fetch gap windows (full-range pass, skips already-fetched)
-        if: steps.gap_check.outputs.gaps != '0'
-        run: xvfb-run --auto-servernum python scraper/fetch.py --mode=backfill --start-year=2006
+      - name: Fetch any unfetched windows (backfill pass)
+        run: |
+          remaining=$(python scraper/fetch.py --mode=count-remaining --start-year=2006)
+          echo "Unfetched windows: $remaining"
+          if [ "$remaining" -gt 0 ]; then
+            echo "Running backfill to fetch $remaining missing windows..."
+            xvfb-run --auto-servernum python scraper/fetch.py --mode=backfill --start-year=2006
+          fi
 
       - name: Fetch last 14 days from ORESTAR
         run: xvfb-run --auto-servernum python scraper/fetch.py --mode=incremental --days=14
