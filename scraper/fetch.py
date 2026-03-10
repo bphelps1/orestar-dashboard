@@ -475,6 +475,60 @@ def count_remaining(start_year: int = 2017, end_year: int | None = None,
     return remaining
 
 
+def check_split_gaps(date_field: str = "filed") -> int:
+    """
+    Detect windows that were split due to the ORESTAR row cap but whose
+    second (or first) sub-window was never fetched.  Removes incomplete
+    parent windows from the fetched log so they are retried on the next run.
+
+    Returns the number of gaps found and repaired.
+    """
+    log_file = FETCHED_LOG_TRN if date_field == "tran" else FETCHED_LOG
+    fetched = _load_fetched(log_file)
+    if not fetched:
+        log.info("No fetched windows to check.")
+        return 0
+
+    to_remove = set()
+    for key in fetched:
+        tt, ws_str, we_str = key
+        ws = date.fromisoformat(ws_str)
+        we = date.fromisoformat(we_str)
+        span = (we - ws).days
+        if span < 2:
+            continue
+        half = span // 2
+        mid = ws + timedelta(days=half)
+        first_key = (tt, str(ws), str(mid))
+        second_key = (tt, str(mid + timedelta(days=1)), str(we))
+        has_first = first_key in fetched
+        has_second = second_key in fetched
+        # If one half exists but not the other, the parent was prematurely
+        # marked done.  Remove it so the next run re-splits and fetches
+        # the missing half.
+        if (has_first and not has_second) or (has_second and not has_first):
+            to_remove.add(key)
+            missing = second_key if has_first else first_key
+            log.warning(
+                "Split gap: %s %s→%s is missing sub-window %s→%s — "
+                "removing parent so it will be re-fetched",
+                tt, ws_str, we_str, missing[1], missing[2],
+            )
+
+    if to_remove:
+        cleaned = fetched - to_remove
+        _save_fetched(cleaned, log_file)
+        log.info(
+            "Removed %d incomplete split windows from %s",
+            len(to_remove), log_file.name,
+        )
+    else:
+        log.info("No split gaps found in %s", log_file.name)
+
+    print(len(to_remove))
+    return len(to_remove)
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -485,7 +539,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--mode",
-        choices=["incremental", "backfill", "test", "count-remaining"],
+        choices=["incremental", "backfill", "test", "count-remaining", "check-gaps"],
         default="incremental",
     )
     parser.add_argument("--days",        type=int,  default=14,   dest="days")
@@ -510,6 +564,8 @@ def main() -> None:
     elif args.mode == "count-remaining":
         count_remaining(start_year=args.start_year, end_year=args.end_year,
                         date_field=args.date_field)
+    elif args.mode == "check-gaps":
+        check_split_gaps(date_field=args.date_field)
 
 
 if __name__ == "__main__":
