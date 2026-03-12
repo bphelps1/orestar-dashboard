@@ -70,6 +70,11 @@ USER_AGENT = (
     "Chrome/120.0.0.0 Safari/537.36"
 )
 
+# Magic bytes for file type detection
+_XLS_MAGIC  = b"\xd0\xcf\x11\xe0"   # OLE2 Compound Document (old .xls)
+_XLSX_MAGIC = b"PK\x03\x04"         # ZIP archive (new .xlsx)
+
+
 class SessionExpiredError(Exception):
     """Raised when the ORESTAR session has expired and the browser was redirected away."""
     pass
@@ -126,6 +131,45 @@ def _load_search_form(page) -> None:
             "F5 may have blocked the browser, or the site is down."
         )
     log.info("Search form ready.")
+
+
+def _validate_download(path: Path) -> int:
+    """
+    Validate that a downloaded file is a real Excel file with data rows.
+
+    Returns the number of data rows (excluding header), or -1 if the file is
+    invalid (HTML error page, corrupted, empty, etc.).
+    """
+    if not path.exists() or path.stat().st_size == 0:
+        return -1
+
+    header = path.read_bytes()[:8]
+
+    # HTML error page (F5 bot defense, session expired, etc.)
+    if header[:5].lower() in (b"<!doc", b"<html", b"<head", b"<?xml"):
+        return -1
+
+    try:
+        if header[:4] == _XLS_MAGIC:
+            import xlrd as _xlrd
+            _wb = _xlrd.open_workbook(str(path), on_demand=True)
+            nrows = _wb.sheet_by_index(0).nrows
+            _wb.release_resources()
+            return max(nrows - 1, 0)  # subtract header row
+        elif header[:4] == _XLSX_MAGIC:
+            wb = load_workbook(path, read_only=True)
+            count = 0
+            for _ in wb.active.rows:
+                count += 1
+                if count > ORESTAR_ROW_CAP + 1:
+                    break
+            wb.close()
+            return max(count - 1, 0)
+        else:
+            # Unknown format — treat as invalid
+            return -1
+    except Exception:
+        return -1
 
 
 def _return_to_search(page) -> None:
@@ -250,6 +294,24 @@ def download_week(
                 filename.name, start, end, len(resp.content),
             )
 
+        # ── Validate the downloaded file ──────────────────────────────────
+        row_count = _validate_download(filename)
+        if row_count < 0:
+            log.warning(
+                "Invalid download for %s %s→%s — file is not valid Excel "
+                "(HTML error page, corrupted, or empty). Deleting and will retry.",
+                tran_type, start, end,
+            )
+            filename.unlink(missing_ok=True)
+            _return_to_search(page)
+            return None
+
+        if row_count == 0:
+            log.info(
+                "Empty result for %s %s→%s (0 data rows) — valid but no transactions",
+                tran_type, start, end,
+            )
+
         # Return to search form for next iteration
         _return_to_search(page)
         time.sleep(REQUEST_DELAY)
@@ -346,32 +408,9 @@ def _fetch_range(start: date, end: date, date_field: str = "filed") -> None:
                 span_days = (w_end - w_start).days
                 cap_hit = False
                 if result is not None and result.exists() and span_days > 0:
-                    try:
-                        # ORESTAR exports the old OLE2 .xls binary format even when saved
-                        # with a .xlsx extension — openpyxl silently fails on these files.
-                        # Detect the real format from magic bytes and use the right reader.
-                        _hdr = result.read_bytes()[:4]
-                        _XLS  = b"\xd0\xcf\x11\xe0"   # OLE2 — must use xlrd
-                        _XLSX = b"PK\x03\x04"          # ZIP  — use openpyxl
-                        if _hdr == _XLS:
-                            import xlrd as _xlrd
-                            _wb = _xlrd.open_workbook(str(result), on_demand=True)
-                            row_count = _wb.sheet_by_index(0).nrows  # includes header
-                            _wb.release_resources()
-                        elif _hdr[:4] == _XLSX:
-                            wb = load_workbook(result, read_only=True)
-                            row_count = 0
-                            for _ in wb.active.rows:
-                                row_count += 1
-                                if row_count > ORESTAR_ROW_CAP + 1:
-                                    break
-                            wb.close()
-                        else:
-                            row_count = 0
-                        if row_count - 1 >= ORESTAR_ROW_CAP:  # subtract header row
-                            cap_hit = True
-                    except Exception:
-                        pass
+                    row_count = _validate_download(result)
+                    if row_count >= ORESTAR_ROW_CAP:
+                        cap_hit = True
 
                 if cap_hit:
                     half = span_days // 2

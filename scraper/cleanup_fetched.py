@@ -1,17 +1,21 @@
 """
-cleanup_fetched.py — Identify and remove zero-data windows from fetched_windows.json.
+cleanup_fetched.py — Identify and remove empty windows from fetched_windows.json.
 
-A "zero-data window" is a standard 7-day window (span == 6 days) that was marked
-as fetched but has NO matching transactions in the CSV data.  These are likely
-failed downloads where the scraper received an empty/error response but still
+An "empty window" is one marked as fetched but whose source file contributed ZERO
+transactions to the dashboard.  This is detected by cross-referencing the fetched
+log against the _source_file column in the per-year transaction CSVs.
+
+These empty windows are typically the result of failed downloads where the scraper
+received an HTML error page, an empty file, or a truncated response but still
 recorded the window as done.
 
 Usage:
     python cleanup_fetched.py              # dry run (report only)
-    python cleanup_fetched.py --apply      # remove zero-data windows and save
+    python cleanup_fetched.py --apply      # remove empty windows and save
+    python cleanup_fetched.py --log tran   # check fetched_windows_tran.json instead
 
 Reads:
-    data/fetched_windows.json
+    data/fetched_windows.json (or fetched_windows_tran.json)
     data/transactions/txn_YYYY.csv.gz
 
 Writes (with --apply):
@@ -20,138 +24,115 @@ Writes (with --apply):
 """
 
 import argparse
+import gzip
 import json
 import shutil
-from datetime import date, timedelta
+from collections import Counter
+from datetime import date
 from pathlib import Path
-
-import pandas as pd
 
 ROOT = Path(__file__).parent.parent
 DATA_DIR = ROOT / "data"
 FETCHED_LOG = DATA_DIR / "fetched_windows.json"
+FETCHED_LOG_TRN = DATA_DIR / "fetched_windows_tran.json"
 TRANS_DIR = DATA_DIR / "transactions"
 
 
-def load_transactions() -> pd.DataFrame:
-    """Load all transaction CSVs into a single DataFrame with parsed filed_date."""
-    frames = []
+def collect_source_files() -> set[str]:
+    """Scan all per-year CSV.gz files and return the set of _source_file values."""
+    source_files: set[str] = set()
     for f in sorted(TRANS_DIR.glob("txn_*.csv.gz")):
         try:
-            df = pd.read_csv(f, usecols=["filed_date", "tran_type"], dtype=str)
-            frames.append(df)
+            with gzip.open(f, "rt") as gz:
+                import csv
+                reader = csv.DictReader(gz)
+                for row in reader:
+                    src = row.get("_source_file", "").strip()
+                    if src:
+                        source_files.add(src)
         except Exception as exc:
             print(f"  Warning: could not read {f.name}: {exc}")
-    if not frames:
-        raise RuntimeError("No transaction CSVs found")
-
-    combined = pd.concat(frames, ignore_index=True)
-
-    # Parse filed_date — handle both YYYY-MM-DD and MM/DD/YYYY formats
-    combined["filed_date"] = pd.to_datetime(
-        combined["filed_date"], format="mixed", dayfirst=False
-    ).dt.date
-
-    # Normalize tran_type
-    combined["tran_type"] = combined["tran_type"].str.strip().str.upper()
-
-    # Drop rows with unparseable dates
-    combined = combined.dropna(subset=["filed_date"])
-
-    print(f"Loaded {len(combined):,} transactions from {len(frames)} CSV files")
-    return combined
+    print(f"Found {len(source_files):,} unique source files in transaction data")
+    return source_files
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Find and remove zero-data windows from fetched_windows.json"
+        description="Find and remove empty windows from fetched_windows.json"
     )
     parser.add_argument(
         "--apply", action="store_true",
-        help="Actually remove zero-data windows (default is dry-run report only)"
+        help="Actually remove empty windows (default is dry-run report only)"
+    )
+    parser.add_argument(
+        "--log", choices=["filed", "tran"], default="filed",
+        help="Which log to clean: 'filed' (default) or 'tran'"
     )
     args = parser.parse_args()
 
+    log_file = FETCHED_LOG_TRN if args.log == "tran" else FETCHED_LOG
+    backup_file = DATA_DIR / f"{log_file.stem}_backup.json"
+
     # 1. Load fetched windows
-    with open(FETCHED_LOG) as f:
+    with open(log_file) as f:
         windows = json.load(f)
-    print(f"Fetched windows: {len(windows)} total")
+    print(f"Fetched windows in {log_file.name}: {len(windows)} total")
 
-    # 2. Load all transactions
-    txn = load_transactions()
+    # 2. Collect all source files referenced in transaction data
+    source_files = collect_source_files()
 
-    # Build a set of (tran_type, filed_date) for fast lookup
-    txn_keys = set(zip(txn["tran_type"], txn["filed_date"]))
-
-    # 3. Check each standard 7-day window
-    zero_data = []
-    non_standard = 0
-    has_data = 0
+    # 3. Check each window against source files
+    empty = []
+    has_data = []
 
     for entry in windows:
         ttype, start_str, end_str = entry
-        start = date.fromisoformat(start_str)
-        end = date.fromisoformat(end_str)
-        span = (end - start).days
-
-        # Only check standard 7-day windows (span == 6 days)
-        if span != 6:
-            non_standard += 1
-            continue
-
-        # Check if ANY date in [start, end] has a transaction with this tran_type
-        found = False
-        d = start
-        while d <= end:
-            if (ttype.upper(), d) in txn_keys:
-                found = True
-                break
-            d += timedelta(days=1)
-
-        if found:
-            has_data += 1
+        expected_file = f"{ttype}_{start_str}_{end_str}.xlsx"
+        if expected_file in source_files:
+            has_data.append(entry)
         else:
-            zero_data.append(entry)
+            empty.append(entry)
 
     print(f"\nResults:")
-    print(f"  Standard 7-day windows checked: {len(windows) - non_standard}")
-    print(f"  Non-standard windows (skipped): {non_standard}")
-    print(f"  Windows with data:              {has_data}")
-    print(f"  Zero-data windows:              {len(zero_data)}")
+    print(f"  Windows with data (source file exists): {len(has_data)}")
+    print(f"  Empty windows (no source file):         {len(empty)}")
+    pct = len(empty) / len(windows) * 100 if windows else 0
+    print(f"  Empty percentage:                       {pct:.1f}%")
 
-    if zero_data:
-        # Show some examples
-        print(f"\nFirst 20 zero-data windows:")
-        for entry in zero_data[:20]:
+    if empty:
+        # Breakdown by type
+        type_counts = Counter(e[0] for e in empty)
+        type_totals = Counter(e[0] for e in windows)
+        print(f"\nEmpty windows by type:")
+        for t in sorted(type_totals):
+            ec = type_counts.get(t, 0)
+            tc = type_totals[t]
+            print(f"  {t:>2}: {ec:>5} empty / {tc:>5} total ({ec/tc*100:.1f}%)")
+
+        # Date range
+        dates = sorted(date.fromisoformat(e[1]) for e in empty)
+        print(f"\nDate range of empty windows: {dates[0]} to {dates[-1]}")
+
+        # Sample
+        print(f"\nFirst 15 empty windows:")
+        for entry in empty[:15]:
             print(f"  {entry}")
-        if len(zero_data) > 20:
-            print(f"  ... and {len(zero_data) - 20} more")
+        if len(empty) > 15:
+            print(f"  ... and {len(empty) - 15} more")
 
-        # Show breakdown by type
-        from collections import Counter
-        type_counts = Counter(e[0] for e in zero_data)
-        print(f"\nZero-data windows by type:")
-        for t in sorted(type_counts):
-            print(f"  {t}: {type_counts[t]}")
-
-        # Show date range
-        dates = [date.fromisoformat(e[1]) for e in zero_data]
-        print(f"\nDate range of zero-data windows: {min(dates)} to {max(dates)}")
-
-    if args.apply and zero_data:
+    if args.apply and empty:
         # Save backup
-        backup = DATA_DIR / "fetched_windows_backup.json"
-        shutil.copy2(FETCHED_LOG, backup)
-        print(f"\nBackup saved to: {backup}")
+        shutil.copy2(log_file, backup_file)
+        print(f"\nBackup saved to: {backup_file}")
 
-        # Remove zero-data windows
-        zero_set = {tuple(e) for e in zero_data}
-        cleaned = [e for e in windows if tuple(e) not in zero_set]
-        with open(FETCHED_LOG, "w") as f:
-            json.dump(cleaned, f, indent=2)
-        print(f"Cleaned fetched_windows.json: {len(cleaned)} entries (removed {len(zero_data)})")
-    elif zero_data and not args.apply:
-        print(f"\nDry run — no changes made. Re-run with --apply to remove zero-data windows.")
+        # Remove empty windows
+        empty_set = {tuple(e) for e in empty}
+        cleaned = [e for e in windows if tuple(e) not in empty_set]
+        with open(log_file, "w") as f:
+            json.dump(sorted(cleaned), f, indent=2)
+        print(f"Cleaned {log_file.name}: {len(cleaned)} entries (removed {len(empty)})")
+    elif empty and not args.apply:
+        print(f"\nDry run — no changes made. Re-run with --apply to remove empty windows.")
 
 
 if __name__ == "__main__":
