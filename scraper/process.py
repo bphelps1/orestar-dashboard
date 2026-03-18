@@ -775,6 +775,136 @@ def aggregate(df: pd.DataFrame) -> None:
     log.info("Aggregation complete. JSON files written to %s", AGG_DIR)
 
 
+def scrape_account_summaries(
+    filer_ids: list[str],
+    *,
+    cache_path: Path = DATA_DIR / "orestar_cash_balances.json",
+    max_workers: int = 10,
+    max_age_days: int = 7,
+) -> dict[str, dict]:
+    """Fetch full Account Summary from ORESTAR publicAccountSummary for each filer ID.
+
+    Extracts all financial line items including Beginning Balance (Previous Year),
+    which serves as the anchor for calculating per-year cash balances.
+
+    Results are cached in *cache_path*.  Only filer IDs missing from the cache
+    (or whose cached entry is older than *max_age_days*) are re-fetched.
+
+    Returns ``{filer_id_str: {year, beginning_balance, ending_cash_balance, ...}}``
+    for every ID that could be resolved.
+    """
+    import concurrent.futures
+    import urllib.request
+
+    # Load cache
+    cache: dict = {}
+    if cache_path.exists():
+        with open(cache_path) as f:
+            cache = json.load(f)
+
+    now_ts = datetime.now().timestamp()
+    cutoff = now_ts - max_age_days * 86_400
+
+    ids_to_fetch = [
+        fid for fid in filer_ids
+        if fid not in cache or cache[fid].get("ts", 0) < cutoff
+    ]
+
+    if not ids_to_fetch:
+        log.info("ORESTAR account-summary cache is fresh (%d entries)", len(cache))
+    else:
+        log.info(
+            "Fetching ORESTAR Account Summary for %d / %d filers …",
+            len(ids_to_fetch), len(filer_ids),
+        )
+
+        # Regex to extract the year from the page heading
+        _YEAR_RE = re.compile(
+            r"Account Summary Information for the year\s+(\d{4})",
+        )
+
+        def _parse_dollar(html: str, label: str) -> float | None:
+            """Extract a dollar amount following a label in ORESTAR HTML.
+
+            Handles positive ($X,XXX.XX) and negative (- $X,XXX.XX) formats.
+            """
+            # Pattern: label ... optional negative sign ... $ amount
+            pat = re.compile(
+                re.escape(label) + r".*?"
+                r"(-\s*)?\$\s*([\d,]+\.\d{2})",
+                re.DOTALL,
+            )
+            m = pat.search(html)
+            if not m:
+                return None
+            val = float(m.group(2).replace(",", ""))
+            if m.group(1) and m.group(1).strip() == "-":
+                val = -val
+            return val
+
+        def _fetch_one(fid: str) -> tuple[str, dict | None]:
+            url = (
+                "https://secure.sos.state.or.us/orestar/"
+                f"publicAccountSummary.do?filerId={fid}"
+            )
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "ORESTAR-dashboard/1.0"})
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    html = resp.read().decode("utf-8", errors="replace")
+            except Exception:
+                return fid, None
+
+            # Extract year
+            year_m = _YEAR_RE.search(html)
+            if not year_m:
+                return fid, None
+            year = int(year_m.group(1))
+
+            # Extract all financial line items
+            ending = _parse_dollar(html, "Ending Cash Balance")
+            if ending is None:
+                return fid, None  # Page didn't load properly
+
+            result = {
+                "year": year,
+                "beginning_balance": _parse_dollar(html, "Beginning Balance (Previous Year)") or 0.0,
+                "ending_cash_balance": ending,
+                "orestar_contributions": _parse_dollar(html, "Cash Contributions") or 0.0,
+                "orestar_other_receipts": _parse_dollar(html, "Other Receipts") or 0.0,
+                "orestar_expenditures": _parse_dollar(html, "Cash Expenditures") or 0.0,
+                "orestar_other_disbursements": _parse_dollar(html, "Other Disbursements") or 0.0,
+                "balance_adjustments": _parse_dollar(html, "Balance Adjustments") or 0.0,
+            }
+            return fid, result
+
+        done = 0
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {pool.submit(_fetch_one, fid): fid for fid in ids_to_fetch}
+            for future in concurrent.futures.as_completed(futures):
+                fid, val = future.result()
+                done += 1
+                if done % 500 == 0:
+                    log.info("  … %d / %d fetched", done, len(ids_to_fetch))
+                if val is not None:
+                    cache[fid] = {**val, "ts": now_ts}
+
+        log.info("ORESTAR account-summary fetch complete (%d cached total)", len(cache))
+
+        # Persist cache
+        with open(cache_path, "w") as f:
+            json.dump(cache, f, separators=(",", ":"))
+
+    # Return full summary dicts (excluding the cache timestamp)
+    result = {}
+    for fid, entry in cache.items():
+        if "ending_cash_balance" in entry:
+            result[fid] = {k: v for k, v in entry.items() if k != "ts"}
+        elif "balance" in entry:
+            # Legacy cache entry (old format) — treat as ending balance only
+            result[fid] = {"ending_cash_balance": entry["balance"], "year": 0, "beginning_balance": 0.0}
+    return result
+
+
 def aggregate_filers(
     df: pd.DataFrame,
     contributions: pd.DataFrame,   # cash contributions only (C type, non-inkind)
@@ -854,6 +984,28 @@ def aggregate_filers(
             return pd.Series(dtype=float, name=col_name)
         return frame.groupby("month")["amount"].sum().rename(col_name)
 
+    # ── Scrape ORESTAR Account Summary ───────────────────────────────────────
+    # Build canonical-name → filer-id mapping so we can look up ORESTAR data.
+    _filer_id_col = "filer id" if "filer id" in df.columns else None
+    _orestar_data: dict[str, dict] = {}  # canonical name → full summary dict
+    if _filer_id_col:
+        _name_to_fid: dict[str, str] = (
+            df[[filer_col, _filer_id_col]]
+            .dropna(subset=[_filer_id_col])
+            .assign(_fid=lambda x: x[_filer_id_col].astype(str).str.strip())
+            .query("_fid != ''")
+            .drop_duplicates(subset=[filer_col])
+            .set_index(filer_col)["_fid"]
+            .to_dict()
+        )
+        unique_fids = sorted(set(_name_to_fid.values()))
+        _fid_to_summary = scrape_account_summaries(unique_fids)
+        # Map canonical name → full ORESTAR account summary
+        for canon_name, fid in _name_to_fid.items():
+            if fid in _fid_to_summary:
+                _orestar_data[canon_name] = _fid_to_summary[fid]
+        log.info("ORESTAR account summaries mapped for %d / %d filers", len(_orestar_data), len(all_filer_names))
+
     # ── Per-filer detail files ────────────────────────────────────────────────
     # Remove stale files whose slugs are no longer in the current filer set.
     current_slugs = set(filer_slugs.values())
@@ -882,41 +1034,109 @@ def aggregate_filers(
         total_out       = round(float(_cash_expend["amount"].sum())  if not _cash_expend.empty  else 0.0, 2)
         total_or        = round(float(filer_or["amount"].sum())      if not filer_or.empty      else 0.0, 2)
         total_od        = round(float(filer_od["amount"].sum())      if not filer_od.empty      else 0.0, 2)
-        # cash_on_hand: include all C-type receipts and all E-type disbursements
-        # EXCEPT sub_types that represent obligations not yet paid in cash:
-        #   "Personal Expenditure for Reimbursement" — records the obligation when the
-        #     candidate spends their own money; the actual cash outflow is the subsequent
-        #     reimbursement "Cash Expenditure". Including both would double-count.
-        #   "Account Payable" — an outstanding payable (money owed but not yet disbursed).
-        #     ORESTAR tracks this separately on the balance sheet; deducting it here would
-        #     understate cash on hand (verified against ORESTAR publicAccountSummary).
-        #   "Account Payable Rescinded" — reverses a previously recorded payable; no cash
-        #     changes hands. Classified as O-type (other receipt) by ORESTAR but must be
-        #     excluded to match the ORESTAR Account Summary ending balance.
+        # ── Cash-on-hand calculation ───────────────────────────────────────────
+        # Uses ORESTAR "Beginning Balance (Previous Year)" as an anchor, then
+        # calculates per-year beginning balances by working backward through
+        # our transaction data.
+        #
+        # Sub-types excluded from cash-affecting expenditures:
+        #   "Personal Expenditure for Reimbursement" — obligation only
+        #   "Account Payable" — outstanding payable; cash outflow is later
+        # Sub-types excluded from other receipts:
+        #   "Account Payable Rescinded" — reverses a payable; no cash effect
         _COH_EXCLUDE_E  = {"Personal Expenditure for Reimbursement", "Account Payable"}
         _COH_EXCLUDE_OR = {"Account Payable Rescinded"}
         _e_for_coh      = filer_expend[~filer_expend["sub_type"].isin(_COH_EXCLUDE_E)] if not filer_expend.empty else filer_expend
         _or_for_coh     = filer_or[~filer_or["sub_type"].isin(_COH_EXCLUDE_OR)] if not filer_or.empty else filer_or
-        _total_in_full  = round(float(filer_contrib["amount"].sum()) if not filer_contrib.empty else 0.0, 2)
-        _total_out_full = round(float(_e_for_coh["amount"].sum())    if not _e_for_coh.empty    else 0.0, 2)
-        _total_or_coh   = round(float(_or_for_coh["amount"].sum())   if not _or_for_coh.empty   else 0.0, 2)
-        cash_on_hand    = round(_total_in_full + _total_or_coh - _total_out_full - total_od, 2)
-        tran_count    = int(len(filer_all))
+        tran_count      = int(len(filer_all))
 
-        # Timeline — use _e_for_coh so personal-expenditure-for-reimbursement
-        # obligations don't inflate the expenditures series
-        c_monthly = monthly_sum(filer_contrib, "contributions")
-        i_monthly = monthly_sum(filer_inkind,  "inkind")
-        e_monthly = monthly_sum(_e_for_coh,    "expenditures")
+        # Calculate net transactions per year for COH computation
+        def _yearly_net(contrib_df, expend_df, or_df, od_df):
+            """Return {year_str: net_cash_flow} for each year with transactions."""
+            nets: dict[str, float] = {}
+            all_frames = []
+            for frame, sign in [(contrib_df, 1), (or_df, 1), (expend_df, -1), (od_df, -1)]:
+                if not frame.empty and "year" in frame.columns:
+                    yearly = frame.groupby("year")["amount"].sum()
+                    for yr, amt in yearly.items():
+                        yr_s = str(int(yr))
+                        nets[yr_s] = nets.get(yr_s, 0.0) + sign * float(amt)
+            return nets
+
+        yearly_nets = _yearly_net(_cash_contrib, _e_for_coh, _or_for_coh, filer_od)
+
+        # Determine beginning balances using ORESTAR anchor
+        orestar_info = _orestar_data.get(name)
+        beginning_balances: dict[str, float] = {}
+        cash_on_hand_source = "calculated"
+        orestar_discrepancy = 0.0
+        orestar_year = 0
+
+        if orestar_info and orestar_info.get("year", 0) > 0:
+            # We have an ORESTAR anchor
+            anchor_year = orestar_info["year"]
+            anchor_beginning = orestar_info.get("beginning_balance", 0.0)
+            orestar_ending = orestar_info.get("ending_cash_balance", 0.0)
+            orestar_year = anchor_year
+            cash_on_hand_source = "orestar"
+
+            # Set the anchor year's beginning balance
+            beginning_balances[str(anchor_year)] = round(anchor_beginning, 2)
+
+            # Work backward from anchor to compute prior years' beginning balances
+            sorted_years = sorted(yearly_nets.keys())
+            years_before_anchor = [y for y in sorted_years if int(y) < anchor_year]
+            # Go from the year just before anchor backward
+            running_balance = anchor_beginning
+            for yr_s in reversed(years_before_anchor):
+                # beginning_balance[yr] + net[yr] = beginning_balance[yr+1]
+                # So: beginning_balance[yr] = running_balance - net[yr]
+                net = yearly_nets.get(yr_s, 0.0)
+                running_balance = running_balance - net
+                beginning_balances[yr_s] = round(running_balance, 2)
+
+            # Compute cash on hand (ending balance = anchor beginning + all transactions from anchor year onward)
+            years_from_anchor = [y for y in sorted_years if int(y) >= anchor_year]
+            net_from_anchor = sum(yearly_nets.get(y, 0.0) for y in years_from_anchor)
+            cash_on_hand = round(anchor_beginning + net_from_anchor, 2)
+
+            # Check discrepancy: our calculated ending should match ORESTAR
+            # (Only meaningful if we have complete data for the anchor year)
+            our_anchor_ending = round(anchor_beginning + yearly_nets.get(str(anchor_year), 0.0), 2)
+            orestar_discrepancy = round(our_anchor_ending - orestar_ending, 2)
+        else:
+            # No ORESTAR data — pure transaction-based fallback
+            _total_in_full  = round(float(_cash_contrib["amount"].sum()) if not _cash_contrib.empty else 0.0, 2)
+            _total_out_full = round(float(_e_for_coh["amount"].sum())    if not _e_for_coh.empty    else 0.0, 2)
+            _total_or_coh   = round(float(_or_for_coh["amount"].sum())   if not _or_for_coh.empty   else 0.0, 2)
+            cash_on_hand    = round(_total_in_full + _total_or_coh - _total_out_full - total_od, 2)
+
+            # Set beginning balance for earliest year to 0 (no anchor available)
+            sorted_years = sorted(yearly_nets.keys())
+            if sorted_years:
+                running = 0.0
+                for yr_s in sorted_years:
+                    beginning_balances[yr_s] = round(running, 2)
+                    running += yearly_nets.get(yr_s, 0.0)
+
+        # Timeline — includes other_receipts and other_disbursements for proper
+        # cash-on-hand calculation in the frontend
+        c_monthly  = monthly_sum(filer_contrib, "contributions")
+        i_monthly  = monthly_sum(filer_inkind,  "inkind")
+        e_monthly  = monthly_sum(_e_for_coh,    "expenditures")
+        or_monthly = monthly_sum(_or_for_coh,   "other_receipts")
+        od_monthly = monthly_sum(filer_od,      "other_disbursements")
         count_monthly_filer = filer_all.groupby("month").size().rename("count")
-        tl_df = pd.concat([c_monthly, i_monthly, e_monthly, count_monthly_filer], axis=1).fillna(0).sort_index()
+        tl_df = pd.concat([c_monthly, i_monthly, e_monthly, or_monthly, od_monthly, count_monthly_filer], axis=1).fillna(0).sort_index()
         timeline = [
             {
                 "month": m,
-                "contributions": round(float(row.get("contributions", 0)), 2),
-                "inkind":        round(float(row.get("inkind",        0)), 2),
-                "expenditures":  round(float(row.get("expenditures",  0)), 2),
-                "count":         int(row.get("count", 0)),
+                "contributions":       round(float(row.get("contributions",       0)), 2),
+                "inkind":              round(float(row.get("inkind",              0)), 2),
+                "expenditures":        round(float(row.get("expenditures",        0)), 2),
+                "other_receipts":      round(float(row.get("other_receipts",      0)), 2),
+                "other_disbursements": round(float(row.get("other_disbursements", 0)), 2),
+                "count":               int(row.get("count", 0)),
             }
             for m, row in tl_df.iterrows()
         ]
@@ -989,6 +1209,10 @@ def aggregate_filers(
             "total_out": total_out,
             "total_or": total_or, "total_od": total_od,
             "cash_on_hand": cash_on_hand, "tran_count": tran_count,
+            "cash_on_hand_source": cash_on_hand_source,
+            "orestar_discrepancy": orestar_discrepancy,
+            "orestar_year": orestar_year,
+            "beginning_balances": beginning_balances,
             "timeline": timeline,
             "top_donors": top_donors_list,
             "top_donors_by_year": top_donors_by_year,

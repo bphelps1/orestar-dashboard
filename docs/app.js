@@ -290,16 +290,40 @@ function mergeTypeByMonth(byMonth) {
 }
 
 // Sum contributions/expenditures/count from a (possibly filtered) timeline array.
-function statsFromTimeline(rows) {
+// When beginningBalances is provided, cash on hand is calculated as:
+//   beginning_balance[earliest_year] + contributions + other_receipts - expenditures - other_disbursements
+function statsFromTimeline(rows, beginningBalances) {
   const totalIn    = rows.reduce((s, r) => s + (r.contributions || 0), 0);
   const totalInKind = rows.reduce((s, r) => s + (r.inkind       || 0), 0);
   const totalOut   = rows.reduce((s, r) => s + (r.expenditures  || 0), 0);
+  const totalOR    = rows.reduce((s, r) => s + (r.other_receipts || 0), 0);
+  const totalOD    = rows.reduce((s, r) => s + (r.other_disbursements || 0), 0);
   const count      = rows.reduce((s, r) => s + (r.count         || 0), 0);
+
+  // Determine beginning balance for the earliest year in the filtered rows
+  let beginBal = 0;
+  if (beginningBalances && rows.length > 0) {
+    const earliestMonth = rows[0].month || "";  // timeline is sorted by month
+    const earliestYear = earliestMonth.slice(0, 4);
+    // Find the beginning balance for this year (or the earliest available)
+    if (earliestYear && beginningBalances[earliestYear] !== undefined) {
+      beginBal = beginningBalances[earliestYear];
+    } else {
+      // Fall back to earliest available beginning balance
+      const sortedYears = Object.keys(beginningBalances).sort();
+      if (sortedYears.length > 0) {
+        beginBal = beginningBalances[sortedYears[0]];
+      }
+    }
+  }
+
+  const netFlow = totalIn + totalOR - totalOut - totalOD;
+
   return {
     totalIn:     Math.round(totalIn    * 100) / 100,
     totalInKind: Math.round(totalInKind * 100) / 100,
     totalOut:    Math.round(totalOut   * 100) / 100,
-    cashOnHand:  Math.round((totalIn - totalOut) * 100) / 100,
+    cashOnHand:  Math.round((beginBal + netFlow) * 100) / 100,
     count,
   };
 }
@@ -804,6 +828,7 @@ function renderOverviewGlobal() {
     document.getElementById("stat-cash-on-hand").textContent  = fmt$(coh);
     document.getElementById("stat-transactions").textContent  = fmtNum(summaryData.total_transactions);
   }
+  updateCohIndicator(null);  // No single-filer indicator for global view
   document.getElementById("stat-cards").hidden             = false;
   document.getElementById("filer-comparison-grid").hidden  = true;
   document.getElementById("overview-donut-box").hidden     = false;
@@ -841,11 +866,35 @@ function renderOverviewGlobal() {
   fitStatCards();
 }
 
+function updateCohIndicator(profile) {
+  const ind = document.getElementById("coh-indicator");
+  if (!ind) return;
+  if (!profile) {
+    ind.hidden = true;
+    return;
+  }
+  const src = profile.cash_on_hand_source;
+  const disc = profile.orestar_discrepancy || 0;
+  if (src === "orestar" && Math.abs(disc) > 0.01) {
+    ind.hidden = false;
+    ind.className = "coh-indicator coh-warn";
+    ind.textContent = "\u26a0";
+    ind.title = `ORESTAR discrepancy: our data differs by ${fmt$(Math.abs(disc))} from ORESTAR's Ending Cash Balance for ${profile.orestar_year}. This may indicate missing transactions.`;
+  } else if (src === "calculated") {
+    ind.hidden = false;
+    ind.className = "coh-indicator coh-estimated";
+    ind.textContent = "EST";
+    ind.title = "Estimated: no ORESTAR beginning balance available. Cash on hand is calculated from transactions only.";
+  } else {
+    ind.hidden = true;
+  }
+}
+
 function renderOverviewSingleFiler(profile) {
   const hasDate = state.dateStart || state.dateEnd;
   if (hasDate) {
     const { totalIn, totalInKind, totalOut, cashOnHand, count } =
-      statsFromTimeline(filterMonthRows(profile.timeline || []));
+      statsFromTimeline(filterMonthRows(profile.timeline || []), profile.beginning_balances);
     document.getElementById("stat-contributions").textContent = fmt$(totalIn);
     document.getElementById("stat-inkind").textContent        = fmt$(totalInKind);
     document.getElementById("stat-expenditures").textContent  = fmt$(totalOut);
@@ -858,6 +907,7 @@ function renderOverviewSingleFiler(profile) {
     document.getElementById("stat-cash-on-hand").textContent  = fmt$(profile.cash_on_hand);
     document.getElementById("stat-transactions").textContent  = fmtNum(profile.tran_count);
   }
+  updateCohIndicator(profile);
   document.getElementById("stat-cards").hidden             = false;
   document.getElementById("filer-comparison-grid").hidden  = true;
   document.getElementById("overview-donut-box").hidden     = false;
@@ -929,9 +979,14 @@ function renderOverviewMultiFiler(profiles) {
   document.getElementById("filer-comparison-grid").innerHTML = profiles.map(p => {
     const hasDate = state.dateStart || state.dateEnd;
     const s = hasDate
-      ? statsFromTimeline(filterMonthRows(p.timeline || []))
+      ? statsFromTimeline(filterMonthRows(p.timeline || []), p.beginning_balances)
       : { totalIn: p.total_in, totalInKind: p.total_inkind || 0, totalOut: p.total_out, cashOnHand: p.cash_on_hand, count: p.tran_count };
     const tranCount = s.count ? fmtNum(s.count) : "—";
+    const cohInd = p.cash_on_hand_source === "calculated"
+      ? '<span class="coh-indicator coh-estimated" title="Estimated: no ORESTAR beginning balance available">EST</span>'
+      : (Math.abs(p.orestar_discrepancy || 0) > 0.01
+        ? `<span class="coh-indicator coh-warn" title="ORESTAR discrepancy: ${fmt$(Math.abs(p.orestar_discrepancy))}">\u26a0</span>`
+        : '');
     return `
     <div class="filer-card">
       <div class="filer-card-name">${esc(p.name)}</div>
@@ -942,7 +997,7 @@ function renderOverviewMultiFiler(profiles) {
         <div class="filer-card-stat-value">${fmt$(s.totalInKind)}</div>
         <div class="filer-card-stat-label">Total Expenditures</div>
         <div class="filer-card-stat-value">${fmt$(s.totalOut)}</div>
-        <div class="filer-card-stat-label">Cash on Hand</div>
+        <div class="filer-card-stat-label">Cash on Hand ${cohInd}</div>
         <div class="filer-card-stat-value">${fmt$(s.cashOnHand)}</div>
         <div class="filer-card-stat-label">Total Transactions</div>
         <div class="filer-card-stat-value">${tranCount}</div>
