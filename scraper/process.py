@@ -421,6 +421,26 @@ def process() -> None:
             log.info("No existing transactions data. Nothing to do.")
             return
         log.info("Re-aggregating from existing transaction files (%d rows)", len(df))
+
+        # Ensure amount is numeric for re-aggregation path
+        df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0.0)
+
+        # Remove originals superseded by amendments (same logic as step 4b)
+        _orig_col = "original id" if "original id" in df.columns else None
+        _status_col = "tran status" if "tran status" in df.columns else None
+        if _orig_col and _status_col and "tran_id" in df.columns:
+            amended = df[df[_status_col] == "Amended"]
+            if not amended.empty:
+                superseded_ids = set(
+                    amended[_orig_col].dropna().astype(str).str.strip()
+                ) & set(df["tran_id"].astype(str).str.strip())
+                if superseded_ids:
+                    before = len(df)
+                    df = df[~df["tran_id"].astype(str).str.strip().isin(superseded_ids)]
+                    log.info(
+                        "Removed %d superseded originals (replaced by amendments): %d → %d rows",
+                        before - len(df), before, len(df),
+                    )
     else:
         # ── 2. Type coercion ─────────────────────────────────────────────────
         for col in ["tran_id", "contributor_payee", "filer", "contributor_type",
@@ -466,6 +486,30 @@ def process() -> None:
             before = len(df)
             df = df.drop_duplicates(subset=["tran_id"], keep="last")
             log.info("Deduplicated by tran_id: %d → %d rows", before, len(df))
+
+        # ── 4b. Remove originals superseded by amendments ─────────────────────
+        # When a transaction is amended, ORESTAR creates a new row with a new
+        # tran_id and status "Amended", whose "original id" points to the
+        # original row.  Both rows may appear in our data because they were
+        # filed on different dates (hence fetched in different weekly windows).
+        # ORESTAR's Account Summary counts only the latest version, so we must
+        # drop the originals to avoid double-counting.
+        _orig_col = "original id" if "original id" in df.columns else None
+        _status_col = "tran status" if "tran status" in df.columns else None
+        if _orig_col and _status_col and "tran_id" in df.columns:
+            amended = df[df[_status_col] == "Amended"]
+            if not amended.empty:
+                # Collect tran_ids of originals that have been superseded
+                superseded_ids = set(
+                    amended[_orig_col].dropna().astype(str).str.strip()
+                ) & set(df["tran_id"].astype(str).str.strip())
+                if superseded_ids:
+                    before = len(df)
+                    df = df[~df["tran_id"].astype(str).str.strip().isin(superseded_ids)]
+                    log.info(
+                        "Removed %d superseded originals (replaced by amendments): %d → %d rows",
+                        before - len(df), before, len(df),
+                    )
 
         # ── 5. Name normalization + fuzzy dedup ───────────────────────────────
         all_names = (
