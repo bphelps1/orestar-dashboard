@@ -1016,6 +1016,20 @@ async function loadDonors() {
   const n = state.selectedFilers.length;
   const years = yearsInRange();
 
+  // Attach toggle button listeners once (works for both global and single-filer views)
+  const toggleBtns = document.querySelectorAll("#donors-view-toggle .toggle-btn");
+  if (toggleBtns[0] && !toggleBtns[0]._listenerAttached) {
+    toggleBtns.forEach(btn => {
+      btn.addEventListener("click", () => {
+        toggleBtns.forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        donorsViewMode = btn.dataset.view;
+        renderActiveTab();
+      });
+      btn._listenerAttached = true;
+    });
+  }
+
   if (n === 0) {
     document.getElementById("donors-global-view").hidden      = false;
     document.getElementById("donors-multi-view").hidden       = true;
@@ -1034,19 +1048,6 @@ async function loadDonors() {
         if (donorsViewMode === "summary") renderDonors(sel.value);
       });
       sel._listenerAttached = true;
-    }
-
-    const toggleBtns = document.querySelectorAll("#donors-view-toggle .toggle-btn");
-    if (!toggleBtns[0]._listenerAttached) {
-      toggleBtns.forEach(btn => {
-        btn.addEventListener("click", () => {
-          toggleBtns.forEach(b => b.classList.remove("active"));
-          btn.classList.add("active");
-          donorsViewMode = btn.dataset.view;
-          renderActiveTab();
-        });
-        btn._listenerAttached = true;
-      });
     }
 
     renderGlobalDonorsView(years);
