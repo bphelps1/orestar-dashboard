@@ -1,6 +1,6 @@
 # Oregon Campaign Finance Dashboard
 
-A self-maintaining, daily-refreshing dashboard of Oregon campaign finance data (cash contributions and expenditures, 2017–present), built on top of Oregon's [ORESTAR](https://secure.sos.state.or.us/orestar/) public records system.
+A self-maintaining, daily-refreshing dashboard of Oregon campaign finance data (cash contributions and expenditures, 2006–present), built on top of Oregon's [ORESTAR](https://secure.sos.state.or.us/orestar/) public records system.
 
 **Live dashboard:** `https://bphelps1.github.io/orestar-dashboard/`
 
