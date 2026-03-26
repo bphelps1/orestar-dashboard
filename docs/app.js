@@ -328,6 +328,194 @@ function statsFromTimeline(rows, beginningBalances) {
   };
 }
 
+// ── Shared field-metadata map (centralized tile definitions) ─────────────────
+const ACCT_FIELD_META = {
+  // Contributions group
+  orestar_contributions: {
+    label: "Cash Contributions",
+    tip: "<strong>Counted:</strong> All monetary donations received.<br><strong>Condition:</strong> ORESTAR sub-type 'Cash Contribution'.<br><strong>Meaning:</strong> Direct cash and check donations to the committee.",
+  },
+  loans_received: {
+    label: "Loans Received (non-exempt)",
+    tip: "<strong>Counted:</strong> Loans received that count toward contribution limits.<br><strong>Condition:</strong> Non-exempt loans reported to ORESTAR.<br><strong>Meaning:</strong> Borrowed money that the committee must repay and that counts as a contribution.",
+  },
+  inkind_contributions: {
+    label: "In-Kind Contributions",
+    tip: "<strong>Counted:</strong> Non-cash contributions (goods, services, etc.).<br><strong>Condition:</strong> Reported as in-kind under ORESTAR contribution types.<br><strong>Meaning:</strong> Things of value given to the committee instead of cash.",
+  },
+  total_contributions_calc: {
+    label: "Total Contributions",
+    subtotal: true,
+    fields: ["orestar_contributions", "loans_received", "inkind_contributions"],
+    tip: "<strong>Counted:</strong> Sum of cash, loans (non-exempt), and in-kind contributions.<br><strong>Meaning:</strong> Everything received that counts toward contribution limits.",
+  },
+  // Expenditures group
+  orestar_expenditures: {
+    label: "Cash Expenditures",
+    tip: "<strong>Counted:</strong> All cash payments made by the committee.<br><strong>Condition:</strong> ORESTAR sub-type 'Cash Expenditure'.<br><strong>Meaning:</strong> Money spent on campaign operations, ads, staff, etc.",
+  },
+  loan_payments: {
+    label: "Loan Payments (non-exempt)",
+    tip: "<strong>Counted:</strong> Loan repayments that count toward expenditure totals.<br><strong>Condition:</strong> Non-exempt loan payments reported to ORESTAR.<br><strong>Meaning:</strong> Money used to repay non-exempt loans.",
+  },
+  inkind_expenditures: {
+    label: "In-Kind Expenditures",
+    tip: "<strong>Counted:</strong> Non-cash expenditures (goods, services provided).<br><strong>Condition:</strong> Reported as in-kind under ORESTAR expenditure types.<br><strong>Meaning:</strong> Non-monetary costs borne by the committee.",
+  },
+  total_expenditures_calc: {
+    label: "Total Expenditures",
+    subtotal: true,
+    fields: ["orestar_expenditures", "loan_payments", "inkind_expenditures"],
+    tip: "<strong>Counted:</strong> Sum of cash, loan payments (non-exempt), and in-kind expenditures.<br><strong>Meaning:</strong> Everything spent that counts toward expenditure totals.",
+  },
+  // Cash Balance group
+  beginning_balance: {
+    label: "Beginning Balance (Previous Year)",
+    tip: "<strong>Counted:</strong> Cash the committee had at the start of the reporting year.<br><strong>Condition:</strong> Carried over from the prior year's ending balance in ORESTAR.<br><strong>Meaning:</strong> Starting cash position for the year.",
+  },
+  orestar_other_receipts: {
+    label: "Other Receipts",
+    tip: "<strong>Counted:</strong> Non-contribution money received (refunds, interest, etc.).<br><strong>Condition:</strong> ORESTAR 'Other Receipt' types (OR, O, OA).<br><strong>Meaning:</strong> Miscellaneous income that isn't a contribution.",
+  },
+  loans_received_exempt: {
+    label: "Loans Received (exempt)",
+    tip: "<strong>Counted:</strong> Loans that do not count toward contribution limits.<br><strong>Condition:</strong> Exempt loans as classified by ORESTAR.<br><strong>Meaning:</strong> Borrowed money not subject to contribution limits.",
+  },
+  cash_balance_inflow_subtotal: {
+    label: "Subtotal (Inflows)",
+    subtotal: true,
+    fields: ["beginning_balance", "orestar_contributions", "orestar_other_receipts", "loans_received_exempt"],
+    tip: "<strong>Meaning:</strong> Total money available before expenditures.",
+  },
+  orestar_other_disbursements: {
+    label: "Other Disbursements",
+    tip: "<strong>Counted:</strong> Non-expenditure cash outflows.<br><strong>Condition:</strong> ORESTAR 'Other Disbursement' type (OD).<br><strong>Meaning:</strong> Miscellaneous payments that aren't standard expenditures.",
+  },
+  loan_payments_exempt: {
+    label: "Loan Payments (exempt)",
+    tip: "<strong>Counted:</strong> Repayments on exempt loans.<br><strong>Condition:</strong> Payments on loans classified as exempt by ORESTAR.<br><strong>Meaning:</strong> Money used to repay loans not subject to limits.",
+  },
+  cash_balance_outflow_subtotal: {
+    label: "Subtotal (Outflows)",
+    subtotal: true,
+    fields: ["orestar_expenditures", "orestar_other_disbursements", "loan_payments_exempt"],
+    tip: "<strong>Meaning:</strong> Total money paid out.",
+  },
+  balance_adjustments: {
+    label: "Balance Adjustments",
+    tip: "<strong>Counted:</strong> Manual corrections to the cash balance.<br><strong>Condition:</strong> Filed as 'Balance Adjustment' in ORESTAR.<br><strong>Meaning:</strong> Corrections for errors, write-offs, or reclassifications.",
+  },
+  ending_cash_balance: {
+    label: "Ending Cash Balance",
+    subtotal: true,
+    tip: "<strong>Counted:</strong> Inflow subtotal minus outflow subtotal plus adjustments.<br><strong>Condition:</strong> From ORESTAR account summary page.<br><strong>Meaning:</strong> How much cash the committee has at year-end.",
+  },
+  // Financial Status group
+  cash_balance_fs: {
+    label: "Cash Balance",
+    tip: "<strong>Counted:</strong> Current cash on hand per ORESTAR financial status.<br><strong>Condition:</strong> From ORESTAR account summary 'Financial Status' section.<br><strong>Meaning:</strong> Liquid cash the committee currently holds.",
+  },
+  accounts_receivable: {
+    label: "Accounts Receivable",
+    tip: "<strong>Counted:</strong> Money owed to the committee but not yet received.<br><strong>Condition:</strong> Outstanding receivables reported to ORESTAR.<br><strong>Meaning:</strong> Pledged or expected payments not yet collected.",
+  },
+  fs_assets_subtotal: {
+    label: "Subtotal (Assets)",
+    subtotal: true,
+    fields: ["cash_balance_fs", "accounts_receivable"],
+    tip: "<strong>Meaning:</strong> Total assets: cash plus receivables.",
+  },
+  total_outstanding_loans: {
+    label: "Total Outstanding Loans",
+    tip: "<strong>Counted:</strong> All unpaid loan balances.<br><strong>Condition:</strong> Loans reported in ORESTAR that haven't been fully repaid.<br><strong>Meaning:</strong> How much the committee still owes on loans.",
+  },
+  outstanding_personal_expenditures: {
+    label: "Outstanding Personal Expenditures",
+    tip: "<strong>Counted:</strong> Personal spending awaiting reimbursement.<br><strong>Condition:</strong> Expenditures made personally by a candidate/treasurer not yet repaid.<br><strong>Meaning:</strong> Personal money spent on behalf of the committee.",
+  },
+  accounts_payable: {
+    label: "Accounts Payable",
+    tip: "<strong>Counted:</strong> Bills and obligations not yet paid.<br><strong>Condition:</strong> Outstanding payables reported to ORESTAR.<br><strong>Meaning:</strong> Money the committee owes to vendors or service providers.",
+  },
+  fs_liabilities_subtotal: {
+    label: "Subtotal (Liabilities)",
+    subtotal: true,
+    fields: ["total_outstanding_loans", "outstanding_personal_expenditures", "accounts_payable"],
+    tip: "<strong>Meaning:</strong> Total outstanding obligations.",
+  },
+  balance_deficit: {
+    label: "Balance / Deficit",
+    subtotal: true,
+    tip: "<strong>Counted:</strong> Assets minus liabilities.<br><strong>Condition:</strong> From ORESTAR account summary.<br><strong>Meaning:</strong> The committee's net financial position. Negative means deficit.",
+  },
+};
+
+const ACCT_GROUPS = [
+  {
+    title: "Contributions",
+    fields: ["orestar_contributions", "loans_received", "inkind_contributions", "total_contributions_calc"],
+  },
+  {
+    title: "Expenditures",
+    fields: ["orestar_expenditures", "loan_payments", "inkind_expenditures", "total_expenditures_calc"],
+  },
+  {
+    title: "Cash Balance",
+    fields: [
+      "beginning_balance", "orestar_contributions", "orestar_other_receipts", "loans_received_exempt",
+      "cash_balance_inflow_subtotal",
+      "orestar_expenditures", "orestar_other_disbursements", "loan_payments_exempt",
+      "cash_balance_outflow_subtotal",
+      "balance_adjustments", "ending_cash_balance",
+    ],
+  },
+  {
+    title: "Financial Status",
+    fields: [
+      "cash_balance_fs", "accounts_receivable", "fs_assets_subtotal",
+      "total_outstanding_loans", "outstanding_personal_expenditures", "accounts_payable",
+      "fs_liabilities_subtotal", "balance_deficit",
+    ],
+  },
+];
+
+function renderAcctSummary(acctData) {
+  const grid = document.getElementById("acct-summary-grid");
+  const details = document.getElementById("acct-summary-details");
+  if (!grid || !details) return;
+
+  if (!acctData || !acctData.year) {
+    details.hidden = true;
+    return;
+  }
+  details.hidden = false;
+
+  grid.innerHTML = ACCT_GROUPS.map(group => {
+    const rows = group.fields.map(field => {
+      const meta = ACCT_FIELD_META[field];
+      if (!meta) return "";
+      let val;
+      if (meta.subtotal && meta.fields) {
+        val = meta.fields.reduce((s, f) => s + (acctData[f] || 0), 0);
+      } else {
+        val = acctData[field] != null ? acctData[field] : 0;
+      }
+      const cls = meta.subtotal ? "acct-row acct-subtotal" : "acct-row";
+      const helpBtn = meta.tip
+        ? `<span class="acct-help" tabindex="0" role="button" aria-label="Info">?<span class="acct-tip">${meta.tip}</span></span>`
+        : "";
+      return `<div class="${cls}">
+        <span class="acct-label">${esc(meta.label)} ${helpBtn}</span>
+        <span class="acct-value">${fmt$(val)}</span>
+      </div>`;
+    }).join("");
+    return `<div class="acct-group">
+      <div class="acct-group-title">${esc(group.title)}</div>
+      ${rows}
+    </div>`;
+  }).join("");
+}
+
 // ── Global state ─────────────────────────────────────────────────────────────
 const state = { selectedFilers: [], dateStart: "", dateEnd: "" };
 const filerCache = {};   // slug → Promise<filerDetail>
@@ -341,6 +529,8 @@ let recipientsData   = null;
 let timelineData     = null;
 let fuseIndex        = null;
 let allRecent        = [];
+
+let donorFilerMap    = null; // donor_name_lower → {slug, name, confidence} | {candidates, confidence:"ambiguous"}
 
 // ── Active tab ───────────────────────────────────────────────────────────────
 let activeTab = "overview";
@@ -551,10 +741,249 @@ function makeLineChart(canvasId, labels, datasets) {
   return chart;
 }
 
+// ── Donor → Filer linking layer ────────────────────────────────────────────────
+
+async function ensureDonorFilerMap() {
+  if (donorFilerMap !== null) return;
+  try {
+    donorFilerMap = await fetchJSON(`${DATA}/donor_filer_map.json`);
+  } catch {
+    donorFilerMap = {};
+  }
+}
+
+function lookupDonorFiler(donorName) {
+  if (!donorFilerMap || !donorName) return null;
+  const key = donorName.toLowerCase().trim();
+  return donorFilerMap[key] || null;
+}
+
+// Build a filer index lookup by slug (for preview data)
+function filerIndexBySlug() {
+  const map = {};
+  filerIndex.forEach(f => { map[f.slug] = f; });
+  return map;
+}
+
+// Render a donor name cell, making it a link if it maps to a filer
+function renderDonorCell(name) {
+  const match = lookupDonorFiler(name);
+  if (!match) return esc(name);
+
+  if (match.confidence === "high") {
+    return `<a class="donor-filer-link" href="#" data-slug="${esc(match.slug)}"
+              data-donor="${esc(name)}" tabindex="0">${esc(name)}</a>`;
+  }
+  if (match.confidence === "ambiguous" && match.candidates) {
+    return `<span class="donor-ambiguous" data-donor="${esc(name)}" tabindex="0"
+              title="Multiple filer matches — click to choose">${esc(name)} <span class="ambig-icon">⋯</span></span>`;
+  }
+  return esc(name);
+}
+
+// Preview popover state
+let _previewPopover = null;
+let _previewTimeout = null;
+
+function hidePreviewPopover() {
+  if (_previewPopover) {
+    _previewPopover.remove();
+    _previewPopover = null;
+  }
+}
+
+async function showPreviewPopover(slug, anchorEl) {
+  hidePreviewPopover();
+  const pop = document.createElement("div");
+  pop.className = "donor-preview-popover";
+  pop.innerHTML = '<div class="preview-loading">Loading…</div>';
+  document.body.appendChild(pop);
+  _previewPopover = pop;
+
+  // Position near the anchor
+  const rect = anchorEl.getBoundingClientRect();
+  pop.style.position = "fixed";
+  pop.style.left = Math.min(rect.right + 8, window.innerWidth - 320) + "px";
+  pop.style.top = Math.max(rect.top - 10, 8) + "px";
+
+  try {
+    const profile = await loadFilerProfile(slug);
+    if (_previewPopover !== pop) return; // stale
+
+    // Respect current filters
+    const hasDate = state.dateStart || state.dateEnd;
+    let stats;
+    if (hasDate) {
+      stats = statsFromTimeline(filterMonthRows(profile.timeline || []), profile.beginning_balances);
+    } else {
+      stats = {
+        totalIn: profile.total_in,
+        totalOut: profile.total_out,
+        cashOnHand: profile.cash_on_hand,
+      };
+    }
+
+    // Top 5 donors (respect date filter)
+    const years = yearsInRange();
+    const donors = years
+      ? mergeByYear(profile.top_donors_by_year || {}, years).slice(0, 5)
+      : (profile.top_donors || []).slice(0, 5);
+
+    pop.innerHTML = `
+      <div class="preview-header">${esc(profile.name)}</div>
+      <div class="preview-stat"><span>Contributions:</span><span>${fmt$(stats.totalIn)}</span></div>
+      <div class="preview-stat"><span>Expenditures:</span><span>${fmt$(stats.totalOut)}</span></div>
+      <div class="preview-stat"><span>Cash on Hand:</span><span>${fmt$(stats.cashOnHand)}</span></div>
+      ${donors.length ? '<div class="preview-donors-label">Top 5 Donors</div>' : ''}
+      ${donors.map(d => `<div class="preview-donor"><span>${esc(d.name)}</span><span>${fmt$(d.total)}</span></div>`).join("")}
+      <div class="preview-action">Click to view full details</div>
+    `;
+
+    // Reposition if it goes offscreen
+    const popRect = pop.getBoundingClientRect();
+    if (popRect.bottom > window.innerHeight) {
+      pop.style.top = Math.max(8, window.innerHeight - popRect.height - 8) + "px";
+    }
+    if (popRect.right > window.innerWidth) {
+      pop.style.left = Math.max(8, rect.left - popRect.width - 8) + "px";
+    }
+  } catch {
+    if (_previewPopover === pop) {
+      pop.innerHTML = '<div class="preview-loading">Could not load preview</div>';
+    }
+  }
+}
+
+// Ambiguous chooser popover
+function showAmbiguousChooser(donorName, anchorEl) {
+  hidePreviewPopover();
+  const match = lookupDonorFiler(donorName);
+  if (!match || match.confidence !== "ambiguous" || !match.candidates) return;
+
+  const pop = document.createElement("div");
+  pop.className = "donor-preview-popover donor-chooser";
+  pop.innerHTML = `
+    <div class="preview-header">Multiple filers match "${esc(donorName)}"</div>
+    <div class="chooser-list">
+      ${match.candidates.map(c =>
+        `<button class="chooser-item" data-slug="${esc(c.slug)}">${esc(c.name)}</button>`
+      ).join("")}
+    </div>
+    <div class="preview-action">Select a filer to view</div>
+  `;
+  document.body.appendChild(pop);
+  _previewPopover = pop;
+
+  const rect = anchorEl.getBoundingClientRect();
+  pop.style.position = "fixed";
+  pop.style.left = Math.min(rect.right + 8, window.innerWidth - 280) + "px";
+  pop.style.top = Math.max(rect.top - 10, 8) + "px";
+
+  pop.addEventListener("click", e => {
+    const btn = e.target.closest(".chooser-item");
+    if (!btn) return;
+    const slug = btn.dataset.slug;
+    hidePreviewPopover();
+    navigateToFiler(slug);
+  });
+}
+
+function navigateToFiler(slug) {
+  const entry = filerIndex.find(f => f.slug === slug);
+  if (!entry) return;
+  // Add this filer to selection and switch to overview
+  state.selectedFilers = [entry];
+  document.querySelectorAll(".chip").forEach(c => c.remove());
+  const chipRow = document.getElementById("chip-input-row");
+  const input = document.getElementById("filer-search-input");
+  const chip = document.createElement("div");
+  chip.className = "chip";
+  chip.innerHTML =
+    `<span class="chip-label">${esc(entry.name)}</span>` +
+    `<button class="chip-remove" data-slug="${esc(entry.slug)}" aria-label="Remove ${esc(entry.name)}">×</button>`;
+  chipRow.insertBefore(chip, input);
+  input.value = "";
+  document.getElementById("filter-clear-btn").hidden = false;
+  // Switch to overview tab
+  document.querySelectorAll(".tab-btn").forEach(b => {
+    b.classList.remove("active");
+    b.setAttribute("aria-selected", "false");
+  });
+  document.querySelectorAll(".tab-panel").forEach(p => {
+    p.classList.remove("active");
+    p.hidden = true;
+  });
+  const overviewBtn = document.querySelector('.tab-btn[data-tab="overview"]');
+  overviewBtn.classList.add("active");
+  overviewBtn.setAttribute("aria-selected", "true");
+  activeTab = "overview";
+  document.getElementById("tab-overview").classList.add("active");
+  document.getElementById("tab-overview").hidden = false;
+  renderActiveTab();
+}
+
+// Global delegated event handlers for donor links and previews
+document.addEventListener("click", e => {
+  // Handle donor-filer link clicks
+  const link = e.target.closest(".donor-filer-link");
+  if (link) {
+    e.preventDefault();
+    hidePreviewPopover();
+    navigateToFiler(link.dataset.slug);
+    return;
+  }
+  // Handle ambiguous donor clicks
+  const ambig = e.target.closest(".donor-ambiguous");
+  if (ambig) {
+    e.preventDefault();
+    showAmbiguousChooser(ambig.dataset.donor, ambig);
+    return;
+  }
+  // Click outside popover dismisses it
+  if (_previewPopover && !_previewPopover.contains(e.target)) {
+    hidePreviewPopover();
+  }
+});
+
+document.addEventListener("mouseenter", e => {
+  const link = e.target.closest(".donor-filer-link");
+  if (!link) return;
+  clearTimeout(_previewTimeout);
+  _previewTimeout = setTimeout(() => showPreviewPopover(link.dataset.slug, link), 200);
+}, true);
+
+document.addEventListener("mouseleave", e => {
+  const link = e.target.closest(".donor-filer-link");
+  if (!link) return;
+  clearTimeout(_previewTimeout);
+  // Delay hide so user can move to popover
+  _previewTimeout = setTimeout(() => {
+    if (_previewPopover && !_previewPopover.matches(":hover")) {
+      hidePreviewPopover();
+    }
+  }, 300);
+}, true);
+
+document.addEventListener("focusin", e => {
+  const link = e.target.closest(".donor-filer-link");
+  if (link) {
+    clearTimeout(_previewTimeout);
+    showPreviewPopover(link.dataset.slug, link);
+  }
+});
+
+document.addEventListener("focusout", e => {
+  const link = e.target.closest(".donor-filer-link");
+  if (link) {
+    clearTimeout(_previewTimeout);
+    _previewTimeout = setTimeout(hidePreviewPopover, 300);
+  }
+});
+
 // ── Sortable table helper ─────────────────────────────────────────────────────
 
 function buildSortableTable(tableId, rows, columns, searchEl = null) {
-  // columns: [{key, label, fmt, cls}]
+  // columns: [{key, label, fmt, cls, linkDonor}]
   const table = document.getElementById(tableId);
   if (!table) return;
   const tbody = table.querySelector("tbody");
@@ -579,7 +1008,12 @@ function buildSortableTable(tableId, rows, columns, searchEl = null) {
     tbody.innerHTML = sorted.map((row, i) => {
       const cells = columns.map(col => {
         const v = row[col.key];
-        const display = col.fmt ? col.fmt(v) : (v ?? "—");
+        let display;
+        if (col.linkDonor && v && donorFilerMap) {
+          display = renderDonorCell(v);
+        } else {
+          display = col.fmt ? col.fmt(v) : (v != null ? esc(String(v)) : "—");
+        }
         return `<td class="${col.cls || ""}">${display}</td>`;
       }).join("");
       return `<tr><td>${i + 1}</td>${cells}</tr>`;
@@ -814,7 +1248,8 @@ async function loadOverview() {
 function renderOverviewGlobal() {
   const hasDate = state.dateStart || state.dateEnd;
   if (hasDate) {
-    const { totalIn, totalInKind, totalOut, cashOnHand, count } = statsFromTimeline(filterMonthRows(timelineData || []));
+    const globalBeginBal = summaryData.global_beginning_balances || {};
+    const { totalIn, totalInKind, totalOut, cashOnHand, count } = statsFromTimeline(filterMonthRows(timelineData || []), globalBeginBal);
     document.getElementById("stat-contributions").textContent = fmt$(totalIn);
     document.getElementById("stat-inkind").textContent        = fmt$(totalInKind);
     document.getElementById("stat-expenditures").textContent  = fmt$(totalOut);
@@ -824,11 +1259,17 @@ function renderOverviewGlobal() {
     document.getElementById("stat-contributions").textContent = fmt$(summaryData.total_contributions);
     document.getElementById("stat-inkind").textContent        = fmt$(summaryData.total_inkind || 0);
     document.getElementById("stat-expenditures").textContent  = fmt$(summaryData.total_expenditures);
-    const coh = summaryData.total_contributions - summaryData.total_expenditures;
+    const coh = summaryData.global_cash_on_hand != null
+      ? summaryData.global_cash_on_hand
+      : summaryData.total_contributions - summaryData.total_expenditures;
     document.getElementById("stat-cash-on-hand").textContent  = fmt$(coh);
     document.getElementById("stat-transactions").textContent  = fmtNum(summaryData.total_transactions);
   }
   updateCohIndicator(null);  // No single-filer indicator for global view
+  const cohNote = document.getElementById("coh-note");
+  if (cohNote) cohNote.textContent = summaryData.global_beginning_balances
+    ? "Includes ORESTAR beginning balances"
+    : "";
   document.getElementById("stat-cards").hidden             = false;
   document.getElementById("filer-comparison-grid").hidden  = true;
   document.getElementById("overview-donut-box").hidden     = false;
@@ -863,31 +1304,104 @@ function renderOverviewGlobal() {
   }
 
   document.getElementById("filer-comparison-grid").hidden = true;
+  renderAcctSummary(null);  // No per-filer account summary in global view
   fitStatCards();
+}
+
+// ── Discrepancy severity thresholds (absolute dollar difference) ──────────
+function discrepancySeverity(absDisc) {
+  if (absDisc < 500) return "gray";
+  if (absDisc <= 2000) return "yellow";
+  return "red";
+}
+
+function formatTimestamp(unixTs) {
+  if (!unixTs) return "unknown";
+  const d = new Date(unixTs * 1000);
+  return d.toLocaleString("en-US", {
+    hour: "numeric", minute: "2-digit", hour12: true,
+    month: "long", day: "numeric", year: "numeric",
+  });
 }
 
 function updateCohIndicator(profile) {
   const ind = document.getElementById("coh-indicator");
   if (!ind) return;
+
+  // Remove any existing popover
+  const existing = ind.parentElement.querySelector(".disc-popover");
+  if (existing) existing.remove();
+
   if (!profile) {
     ind.hidden = true;
     return;
   }
   const src = profile.cash_on_hand_source;
   const disc = profile.orestar_discrepancy || 0;
-  if (src === "orestar" && Math.abs(disc) > 0.01) {
+  const absDisc = Math.abs(disc);
+
+  if (src === "orestar" && absDisc > 0.01) {
+    const severity = discrepancySeverity(absDisc);
     ind.hidden = false;
-    ind.className = "coh-indicator coh-warn";
+    ind.className = `coh-indicator coh-warn-${severity}`;
     ind.textContent = "\u26a0";
-    ind.title = `ORESTAR discrepancy: our data differs by ${fmt$(Math.abs(disc))} from ORESTAR's Ending Cash Balance for ${profile.orestar_year}. This may indicate missing transactions.`;
+    ind.setAttribute("tabindex", "0");
+    ind.setAttribute("role", "button");
+    ind.setAttribute("aria-label", `ORESTAR discrepancy: ${fmt$(absDisc)}`);
+    ind.removeAttribute("title");
+
+    // Build rich popover
+    const acct = profile.orestar_account_summary || {};
+    const orestarEnding = acct.ending_cash_balance != null ? acct.ending_cash_balance : null;
+    const scrapeTs = acct.scrape_ts || 0;
+
+    const popover = document.createElement("div");
+    popover.className = "disc-popover";
+    popover.setAttribute("role", "tooltip");
+    popover.innerHTML = `
+      <div class="disc-row"><span>ORESTAR ending cash balance:</span><span>${orestarEnding != null ? fmt$(orestarEnding) : "N/A"}</span></div>
+      <div class="disc-row"><span>Website cash on hand:</span><span>${fmt$(profile.cash_on_hand)}</span></div>
+      <div class="disc-row disc-diff"><span>Difference:</span><span>${disc >= 0 ? "+" : ""}${fmt$(disc)}</span></div>
+      <div class="disc-ts">ORESTAR account summary scraped at: ${formatTimestamp(scrapeTs)}</div>
+    `;
+    popover.hidden = true;
+    ind.parentElement.style.position = "relative";
+    ind.parentElement.appendChild(popover);
+
+    function showPopover() { popover.hidden = false; }
+    function hidePopover() { popover.hidden = true; }
+    ind.addEventListener("mouseenter", showPopover);
+    ind.addEventListener("mouseleave", hidePopover);
+    ind.addEventListener("focus", showPopover);
+    ind.addEventListener("blur", hidePopover);
+    ind.addEventListener("click", () => { popover.hidden = !popover.hidden; });
   } else if (src === "calculated") {
     ind.hidden = false;
     ind.className = "coh-indicator coh-estimated";
     ind.textContent = "EST";
+    ind.setAttribute("tabindex", "0");
     ind.title = "Estimated: no ORESTAR beginning balance available. Cash on hand is calculated from transactions only.";
   } else {
     ind.hidden = true;
   }
+}
+
+// Build discrepancy indicator HTML for multi-filer cards (inline)
+function cohIndicatorHTML(profile) {
+  const src = profile.cash_on_hand_source;
+  const disc = profile.orestar_discrepancy || 0;
+  const absDisc = Math.abs(disc);
+  if (src === "calculated") {
+    return '<span class="coh-indicator coh-estimated" tabindex="0" title="Estimated: no ORESTAR beginning balance available">EST</span>';
+  }
+  if (absDisc > 0.01) {
+    const severity = discrepancySeverity(absDisc);
+    const acct = profile.orestar_account_summary || {};
+    const tsText = formatTimestamp(acct.scrape_ts || 0);
+    const tip = `ORESTAR ending: ${fmt$(acct.ending_cash_balance || 0)} | Website: ${fmt$(profile.cash_on_hand)} | Diff: ${fmt$(disc)} | Scraped: ${tsText}`;
+    return `<span class="coh-indicator coh-warn-${severity}" tabindex="0" title="${esc(tip)}">\u26a0</span>`;
+  }
+  return '';
 }
 
 function renderOverviewSingleFiler(profile) {
@@ -908,6 +1422,10 @@ function renderOverviewSingleFiler(profile) {
     document.getElementById("stat-transactions").textContent  = fmtNum(profile.tran_count);
   }
   updateCohIndicator(profile);
+  const cohNote = document.getElementById("coh-note");
+  if (cohNote) cohNote.textContent = profile.cash_on_hand_source === "orestar"
+    ? "Includes ORESTAR beginning balances"
+    : "Estimated from transactions only";
   document.getElementById("stat-cards").hidden             = false;
   document.getElementById("filer-comparison-grid").hidden  = true;
   document.getElementById("overview-donut-box").hidden     = false;
@@ -933,6 +1451,7 @@ function renderOverviewSingleFiler(profile) {
   }
 
   document.getElementById("filer-comparison-grid").hidden = true;
+  renderAcctSummary(profile.orestar_account_summary || null);
   fitStatCards();
 }
 
@@ -982,11 +1501,7 @@ function renderOverviewMultiFiler(profiles) {
       ? statsFromTimeline(filterMonthRows(p.timeline || []), p.beginning_balances)
       : { totalIn: p.total_in, totalInKind: p.total_inkind || 0, totalOut: p.total_out, cashOnHand: p.cash_on_hand, count: p.tran_count };
     const tranCount = s.count ? fmtNum(s.count) : "—";
-    const cohInd = p.cash_on_hand_source === "calculated"
-      ? '<span class="coh-indicator coh-estimated" title="Estimated: no ORESTAR beginning balance available">EST</span>'
-      : (Math.abs(p.orestar_discrepancy || 0) > 0.01
-        ? `<span class="coh-indicator coh-warn" title="ORESTAR discrepancy: ${fmt$(Math.abs(p.orestar_discrepancy))}">\u26a0</span>`
-        : '');
+    const cohInd = cohIndicatorHTML(p);
     return `
     <div class="filer-card">
       <div class="filer-card-name">${esc(p.name)}</div>
@@ -1004,6 +1519,7 @@ function renderOverviewMultiFiler(profiles) {
       </div>
     </div>`;
   }).join("");
+  renderAcctSummary(null);  // Hide in multi-filer mode
 }
 
 // ── Donors ────────────────────────────────────────────────────────────────────
@@ -1012,6 +1528,7 @@ async function loadDonors() {
   if (!donorsData) {
     donorsData = await fetchJSON(`${DATA}/top_donors.json`);
   }
+  await ensureDonorFilerMap();
 
   const n = state.selectedFilers.length;
   const years = yearsInRange();
@@ -1083,7 +1600,7 @@ async function loadDonors() {
         top20.map(r => r.name), top20.map(r => r.total),
         "Total Contributions", "#3182ce");
       buildSortableTable("table-donors", allTimeDonors, [
-        { key: "name",  label: "Donor" },
+        { key: "name",  label: "Donor", linkDonor: true },
         { key: "total", label: "Total ($)", fmt: fmt$, cls: "num" },
       ]);
     }
@@ -1095,7 +1612,7 @@ async function loadDonors() {
     const filerDonorNames = new Set(allTimeDonors.map(r => r.name.toLowerCase()));
     const untapped = globalDonors.filter(r => !filerDonorNames.has(r.name.toLowerCase()));
     buildSortableTable("table-untapped", untapped, [
-      { key: "name",  label: "Donor" },
+      { key: "name",  label: "Donor", linkDonor: true },
       { key: "total", label: "Global Total ($)", fmt: fmt$, cls: "num" },
     ]);
 
@@ -1179,7 +1696,7 @@ async function loadDonors() {
       const tbody = document.querySelector("#table-donors-multi tbody");
       tbody.innerHTML = sorted.map((row, i) => `<tr>
         <td>${i + 1}</td>
-        <td>${esc(row.name)}</td>
+        <td>${donorFilerMap ? renderDonorCell(row.name) : esc(row.name)}</td>
         ${filerNames.map(n => `<td class="num">${row[n] !== undefined ? fmt$(row[n]) : "—"}</td>`).join("")}
         <td class="num">${fmt$(row.total)}</td>
       </tr>`).join("");
@@ -1216,7 +1733,7 @@ function renderGlobalDonorsView(years) {
       top20.map(r => r.name), top20.map(r => r.total),
       "Total Contributions", "#3182ce");
     buildSortableTable("table-donors", rows, [
-      { key: "name",  label: "Donor" },
+      { key: "name",  label: "Donor", linkDonor: true },
       { key: "total", label: "Total ($)", fmt: fmt$, cls: "num" },
     ]);
   } else {
@@ -1277,7 +1794,7 @@ function renderDonorsByYear(byYear, allTime) {
     const tbody = document.querySelector("#table-donors-by-year tbody");
     tbody.innerHTML = sorted.map((row, i) => `<tr>
       <td>${i + 1}</td>
-      <td>${esc(row.name)}</td>
+      <td>${donorFilerMap ? renderDonorCell(row.name) : esc(row.name)}</td>
       ${years.map(yr => `<td class="num">${row[yr] != null ? fmt$(row[yr]) : "—"}</td>`).join("")}
       <td class="num">${fmt$(row.total)}</td>
     </tr>`).join("");
@@ -1321,7 +1838,7 @@ function renderDonors(year) {
   const searchEl = document.getElementById("donors-summary-search");
   if (searchEl) searchEl.value = "";
   buildSortableTable("table-donors", rows, [
-    { key: "name",  label: "Donor" },
+    { key: "name",  label: "Donor", linkDonor: true },
     { key: "total", label: "Total ($)", fmt: fmt$, cls: "num" },
   ], searchEl);
 }
@@ -1610,6 +2127,8 @@ const loaders = {
   } catch (e) {
     filerIndex = [];
   }
+  // Load donor→filer map in background (non-blocking)
+  ensureDonorFilerMap().catch(() => {});
   initFilerSelector();
   renderActiveTab();
 })();

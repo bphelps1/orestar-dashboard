@@ -17,7 +17,7 @@
     <h1>Oregon Campaign Finance</h1>
     <p class="subtitle">
       Data sourced from <a href="https://secure.sos.state.or.us/orestar/" target="_blank" rel="noopener">ORESTAR</a>
-      &mdash; updated daily &mdash; cash contributions &amp; expenditures, 2017&ndash;present
+      &mdash; updated daily &mdash; cash contributions &amp; expenditures, 2006&ndash;present
     </p>
   </div>
 </header>
@@ -79,12 +79,19 @@
       <div class="card">
         <div class="card-label">Cash on Hand <span id="coh-indicator" class="coh-indicator" title="" hidden></span></div>
         <div class="card-value" id="stat-cash-on-hand">—</div>
+        <div class="card-note" id="coh-note"></div>
       </div>
       <div class="card">
         <div class="card-label">Total Transactions</div>
         <div class="card-value" id="stat-transactions">—</div>
       </div>
     </div>
+
+    <!-- Collapsible Account Summary Details -->
+    <details class="acct-summary-details" id="acct-summary-details">
+      <summary class="acct-summary-toggle">Account Summary Details</summary>
+      <div class="acct-summary-grid" id="acct-summary-grid"></div>
+    </details>
 
     <div class="chart-box" id="overview-donut-box">
       <h2 id="overview-donut-title">Contributions by Donor Type</h2>

@@ -653,8 +653,8 @@ def aggregate(df: pd.DataFrame) -> None:
         "num_contributions":    int(len(cash_contribs)),
         "num_inkind":           int(len(inkind_contribs)),
         "num_expenditures":     int(len(expenditures)),
-        "date_range_start":     df["filed_date"].min().strftime("%Y-%m-%d") if len(df) else "",
-        "date_range_end":       df["filed_date"].max().strftime("%Y-%m-%d") if len(df) else "",
+        "date_range_start":     _eff_date.min().strftime("%Y-%m-%d") if len(df) else "",
+        "date_range_end":       _eff_date.max().strftime("%Y-%m-%d") if len(df) else "",
         "last_updated":         datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     _write_json("summary.json", summary)
@@ -813,8 +813,13 @@ def aggregate(df: pd.DataFrame) -> None:
     _write_json("recent_transactions.json", recent.to_dict(orient="records"))
 
     # ── per-filer index + detail files ───────────────────────────────────────
-    aggregate_filers(df, cash_contribs, inkind_contribs, expenditures,
-                     other_receipts, other_disburse, filer_col, contrib_col)
+    global_coh_data = aggregate_filers(df, cash_contribs, inkind_contribs, expenditures,
+                                       other_receipts, other_disburse, filer_col, contrib_col)
+
+    # Update summary.json with correct global cash-on-hand (sum of per-filer COH)
+    summary["global_cash_on_hand"] = global_coh_data["global_cash_on_hand"]
+    summary["global_beginning_balances"] = global_coh_data["global_beginning_balances"]
+    _write_json("summary.json", summary)
 
     log.info("Aggregation complete. JSON files written to %s", AGG_DIR)
 
@@ -911,13 +916,29 @@ def scrape_account_summaries(
 
             result = {
                 "year": year,
+                # Contributions section
                 "beginning_balance": _parse_dollar(html, "Beginning Balance (Previous Year)") or 0.0,
                 "ending_cash_balance": ending,
                 "orestar_contributions": _parse_dollar(html, "Cash Contributions") or 0.0,
-                "orestar_other_receipts": _parse_dollar(html, "Other Receipts") or 0.0,
+                "loans_received": _parse_dollar(html, "Loans Received (non-exempt)") or 0.0,
+                "inkind_contributions": _parse_dollar(html, "In-Kind Contributions") or 0.0,
+                # Expenditures section
                 "orestar_expenditures": _parse_dollar(html, "Cash Expenditures") or 0.0,
+                "loan_payments": _parse_dollar(html, "Loan Payments (non-exempt)") or 0.0,
+                "inkind_expenditures": _parse_dollar(html, "In-Kind Expenditures") or 0.0,
+                # Cash Balance section
+                "orestar_other_receipts": _parse_dollar(html, "Other Receipts") or 0.0,
+                "loans_received_exempt": _parse_dollar(html, "Loans Received (exempt)") or 0.0,
                 "orestar_other_disbursements": _parse_dollar(html, "Other Disbursements") or 0.0,
+                "loan_payments_exempt": _parse_dollar(html, "Loan Payments (exempt)") or 0.0,
                 "balance_adjustments": _parse_dollar(html, "Balance Adjustments") or 0.0,
+                # Financial Status section
+                "cash_balance_fs": _parse_dollar(html, "Cash Balance") or 0.0,
+                "accounts_receivable": _parse_dollar(html, "Accounts Receivable") or 0.0,
+                "total_outstanding_loans": _parse_dollar(html, "Total Outstanding Loans") or 0.0,
+                "outstanding_personal_expenditures": _parse_dollar(html, "Outstanding Personal Expenditures") or 0.0,
+                "accounts_payable": _parse_dollar(html, "Accounts Payable") or 0.0,
+                "balance_deficit": _parse_dollar(html, "Balance Deficit") or 0.0,
             }
             return fid, result
 
@@ -938,14 +959,14 @@ def scrape_account_summaries(
         with open(cache_path, "w") as f:
             json.dump(cache, f, separators=(",", ":"))
 
-    # Return full summary dicts (excluding the cache timestamp)
+    # Return full summary dicts (including scrape timestamp for frontend display)
     result = {}
     for fid, entry in cache.items():
         if "ending_cash_balance" in entry:
-            result[fid] = {k: v for k, v in entry.items() if k != "ts"}
+            result[fid] = dict(entry)  # keep all fields including "ts"
         elif "balance" in entry:
             # Legacy cache entry (old format) — treat as ending balance only
-            result[fid] = {"ending_cash_balance": entry["balance"], "year": 0, "beginning_balance": 0.0}
+            result[fid] = {"ending_cash_balance": entry["balance"], "year": 0, "beginning_balance": 0.0, "ts": entry.get("ts", 0)}
     return result
 
 
@@ -1059,6 +1080,7 @@ def aggregate_filers(
             log.debug("Removed stale filer file: %s", stale.name)
 
     index_rows = []
+    _global_beginning_balances: dict[str, float] = {}  # year → sum of per-filer beginning balances
     log.info("Generating per-filer detail files for %d filers…", len(all_filer_names))
 
     for name in all_filer_names:
@@ -1163,6 +1185,12 @@ def aggregate_filers(
                     beginning_balances[yr_s] = round(running, 2)
                     running += yearly_nets.get(yr_s, 0.0)
 
+        # Accumulate global beginning balances (sum across all filers per year)
+        for yr_s, bal in beginning_balances.items():
+            _global_beginning_balances[yr_s] = round(
+                _global_beginning_balances.get(yr_s, 0.0) + bal, 2
+            )
+
         # Timeline — includes other_receipts and other_disbursements for proper
         # cash-on-hand calculation in the frontend
         c_monthly  = monthly_sum(filer_contrib, "contributions")
@@ -1247,6 +1275,33 @@ def aggregate_filers(
                 for mo in sorted(filer_contrib["month"].dropna().unique()):
                     by_type_by_month_filer[str(mo)] = _filer_type_rows(filer_contrib[filer_contrib["month"] == mo])
 
+        # Build ORESTAR account summary block for frontend display
+        _acct_summary = {}
+        if orestar_info and orestar_info.get("year", 0) > 0:
+            _acct_summary = {
+                "year": orestar_info["year"],
+                "beginning_balance": orestar_info.get("beginning_balance", 0.0),
+                "ending_cash_balance": orestar_info.get("ending_cash_balance", 0.0),
+                "orestar_contributions": orestar_info.get("orestar_contributions", 0.0),
+                "orestar_other_receipts": orestar_info.get("orestar_other_receipts", 0.0),
+                "orestar_expenditures": orestar_info.get("orestar_expenditures", 0.0),
+                "orestar_other_disbursements": orestar_info.get("orestar_other_disbursements", 0.0),
+                "balance_adjustments": orestar_info.get("balance_adjustments", 0.0),
+                "loans_received": orestar_info.get("loans_received", 0.0),
+                "loans_received_exempt": orestar_info.get("loans_received_exempt", 0.0),
+                "loan_payments": orestar_info.get("loan_payments", 0.0),
+                "loan_payments_exempt": orestar_info.get("loan_payments_exempt", 0.0),
+                "inkind_contributions": orestar_info.get("inkind_contributions", 0.0),
+                "inkind_expenditures": orestar_info.get("inkind_expenditures", 0.0),
+                "cash_balance_fs": orestar_info.get("cash_balance_fs", 0.0),
+                "accounts_receivable": orestar_info.get("accounts_receivable", 0.0),
+                "total_outstanding_loans": orestar_info.get("total_outstanding_loans", 0.0),
+                "outstanding_personal_expenditures": orestar_info.get("outstanding_personal_expenditures", 0.0),
+                "accounts_payable": orestar_info.get("accounts_payable", 0.0),
+                "balance_deficit": orestar_info.get("balance_deficit", 0.0),
+                "scrape_ts": orestar_info.get("ts", 0),
+            }
+
         detail = {
             "name": name, "slug": slug,
             "total_in": total_in, "total_inkind": total_inkind,
@@ -1256,6 +1311,7 @@ def aggregate_filers(
             "cash_on_hand_source": cash_on_hand_source,
             "orestar_discrepancy": orestar_discrepancy,
             "orestar_year": orestar_year,
+            "orestar_account_summary": _acct_summary,
             "beginning_balances": beginning_balances,
             "timeline": timeline,
             "top_donors": top_donors_list,
@@ -1271,8 +1327,12 @@ def aggregate_filers(
         with open(out_path, "w") as f:
             json.dump(detail, f, separators=(",", ":"), default=str)
 
+        _fid_for_index = ""
+        if _filer_id_col:
+            _fid_for_index = _name_to_fid.get(name, "")
         index_rows.append({
             "slug": slug, "name": name,
+            "filer_id": _fid_for_index,
             "total_in": total_in, "total_inkind": total_inkind,
             "total_out": total_out,
             "cash_on_hand": cash_on_hand,
@@ -1285,6 +1345,93 @@ def aggregate_filers(
         "Wrote filer_index.json (%d filers) and %d filer detail files",
         len(index_rows), len(index_rows),
     )
+
+    # ── Build donor → filer mapping for clickable donor links ──────────────
+    # For each filer, build a lookup by normalized name and by filer ID.
+    # Then check top donor names against filer names for linking.
+    _norm_cache: dict[str, str] = {}  # normalized → canonical filer name
+
+    def _normalize_name(n: str) -> str:
+        """Normalize a name for matching: lowercase, strip punctuation/whitespace."""
+        import re
+        n = n.lower().strip()
+        n = re.sub(r"[''`]s\b", "s", n)  # possessives
+        n = re.sub(r"[^a-z0-9\s]", "", n)  # strip punctuation
+        n = re.sub(r"\s+", " ", n).strip()
+        # Common suffixes
+        for suffix in [" pac", " committee", " cmte", " comm", " political action committee",
+                       " for oregon", " for or"]:
+            if n.endswith(suffix):
+                n = n[:-len(suffix)].strip()
+        return n
+
+    filer_by_norm: dict[str, list] = {}  # normalized name → list of {slug, name, filer_id}
+    filer_by_fid: dict[str, dict] = {}   # filer_id → {slug, name}
+
+    for row in index_rows:
+        norm = _normalize_name(row["name"])
+        entry = {"slug": row["slug"], "name": row["name"], "filer_id": row.get("filer_id", "")}
+        filer_by_norm.setdefault(norm, []).append(entry)
+        if entry["filer_id"]:
+            filer_by_fid[entry["filer_id"]] = entry
+
+    # Collect all unique donor names from top_donors.json data
+    # (We'll read it back since it was already written)
+    donor_filer_map = {}  # donor_name_lower → {slug, name, confidence}
+    top_donors_path = AGG_DIR / "top_donors.json"
+    if top_donors_path.exists():
+        import json as _json
+        with open(top_donors_path) as _f:
+            _td = _json.load(_f)
+        all_donor_names = set()
+        for d in _td.get("all_time", []):
+            all_donor_names.add(d["name"])
+        for yr_list in _td.get("by_year", {}).values():
+            for d in yr_list:
+                all_donor_names.add(d["name"])
+
+        for donor_name in all_donor_names:
+            dn_lower = donor_name.lower().strip()
+            dn_norm = _normalize_name(donor_name)
+
+            # 1. Exact name match (case-insensitive)
+            exact_matches = [r for r in index_rows if r["name"].lower().strip() == dn_lower]
+            if len(exact_matches) == 1:
+                donor_filer_map[dn_lower] = {
+                    "slug": exact_matches[0]["slug"],
+                    "name": exact_matches[0]["name"],
+                    "confidence": "high",
+                }
+                continue
+
+            # 2. Normalized name match
+            norm_matches = filer_by_norm.get(dn_norm, [])
+            if len(norm_matches) == 1:
+                donor_filer_map[dn_lower] = {
+                    "slug": norm_matches[0]["slug"],
+                    "name": norm_matches[0]["name"],
+                    "confidence": "high",
+                }
+                continue
+
+            # 3. Multiple matches → ambiguous
+            if len(norm_matches) > 1 or len(exact_matches) > 1:
+                matches = exact_matches if len(exact_matches) > 1 else norm_matches
+                donor_filer_map[dn_lower] = {
+                    "candidates": [{"slug": m["slug"], "name": m["name"]} for m in matches],
+                    "confidence": "ambiguous",
+                }
+
+    _write_json("donor_filer_map.json", donor_filer_map)
+    log.info("Wrote donor_filer_map.json (%d linked, %d ambiguous)",
+             sum(1 for v in donor_filer_map.values() if v.get("confidence") == "high"),
+             sum(1 for v in donor_filer_map.values() if v.get("confidence") == "ambiguous"))
+
+    # Return global COH data so aggregate() can update summary.json
+    return {
+        "global_cash_on_hand": round(sum(r["cash_on_hand"] for r in index_rows), 2),
+        "global_beginning_balances": _global_beginning_balances,
+    }
 
 
 def _write_json(filename: str, data) -> None:
