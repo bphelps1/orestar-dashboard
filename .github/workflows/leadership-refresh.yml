@@ -32,7 +32,7 @@ jobs:
           cache-dependency-path: scraper/requirements.txt
 
       - name: Install Python dependencies
-        run: pip install -r scraper/requirements.txt supabase
+        run: pip install requests beautifulsoup4 lxml supabase
 
       - name: Refresh leadership roles
         run: python scraper/refresh_leadership.py
