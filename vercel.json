@@ -1,0 +1,22 @@
+{
+  "outputDirectory": "docs",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/:path*" },
+    { "source": "/recommend", "destination": "/recommend.html" },
+    { "source": "/admin/:path*", "destination": "/admin/:path*.html" }
+  ],
+  "headers": [
+    {
+      "source": "/data/aggregated/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=300, s-maxage=3600" }
+      ]
+    },
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" }
+      ]
+    }
+  ]
+}

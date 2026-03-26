@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Donor Recommendations — Oregon Campaign Finance</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="recommend.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+  <!-- SheetJS for Excel export -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <h1>Donor Recommendations</h1>
+    <p class="subtitle">
+      <a href="/">← Back to Dashboard</a> &mdash;
+      Find recommended donors for a candidate committee
+    </p>
+  </div>
+</header>
+
+<!-- ══════ Login Form ══════ -->
+<div id="login-form" class="login-container">
+  <div class="login-box">
+    <h2>Sign In</h2>
+    <p class="login-desc">This tool is restricted to authorized users.</p>
+    <form id="login-form-el" autocomplete="on">
+      <label for="login-email">Email</label>
+      <input type="email" id="login-email" required autocomplete="email" />
+      <label for="login-password">Password</label>
+      <input type="password" id="login-password" required autocomplete="current-password" />
+      <button type="submit" class="btn-primary" id="login-btn">Sign In</button>
+      <p class="login-error" id="login-error" hidden></p>
+    </form>
+  </div>
+</div>
+
+<!-- ══════ App Content (hidden until authenticated) ══════ -->
+<main id="app-content" hidden>
+
+  <div class="toolbar">
+    <span id="user-info"></span>
+    <button class="btn-small" id="sign-out-btn">Sign Out</button>
+  </div>
+
+  <!-- Search -->
+  <section class="search-section">
+    <div class="search-box">
+      <label for="filer-search">Search for a candidate committee:</label>
+      <input type="text" id="filer-search" placeholder="Committee name or candidate name…"
+             autocomplete="off" />
+      <ul id="filer-results" class="filer-results-dropdown" hidden></ul>
+    </div>
+    <div id="selected-filer-info" class="selected-filer-info" hidden></div>
+  </section>
+
+  <!-- Cycle selector -->
+  <section id="cycle-section" hidden>
+    <div class="controls-bar">
+      <label for="cycle-select">Election Cycle:</label>
+      <select id="cycle-select"></select>
+      <button class="btn-primary" id="run-btn">Generate Recommendations</button>
+    </div>
+  </section>
+
+  <!-- Status -->
+  <div id="status-msg" class="status-msg" hidden></div>
+
+  <!-- Results -->
+  <section id="results-section" hidden>
+    <div class="results-header">
+      <h2 id="results-title">Recommendations</h2>
+      <div class="export-btns">
+        <button class="btn-small" id="export-csv">Export CSV</button>
+        <button class="btn-small" id="export-xlsx">Export Excel</button>
+      </div>
+    </div>
+
+    <div class="results-summary" id="results-summary"></div>
+
+    <div class="results-filters">
+      <input type="search" id="results-search" class="table-search"
+             placeholder="Filter donors…" />
+      <select id="tier-filter">
+        <option value="">All tiers</option>
+        <option value="A">Tier A (strong)</option>
+        <option value="B">Tier B (good)</option>
+        <option value="C">Tier C (moderate)</option>
+      </select>
+    </div>
+
+    <div class="table-wrapper">
+      <table id="rec-table" class="data-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th class="sortable" data-col="donor">Donor</th>
+            <th class="sortable num" data-col="score">Score</th>
+            <th class="sortable" data-col="tier">Tier</th>
+            <th class="sortable num" data-col="already_given">Already Given</th>
+            <th class="sortable num" data-col="target_ask">Target Ask</th>
+            <th class="sortable num" data-col="remaining_ask">Remaining Ask</th>
+            <th class="sortable num" data-col="comp_range">Comparable Range</th>
+            <th>Why Recommended</th>
+          </tr>
+        </thead>
+        <tbody id="rec-tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- Expandable row detail template -->
+    <div id="donor-detail-panel" class="donor-detail-panel" hidden>
+      <h3 id="detail-donor-name"></h3>
+      <div id="detail-content"></div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p>Oregon Campaign Finance &mdash; Donor Recommendation Tool</p>
+</footer>
+
+<script src="lib/supabase.js"></script>
+<script src="recommend.js"></script>
+</body>
+</html>

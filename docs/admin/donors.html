@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Donor Dedup Admin — Oregon Campaign Finance</title>
+  <link rel="stylesheet" href="../style.css" />
+  <link rel="stylesheet" href="../recommend.css" />
+  <link rel="stylesheet" href="donors.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <h1>Donor Identity Admin</h1>
+    <p class="subtitle">
+      <a href="/">← Dashboard</a> &mdash;
+      <a href="/recommend">Recommendations</a> &mdash;
+      Review and merge duplicate donor identities
+    </p>
+  </div>
+</header>
+
+<!-- Login -->
+<div id="login-form" class="login-container">
+  <div class="login-box">
+    <h2>Sign In</h2>
+    <p class="login-desc">Admin access required.</p>
+    <form id="login-form-el" autocomplete="on">
+      <label for="login-email">Email</label>
+      <input type="email" id="login-email" required autocomplete="email" />
+      <label for="login-password">Password</label>
+      <input type="password" id="login-password" required autocomplete="current-password" />
+      <button type="submit" class="btn-primary" id="login-btn">Sign In</button>
+      <p class="login-error" id="login-error" hidden></p>
+    </form>
+  </div>
+</div>
+
+<!-- App -->
+<main id="app-content" hidden>
+
+  <div class="toolbar">
+    <span id="user-info"></span>
+    <button class="btn-small" id="sign-out-btn">Sign Out</button>
+  </div>
+
+  <!-- Pending merges -->
+  <section class="admin-section">
+    <h2>Pending Duplicate Clusters</h2>
+    <p class="section-desc">Probable duplicates identified by the normalization engine. Review and merge or reject.</p>
+    <div id="pending-list" class="cluster-list"></div>
+    <p id="pending-empty" class="empty-msg" hidden>No pending clusters.</p>
+  </section>
+
+  <!-- Merge history -->
+  <section class="admin-section">
+    <h2>Merge History</h2>
+    <p class="section-desc">Previously merged donors. Merges can be undone.</p>
+    <div id="merge-log" class="merge-log"></div>
+    <p id="log-empty" class="empty-msg" hidden>No merge history yet.</p>
+  </section>
+
+  <!-- Manual search + merge -->
+  <section class="admin-section">
+    <h2>Manual Donor Search</h2>
+    <div class="search-box" style="max-width:400px">
+      <input type="text" id="donor-search" placeholder="Search donor name…" />
+    </div>
+    <div id="donor-search-results" class="donor-search-results"></div>
+  </section>
+
+</main>
+
+<footer>
+  <p>Oregon Campaign Finance — Donor Identity Admin</p>
+</footer>
+
+<script src="../lib/supabase.js"></script>
+<script src="donors.js"></script>
+</body>
+</html>
