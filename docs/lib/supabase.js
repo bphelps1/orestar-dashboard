@@ -10,8 +10,8 @@
  */
 
 // These will be replaced by actual values when you create the Supabase project
-const SUPABASE_URL  = window.__SUPABASE_URL  || "https://YOUR_PROJECT.supabase.co";
-const SUPABASE_ANON = window.__SUPABASE_ANON || "YOUR_ANON_KEY";
+const SUPABASE_URL  = window.__SUPABASE_URL  || "https://zkyvnprygbfywniisugi.supabase.co";
+const SUPABASE_ANON = window.__SUPABASE_ANON || "sb_publishable_8tWa4xOZ6i0NZzkq4hr9xw_Z9mADjQv";
 
 // Load Supabase client from CDN
 let _supabaseClient = null;
