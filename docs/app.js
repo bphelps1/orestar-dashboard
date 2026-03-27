@@ -453,13 +453,23 @@ const CALC_GROUPS = [
  * the ORESTAR account summary page. The only exception is the first-year
  * beginning balance (the anchor).
  */
-function buildCalcSummary(profile) {
+/**
+ * Build a calculated account summary, optionally filtered to a single year.
+ * @param {object} profile - The filer's full profile JSON
+ * @param {string} [year] - Optional year string (e.g. "2024") to filter to
+ */
+function buildCalcSummary(profile, year) {
   const timeline = profile.timeline || [];
   if (!timeline.length) return null;
 
-  // Sum transaction-based values from the timeline
+  // Filter timeline rows if year is specified
+  const rows = year
+    ? timeline.filter(r => r.month && r.month.startsWith(year))
+    : timeline;
+
+  // Sum transaction-based values from the (filtered) timeline
   let cashContrib = 0, inkind = 0, cashExpend = 0, otherReceipts = 0, otherDisburse = 0;
-  for (const row of timeline) {
+  for (const row of rows) {
     cashContrib   += row.contributions       || 0;
     inkind        += row.inkind              || 0;
     cashExpend    += row.expenditures        || 0;
@@ -467,20 +477,48 @@ function buildCalcSummary(profile) {
     otherDisburse += row.other_disbursements || 0;
   }
 
-  // Beginning balance: only use ORESTAR anchor for pre-2006 filers.
-  // Filers whose data starts after 2006 have all transactions in our data,
-  // so their beginning balance is $0 (no pre-existing cash to account for).
+  // Beginning balance
   const beginBalances = profile.beginning_balances || {};
-  const sortedYears = Object.keys(beginBalances).sort();
-  const firstYear = sortedYears[0] || "";
-  const beginBal = firstYear ? (beginBalances[firstYear] || 0) : 0;
+  let beginBal;
+  if (year) {
+    // For a specific year, use that year's beginning balance
+    beginBal = beginBalances[year] || 0;
+  } else {
+    // All time: use the first year's beginning balance
+    const sortedYears = Object.keys(beginBalances).sort();
+    const firstYear = sortedYears[0] || "";
+    beginBal = firstYear ? (beginBalances[firstYear] || 0) : 0;
+  }
 
   // Our calculated ending balance
   const endingCalc = beginBal + cashContrib + otherReceipts - cashExpend - otherDisburse;
 
-  // ORESTAR-reported values (for comparison only)
-  const orestar = profile.orestar_account_summary || {};
-  const orestarEnding = orestar.ending_cash_balance != null ? orestar.ending_cash_balance : null;
+  // ORESTAR-reported values (for comparison / validation)
+  // If a specific year is selected, use the per-year ORESTAR data
+  const orestarYearly = profile.orestar_yearly || {};
+  const orestarYear = year ? (orestarYearly[year] || null) : null;
+  const orestarCurrent = profile.orestar_account_summary || {};
+
+  let orestarEnding = null;
+  let orestarContrib = null, orestarExpend = null;
+  let orestarOR = null, orestarOD = null, orestarBegBal = null;
+  let hasOrestar = false;
+
+  if (year && orestarYear) {
+    // Per-year ORESTAR data from the yearly scraper
+    orestarEnding = orestarYear.ending_cash_balance;
+    orestarContrib = orestarYear.contributions;
+    orestarExpend = orestarYear.expenditures;
+    orestarOR = orestarYear.other_receipts;
+    orestarOD = orestarYear.other_disbursements;
+    orestarBegBal = orestarYear.beginning_balance;
+    hasOrestar = true;
+  } else if (!year && orestarCurrent.year) {
+    // All-time: use the current year's ORESTAR account summary
+    orestarEnding = orestarCurrent.ending_cash_balance != null
+      ? orestarCurrent.ending_cash_balance : null;
+    hasOrestar = true;
+  }
 
   return {
     cash_contributions: Math.round(cashContrib * 100) / 100,
@@ -495,25 +533,76 @@ function buildCalcSummary(profile) {
     orestar_discrepancy: orestarEnding != null
       ? Math.round((endingCalc - orestarEnding) * 100) / 100
       : null,
-    accounts_receivable: orestar.accounts_receivable || 0,
-    accounts_payable: orestar.accounts_payable || 0,
-    total_outstanding_loans: orestar.total_outstanding_loans || 0,
-    outstanding_personal_expenditures: orestar.outstanding_personal_expenditures || 0,
-    _has_orestar: !!orestar.year,
+    // Per-year ORESTAR breakdown (when available)
+    orestar_beginning_balance: orestarBegBal,
+    orestar_contributions: orestarContrib,
+    orestar_expenditures: orestarExpend,
+    orestar_other_receipts: orestarOR,
+    orestar_other_disbursements: orestarOD,
+    accounts_receivable: (year && orestarYear)
+      ? (orestarYear.accounts_receivable || 0)
+      : (orestarCurrent.accounts_receivable || 0),
+    accounts_payable: (year && orestarYear)
+      ? (orestarYear.accounts_payable || 0)
+      : (orestarCurrent.accounts_payable || 0),
+    total_outstanding_loans: (year && orestarYear)
+      ? (orestarYear.total_outstanding_loans || 0)
+      : (orestarCurrent.total_outstanding_loans || 0),
+    outstanding_personal_expenditures: (year && orestarYear)
+      ? (orestarYear.outstanding_personal_expenditures || 0)
+      : (orestarCurrent.outstanding_personal_expenditures || 0),
+    _has_orestar: hasOrestar,
+    _has_orestar_yearly: year && !!orestarYear,
   };
 }
 
 function renderAcctSummary(profile) {
   const grid = document.getElementById("acct-summary-grid");
   const details = document.getElementById("acct-summary-details");
+  const controls = document.getElementById("acct-summary-controls");
+  const yearSelect = document.getElementById("acct-year-select");
   if (!grid || !details) return;
 
-  const calcData = profile ? buildCalcSummary(profile) : null;
-  if (!calcData) {
+  if (!profile) {
     details.hidden = true;
+    if (controls) controls.hidden = true;
     return;
   }
+
+  // Populate year selector from available years in beginning_balances and orestar_yearly
+  if (yearSelect && controls) {
+    const balYears = Object.keys(profile.beginning_balances || {});
+    const orestarYears = Object.keys(profile.orestar_yearly || {});
+    const allYears = [...new Set([...balYears, ...orestarYears])].sort().reverse();
+
+    const prevVal = yearSelect.value;
+    yearSelect.innerHTML = '<option value="">All Time</option>';
+    for (const yr of allYears) {
+      yearSelect.innerHTML += `<option value="${yr}">${yr}</option>`;
+    }
+    yearSelect.value = prevVal && allYears.includes(prevVal) ? prevVal : "";
+    controls.hidden = allYears.length === 0;
+
+    // Wire change handler — use onchange so re-calls naturally replace the old handler
+    yearSelect.onchange = () => {
+      renderAcctSummaryTiles(profile, yearSelect.value || null);
+    };
+  }
+
   details.hidden = false;
+  const selectedYear = yearSelect ? (yearSelect.value || null) : null;
+  renderAcctSummaryTiles(profile, selectedYear);
+}
+
+function renderAcctSummaryTiles(profile, year) {
+  const grid = document.getElementById("acct-summary-grid");
+  if (!grid) return;
+
+  const calcData = buildCalcSummary(profile, year);
+  if (!calcData) {
+    grid.innerHTML = "<p>No data available for this year.</p>";
+    return;
+  }
 
   grid.innerHTML = CALC_GROUPS.map(group => {
     // Hide ORESTAR validation/balance groups if no ORESTAR data

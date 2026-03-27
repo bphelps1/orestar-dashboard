@@ -244,7 +244,17 @@ def main():
             cache = json.load(f)
         log.info("Loaded %d cached earliest balances", len(cache))
 
-    # Filter to only IDs that need fetching
+    # Load yearly summaries cache to check for missing yearly data
+    yearly_cache: dict = {}
+    if YEARLY_PATH.exists():
+        with open(YEARLY_PATH) as f:
+            yearly_cache = json.load(f)
+        log.info("Loaded %d cached yearly summary entries", len(yearly_cache))
+
+    # Filter to only IDs that need fetching:
+    # - Not in earliest_balances cache at all, OR
+    # - Stale (older than max_age_days), OR
+    # - Missing from yearly summaries (backfill yearly data for previously scraped filers)
     now_ts = datetime.now().timestamp()
     cutoff = now_ts - args.max_age_days * 86_400
 
@@ -253,7 +263,10 @@ def main():
     else:
         ids_to_fetch = [
             fid for fid in filer_ids
-            if fid not in cache or cache[fid].get("ts", 0) < cutoff
+            if fid not in cache
+            or cache[fid].get("ts", 0) < cutoff
+            or fid not in yearly_cache
+            or not yearly_cache[fid].get("years")
         ]
 
     # Total remaining (before --max-filers cap) for retrigger logic
@@ -268,15 +281,9 @@ def main():
         remaining_path.write_text("0")
         return
 
-    log.info("Will scrape earliest balances for %d filers (%d already cached)",
-             len(ids_to_fetch), len(cache))
-
-    # Load yearly summaries cache
-    yearly_cache: dict = {}
-    if YEARLY_PATH.exists():
-        with open(YEARLY_PATH) as f:
-            yearly_cache = json.load(f)
-        log.info("Loaded %d cached yearly summary entries", len(yearly_cache))
+    log.info("Will scrape earliest balances for %d filers (%d already cached, %d need yearly backfill)",
+             len(ids_to_fetch), len(cache),
+             sum(1 for fid in ids_to_fetch if fid in cache and fid not in yearly_cache))
 
     # Launch Playwright
     from playwright.sync_api import sync_playwright
