@@ -1,6 +1,9 @@
 # Raw Excel downloads — never committed
 data/_raw/
 
+# Verification scratch data (per-filer ORESTAR downloads + diff reports)
+data/_verify/
+
 # Legacy single-file transactions store (replaced by data/transactions/txn_YYYY.csv.gz)
 data/transactions.csv.gz
 data/transactions.csv

@@ -320,6 +320,11 @@ main { max-width: 1200px; margin: 32px auto; padding: 0 24px; }
   background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
   border-color: #cbd5e0;
 }
+.acct-tile.acct-tile-orestar {
+  background: #fefcf3;
+  border-color: #e2d8b3;
+  border-style: dashed;
+}
 .acct-tile-label {
   font-size: 0.72rem;
   font-weight: 600;
