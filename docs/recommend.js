@@ -242,12 +242,16 @@ async function runRecommendations() {
       comparables.map(c => loadFilerProfile(c.slug))
     );
 
-    // 4. Build donor scoring
-    showStatus("Scoring donors…", "loading");
+    // 4. Build repeat donor targets (existing donors to THIS filer)
+    showStatus("Analyzing repeat donors…", "loading");
+    const repeatTargets = buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years, cycle);
+
+    // 5. Build new donor scoring
+    showStatus("Scoring new donors…", "loading");
     const recommendations = scoreDonors(targetProfile, comparables, compProfiles, years, cycle);
 
-    // 5. Display results
-    displayResults(recommendations, targetProfile, comparables, cycle);
+    // 6. Display results
+    displayResults(recommendations, repeatTargets, targetProfile, comparables, cycle);
 
   } catch (err) {
     showStatus(`Error: ${err.message}`, "error");
@@ -471,7 +475,132 @@ function _getAllYearGifts(donorName, compProfiles, comparables) {
   return years;
 }
 
-// ── Step 4: Score donors ──────────────────────────────────────────────────
+// ── Step 4a: Repeat Donor Targets ─────────────────────────────────────────
+// For donors who gave to THIS candidate across multiple election cycles,
+// compute a fundraising target: ~5% increase from their last-cycle giving,
+// adjusted upward if they gave more to comparable candidates.
+function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years, cycle) {
+  const byYear = targetProfile.top_donors_by_year || {};
+  const allYears = Object.keys(byYear).map(Number).sort((a, b) => a - b);
+  const cycleStart = cycle - 1;
+
+  // Group years into 2-year election cycles
+  function yearToCycle(yr) { return yr % 2 === 0 ? yr : yr + 1; }
+
+  // Build per-donor cycle history: donor → { cycles: {cycle: amount}, totalGifts }
+  const donorHistory = new Map();
+  for (const [yrStr, donors] of Object.entries(byYear)) {
+    const yr = parseInt(yrStr);
+    const cy = yearToCycle(yr);
+    for (const d of donors) {
+      const key = d.name.toLowerCase();
+      if (!donorHistory.has(key)) {
+        donorHistory.set(key, { name: d.name, cycles: {}, totalGifts: 0 });
+      }
+      const entry = donorHistory.get(key);
+      entry.cycles[cy] = (entry.cycles[cy] || 0) + d.total;
+      entry.totalGifts++;
+    }
+  }
+
+  // Get comparable giving for upside adjustment
+  const compDonorTotals = new Map(); // lowered name → max cycle amount to any comparable
+  for (let i = 0; i < compProfiles.length; i++) {
+    const profile = compProfiles[i];
+    const compByYear = profile.top_donors_by_year || {};
+    const compDonorCycles = new Map(); // donor → {cycle: amount}
+    for (const [yrStr, donors] of Object.entries(compByYear)) {
+      const yr = parseInt(yrStr);
+      const cy = yearToCycle(yr);
+      for (const d of donors) {
+        const key = d.name.toLowerCase();
+        if (!compDonorCycles.has(key)) compDonorCycles.set(key, {});
+        const cyMap = compDonorCycles.get(key);
+        cyMap[cy] = (cyMap[cy] || 0) + d.total;
+      }
+    }
+    // Track max cycle amount per donor across all comparables
+    for (const [key, cyMap] of compDonorCycles) {
+      const maxCy = Math.max(...Object.values(cyMap));
+      compDonorTotals.set(key, Math.max(compDonorTotals.get(key) || 0, maxCy));
+    }
+  }
+
+  const results = [];
+
+  for (const [key, donor] of donorHistory) {
+    const cycleNums = Object.keys(donor.cycles).map(Number).sort((a, b) => a - b);
+
+    // Must have given in at least 2 distinct cycles
+    if (cycleNums.length < 2) continue;
+
+    // Must have given more than once total (not just 1 gift in each of 2 cycles)
+    if (donor.totalGifts < 2) continue;
+
+    const currentCycleAmt = donor.cycles[cycle] || 0;
+    const prevCycles = cycleNums.filter(c => c < cycle);
+    if (!prevCycles.length) continue;
+
+    const lastCycle = prevCycles[prevCycles.length - 1];
+    const lastCycleAmt = donor.cycles[lastCycle];
+
+    // Base target: 5% increase from last cycle
+    let target = Math.round(lastCycleAmt * 1.05 * 100) / 100;
+
+    // Comparable upside adjustment: if they gave MORE to a comparable,
+    // weight toward that amount (but never reduce below the 5% increase)
+    const compMax = compDonorTotals.get(key) || 0;
+    if (compMax > target) {
+      // Blend: 70% base target, 30% comparable max (upside only)
+      target = Math.round((target * 0.7 + compMax * 0.3) * 100) / 100;
+    }
+
+    // Leadership multiplier
+    const targetTier = targetProfile.leadership_tier ||
+      (filerIndex.find(f => f.slug === targetProfile.slug) || {}).leadership_tier || 0;
+    const askMultiplier = LEADERSHIP_ASK_MULTIPLIER[targetTier] || 1.0;
+    target = Math.round(target * askMultiplier * 100) / 100;
+
+    const remaining = Math.max(0, Math.round((target - currentCycleAmt) * 100) / 100);
+
+    // Build cycle history summary
+    const historyParts = prevCycles.map(c => `${c - 1}–${c}: ${fmt$(donor.cycles[c])}`);
+    const avgPrev = prevCycles.reduce((s, c) => s + donor.cycles[c], 0) / prevCycles.length;
+
+    const factors = [];
+    factors.push(`${prevCycles.length} previous cycle${prevCycles.length > 1 ? "s" : ""}: ${historyParts.join(", ")}`);
+    factors.push(`Last cycle (${lastCycle - 1}–${lastCycle}): ${fmt$(lastCycleAmt)} → target: ${fmt$(target)} (+5%${compMax > lastCycleAmt * 1.05 ? " + comparable uplift" : ""})`);
+    if (compMax > 0) {
+      factors.push(`Highest cycle gift to comparable: ${fmt$(compMax)}`);
+    }
+    if (currentCycleAmt > 0) {
+      factors.push(`Already given this cycle: ${fmt$(currentCycleAmt)}`);
+    }
+
+    // Confidence based on consistency
+    const consistency = prevCycles.length >= 3 ? "high" : prevCycles.length === 2 ? "medium" : "low";
+
+    results.push({
+      donor: donor.name,
+      prev_cycles: prevCycles.length,
+      last_cycle_amt: lastCycleAmt,
+      avg_prev: Math.round(avgPrev * 100) / 100,
+      comp_max: compMax,
+      target,
+      current_cycle_amt: currentCycleAmt,
+      remaining,
+      consistency,
+      history: historyParts,
+      factors,
+    });
+  }
+
+  // Sort by target descending
+  results.sort((a, b) => b.target - a.target);
+  return results;
+}
+
+// ── Step 4b: Score new donors ─────────────────────────────────────────────
 function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
   const targetTier = targetProfile.leadership_tier ||
     (filerIndex.find(f => f.slug === targetProfile.slug) || {}).leadership_tier || 0;
@@ -691,34 +820,41 @@ function buildWhySummary(donor, alreadyGiven, targetAsk, topComps) {
   return parts.join(". ") + ".";
 }
 
-// ── Step 5: Display results ───────────────────────────────────────────────
-function displayResults(recommendations, targetProfile, comparables, cycle) {
+// ── Step 6: Display results ───────────────────────────────────────────────
+function displayResults(recommendations, repeatTargets, targetProfile, comparables, cycle) {
   hideStatus();
 
   const section = document.getElementById("results-section");
   section.hidden = false;
 
   document.getElementById("results-title").textContent =
-    `Recommendations for ${targetProfile.name} (${cycle - 1}–${cycle} Cycle)`;
+    `Fundraising Plan for ${targetProfile.name} (${cycle - 1}–${cycle} Cycle)`;
 
   // Summary cards
-  const totalRemainingAsk = recommendations.reduce((s, r) => s + r.remaining_ask, 0);
+  const repeatRemaining = repeatTargets.reduce((s, r) => s + r.remaining, 0);
+  const newRemaining = recommendations.reduce((s, r) => s + r.remaining_ask, 0);
   const tierACnt = recommendations.filter(r => r.tier === "A").length;
   const summaryEl = document.getElementById("results-summary");
   summaryEl.innerHTML = `
-    <div class="summary-card"><span class="sc-label">Total Donors</span><br><span class="sc-value">${fmtNum(recommendations.length)}</span></div>
-    <div class="summary-card"><span class="sc-label">Tier A Donors</span><br><span class="sc-value">${fmtNum(tierACnt)}</span></div>
+    <div class="summary-card"><span class="sc-label">Repeat Donors</span><br><span class="sc-value">${fmtNum(repeatTargets.length)}</span></div>
+    <div class="summary-card"><span class="sc-label">Repeat Donor Target</span><br><span class="sc-value">${fmt$(repeatRemaining)}</span></div>
+    <div class="summary-card"><span class="sc-label">New Prospects</span><br><span class="sc-value">${fmtNum(recommendations.length)}</span></div>
+    <div class="summary-card"><span class="sc-label">New Prospect Target</span><br><span class="sc-value">${fmt$(newRemaining)}</span></div>
     <div class="summary-card"><span class="sc-label">Comparable Filers</span><br><span class="sc-value">${fmtNum(comparables.length)}</span></div>
-    <div class="summary-card"><span class="sc-label">Total Remaining Ask</span><br><span class="sc-value">${fmt$(totalRemainingAsk)}</span></div>
+    <div class="summary-card"><span class="sc-label">Total Fundraising Target</span><br><span class="sc-value">${fmt$(repeatRemaining + newRemaining)}</span></div>
   `;
 
   // Store for filtering/sorting/export
   window._recommendations = recommendations;
+  window._repeatTargets = repeatTargets;
   window._targetProfile = targetProfile;
   window._comparables = comparables;
   window._cycle = cycle;
 
-  // Render table
+  // Render repeat donors section
+  renderRepeatDonors(repeatTargets);
+
+  // Render new donor recommendations table
   renderRecTable(recommendations);
 
   // Wire up filters
@@ -727,26 +863,110 @@ function displayResults(recommendations, targetProfile, comparables, cycle) {
   searchEl.value = "";
   tierEl.value = "";
 
-  searchEl.addEventListener("input", () => renderFiltered());
-  tierEl.addEventListener("change", () => renderFiltered());
+  const filterHandler = () => renderFiltered();
+  searchEl.removeEventListener("input", filterHandler);
+  tierEl.removeEventListener("change", filterHandler);
+  searchEl.addEventListener("input", filterHandler);
+  tierEl.addEventListener("change", filterHandler);
 
-  // Wire up sort
+  // Wire up sort headers (remove old listeners by re-cloning)
   document.querySelectorAll("#rec-table th.sortable").forEach(th => {
-    th.addEventListener("click", () => {
-      const col = th.dataset.col;
-      const curDir = th.classList.contains("sort-asc") ? "asc" : th.classList.contains("sort-desc") ? "desc" : null;
+    const clone = th.cloneNode(true);
+    th.parentNode.replaceChild(clone, th);
+    clone.addEventListener("click", () => {
+      const col = clone.dataset.col;
+      const curDir = clone.classList.contains("sort-asc") ? "asc" : clone.classList.contains("sort-desc") ? "desc" : null;
       document.querySelectorAll("#rec-table th.sortable").forEach(t => t.classList.remove("sort-asc", "sort-desc"));
       const newDir = curDir === "desc" ? "asc" : "desc";
-      th.classList.add("sort-" + newDir);
+      clone.classList.add("sort-" + newDir);
       window._sortCol = col;
       window._sortDir = newDir;
       renderFiltered();
     });
   });
 
-  // Wire up export
-  document.getElementById("export-csv").addEventListener("click", () => exportData("csv"));
-  document.getElementById("export-xlsx").addEventListener("click", () => exportData("xlsx"));
+  // Wire up export (re-clone to avoid duplicate listeners)
+  for (const id of ["export-csv", "export-xlsx", "export-repeat-csv", "export-repeat-xlsx", "export-full-csv", "export-full-xlsx"]) {
+    const btn = document.getElementById(id);
+    if (!btn) continue;
+    const clone = btn.cloneNode(true);
+    btn.parentNode.replaceChild(clone, btn);
+    const fmt = id.includes("csv") ? "csv" : "xlsx";
+    const scope = id.includes("repeat") ? "repeat" : id.includes("full") ? "full" : "new";
+    clone.addEventListener("click", () => exportData(fmt, scope));
+  }
+}
+
+function renderRepeatDonors(repeatTargets) {
+  const container = document.getElementById("repeat-donors-section");
+  if (!container) return;
+
+  if (!repeatTargets.length) {
+    container.hidden = true;
+    return;
+  }
+  container.hidden = false;
+
+  const tbody = document.getElementById("repeat-tbody");
+  tbody.innerHTML = repeatTargets.map((r, i) => {
+    const consistencyBadge = r.consistency === "high"
+      ? '<span class="consistency-badge high">High</span>'
+      : r.consistency === "medium"
+      ? '<span class="consistency-badge medium">Med</span>'
+      : '<span class="consistency-badge low">Low</span>';
+
+    return `
+    <tr class="repeat-row" data-idx="${i}">
+      <td>${i + 1}</td>
+      <td>${esc(r.donor)}</td>
+      <td class="num">${r.prev_cycles}</td>
+      <td class="num">${fmt$(r.last_cycle_amt)}</td>
+      <td class="num"><strong>${fmt$(r.target)}</strong></td>
+      <td class="num">${fmt$(r.current_cycle_amt)}</td>
+      <td class="num">${fmt$(r.remaining)}</td>
+      <td>${consistencyBadge}</td>
+      <td>
+        <div class="why-text">${r.history.join(", ")}</div>
+        <button class="why-toggle repeat-detail-toggle" data-ridx="${i}">Show details ▸</button>
+      </td>
+    </tr>`;
+  }).join("");
+
+  // Wire up detail toggles
+  tbody.querySelectorAll(".repeat-detail-toggle").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const idx = parseInt(btn.dataset.ridx);
+      toggleRepeatDetail(idx, btn);
+    });
+  });
+}
+
+function toggleRepeatDetail(idx, btn) {
+  const existing = document.querySelector(`.repeat-detail-row[data-for="${idx}"]`);
+  if (existing) {
+    existing.remove();
+    btn.textContent = "Show details ▸";
+    return;
+  }
+
+  const r = (window._repeatTargets || [])[idx];
+  if (!r) return;
+
+  btn.textContent = "Hide details ▾";
+  const tr = btn.closest("tr");
+  const detailRow = document.createElement("tr");
+  detailRow.className = "repeat-detail-row detail-row";
+  detailRow.dataset.for = idx;
+
+  detailRow.innerHTML = `<td colspan="9"><div class="detail-content">
+    <h4>Target Calculation</h4>
+    <ul style="margin:0 0 0 16px;font-size:0.83rem;color:#4a5568">
+      ${r.factors.map(f => `<li>${esc(f)}</li>`).join("")}
+    </ul>
+  </div></td>`;
+
+  tr.after(detailRow);
 }
 
 function renderFiltered() {
@@ -849,27 +1069,65 @@ function toggleDetail(idx, btn) {
 }
 
 // ── Export ─────────────────────────────────────────────────────────────────
-function exportData(format) {
+function exportData(format, scope = "new") {
   const recs = window._recommendations || [];
+  const repeats = window._repeatTargets || [];
   const target = window._targetProfile;
   const cycle = window._cycle;
+  const cycleLabel = cycle ? `${cycle - 1}-${cycle}` : "";
 
-  const exportRows = recs.map(r => ({
+  const repeatRows = repeats.map(r => ({
+    "Type": "Repeat Donor",
     "Donor Name": r.donor,
-    "Searched Filer": target ? target.name : "",
-    "Cycle": cycle ? `${cycle - 1}-${cycle}` : "",
+    "Filer": target ? target.name : "",
+    "Cycle": cycleLabel,
+    "Score": "",
+    "Tier": r.consistency === "high" ? "High" : r.consistency === "medium" ? "Med" : "Low",
+    "Previous Cycles": r.prev_cycles,
+    "Last Cycle Amount": r.last_cycle_amt,
+    "Comparable Max": r.comp_max || "",
+    "Target Ask": r.target,
+    "Already Given This Cycle": r.current_cycle_amt,
+    "Remaining Ask": r.remaining,
+    "History": r.history.join("; "),
+    "Notes": r.factors.join("; "),
+  }));
+
+  const newRows = recs.map(r => ({
+    "Type": "New Prospect",
+    "Donor Name": r.donor,
+    "Filer": target ? target.name : "",
+    "Cycle": cycleLabel,
     "Score": r.score,
     "Tier": r.tier,
-    "Already Given This Cycle": r.already_given,
-    "Comparable Giving Min": r.comp_min,
-    "Comparable Giving Max": r.comp_max,
+    "Previous Cycles": "",
+    "Last Cycle Amount": "",
+    "Comparable Max": r.comp_max,
     "Target Ask": r.target_ask,
+    "Already Given This Cycle": r.already_given,
     "Remaining Ask": r.remaining_ask,
-    "Comparable Filers Referenced": r.comp_gifts.map(g => g.filer).join("; "),
-    "Reason for Recommendation": r.why_summary,
-    "Distinct Comparable Filers": r.distinct_comps,
-    "Total to Comparables": r.total_to_comps,
+    "History": r.comp_gifts.map(g => g.filer).join("; "),
+    "Notes": r.why_summary,
   }));
+
+  let exportRows;
+  let fileLabel;
+  if (scope === "repeat") {
+    exportRows = repeatRows;
+    fileLabel = "repeat_donors";
+  } else if (scope === "new") {
+    exportRows = newRows;
+    fileLabel = "new_prospects";
+  } else {
+    // full: repeat donors first, then new prospects
+    exportRows = [...repeatRows, ...newRows];
+    fileLabel = "full_plan";
+  }
+
+  if (!exportRows.length) {
+    alert("No data to export.");
+    return;
+  }
 
   if (format === "csv") {
     const headers = Object.keys(exportRows[0] || {});
@@ -885,17 +1143,29 @@ function exportData(format) {
       ),
     ].join("\n");
 
-    downloadFile(csv, `recommendations_${target.slug}_${cycle}.csv`, "text/csv");
+    downloadFile(csv, `${fileLabel}_${target.slug}_${cycle}.csv`, "text/csv");
 
   } else if (format === "xlsx") {
     if (typeof XLSX === "undefined") {
       alert("Excel export library not loaded. Please try CSV instead.");
       return;
     }
-    const ws = XLSX.utils.json_to_sheet(exportRows);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Recommendations");
-    XLSX.writeFile(wb, `recommendations_${target.slug}_${cycle}.xlsx`);
+    if (scope === "full") {
+      // Separate sheets for repeat and new
+      if (repeatRows.length) {
+        const ws1 = XLSX.utils.json_to_sheet(repeatRows);
+        XLSX.utils.book_append_sheet(wb, ws1, "Repeat Donors");
+      }
+      if (newRows.length) {
+        const ws2 = XLSX.utils.json_to_sheet(newRows);
+        XLSX.utils.book_append_sheet(wb, ws2, "New Prospects");
+      }
+    } else {
+      const ws = XLSX.utils.json_to_sheet(exportRows);
+      XLSX.utils.book_append_sheet(wb, ws, scope === "repeat" ? "Repeat Donors" : "New Prospects");
+    }
+    XLSX.writeFile(wb, `${fileLabel}_${target.slug}_${cycle}.xlsx`);
   }
 }
 

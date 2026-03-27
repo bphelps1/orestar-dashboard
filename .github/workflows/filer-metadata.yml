@@ -47,6 +47,7 @@ jobs:
         run: sudo apt-get install -y xvfb
 
       - name: Scrape filer metadata (party, office, type)
+        id: scrape
         run: |
           MAX="${{ github.event.inputs.max_filers || '500' }}"
           FORCE="${{ github.event.inputs.force || 'false' }}"
@@ -58,6 +59,9 @@ jobs:
             ARGS="$ARGS --force"
           fi
           xvfb-run --auto-servernum python scraper/fetch_filer_metadata.py $ARGS
+          # Capture remaining count directly from the file the scraper just wrote
+          REMAINING=$(cat data/filer_metadata_remaining.txt 2>/dev/null || echo "0")
+          echo "remaining=$REMAINING" >> "$GITHUB_OUTPUT"
 
       - name: Re-aggregate with updated metadata
         if: always()
@@ -83,19 +87,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          REMAINING_FILE="data/filer_metadata_remaining.txt"
-          if [ -f "$REMAINING_FILE" ]; then
-            REMAINING=$(cat "$REMAINING_FILE")
-            echo "Filers remaining: $REMAINING"
-            if [ "$REMAINING" -gt 0 ] 2>/dev/null; then
-              echo "Retriggering workflow for next batch..."
-              gh workflow run filer-metadata.yml \
-                -f max_filers="${{ github.event.inputs.max_filers || '500' }}" \
-                -f force="false"
-              echo "Retrigger dispatched."
-            else
-              echo "All filers scraped — no retrigger needed."
-            fi
+          # Use the remaining count captured BEFORE git operations (immune to rebase)
+          REMAINING="${{ steps.scrape.outputs.remaining }}"
+          echo "Filers remaining: $REMAINING"
+          if [ -n "$REMAINING" ] && [ "$REMAINING" -gt 0 ] 2>/dev/null; then
+            echo "Retriggering workflow for next batch..."
+            gh workflow run filer-metadata.yml \
+              -f max_filers="${{ github.event.inputs.max_filers || '500' }}" \
+              -f force="false"
+            echo "Retrigger dispatched."
           else
-            echo "No remaining count file found — skipping retrigger."
+            echo "All filers scraped — no retrigger needed."
           fi

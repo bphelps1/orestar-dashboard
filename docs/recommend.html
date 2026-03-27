@@ -73,14 +73,56 @@
   <!-- Results -->
   <section id="results-section" hidden>
     <div class="results-header">
-      <h2 id="results-title">Recommendations</h2>
+      <h2 id="results-title">Fundraising Plan</h2>
       <div class="export-btns">
-        <button class="btn-small" id="export-csv">Export CSV</button>
-        <button class="btn-small" id="export-xlsx">Export Excel</button>
+        <span class="export-group-label">Export:</span>
+        <button class="btn-small" id="export-full-csv">Full Plan CSV</button>
+        <button class="btn-small" id="export-full-xlsx">Full Plan Excel</button>
       </div>
     </div>
 
     <div class="results-summary" id="results-summary"></div>
+
+    <!-- ══════ Repeat Donors Section ══════ -->
+    <div id="repeat-donors-section" hidden>
+      <div class="section-header">
+        <h3>Repeat Donor Targets</h3>
+        <p class="section-desc">Donors who have given to this candidate across multiple election cycles.
+          Targets are based on a 5% increase from last cycle, adjusted upward based on comparable giving.</p>
+        <div class="export-btns">
+          <button class="btn-small" id="export-repeat-csv">Repeat CSV</button>
+          <button class="btn-small" id="export-repeat-xlsx">Repeat Excel</button>
+        </div>
+      </div>
+      <div class="table-wrapper">
+        <table id="repeat-table" class="data-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Donor</th>
+              <th class="num">Prev Cycles</th>
+              <th class="num">Last Cycle</th>
+              <th class="num">Target</th>
+              <th class="num">Given This Cycle</th>
+              <th class="num">Remaining</th>
+              <th>Consistency</th>
+              <th>History</th>
+            </tr>
+          </thead>
+          <tbody id="repeat-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══════ New Donor Prospects Section ══════ -->
+    <div class="section-header" style="margin-top:2rem">
+      <h3>New Donor Prospects</h3>
+      <p class="section-desc">Donors who gave to comparable candidates but not yet (or not enough) to this one.</p>
+      <div class="export-btns">
+        <button class="btn-small" id="export-csv">Prospects CSV</button>
+        <button class="btn-small" id="export-xlsx">Prospects Excel</button>
+      </div>
+    </div>
 
     <div class="results-filters">
       <input type="search" id="results-search" class="table-search"
