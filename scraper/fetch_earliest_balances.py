@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 """
-fetch_earliest_balances.py — Scrape earliest-year Beginning Balance from ORESTAR.
+fetch_earliest_balances.py — Scrape ORESTAR Account Summary data for all years.
 
 Uses Playwright (headed browser) to navigate ORESTAR Account Summary pages
-backwards via the "Prev" button, reaching the earliest year to grab the true
-"Beginning Balance (Previous Year)" for each filer.
+backwards via the "Prev" button, collecting ALL years' account summary data
+and the earliest-year "Beginning Balance (Previous Year)" for each filer.
 
 This is needed because:
   - ORESTAR's default Account Summary page shows the current year only
   - Year navigation uses POST forms with OWASP CSRF tokens
   - Plain HTTP requests can't navigate years; a real browser session is required
   - Back-calculating from the current year's beginning balance introduces errors
+  - Per-year ORESTAR data enables tracing where discrepancies originate
 
-Output: data/earliest_balances.json
-  { "filer_id": { "earliest_year": int, "beginning_balance": float, "ts": float }, ... }
+Output:
+  data/earliest_balances.json — { "filer_id": { "earliest_year": int, "beginning_balance": float, "ts": float }, ... }
+  data/orestar_yearly_summaries.json — { "filer_id": { "years": { "2026": {...}, "2025": {...} }, "ts": float }, ... }
 
 Usage:
     python scraper/fetch_earliest_balances.py [--filer-ids 19763 12345] [--max-filers 100]
@@ -34,6 +36,7 @@ log = logging.getLogger(__name__)
 BASE_URL = "https://secure.sos.state.or.us/orestar"
 DATA_DIR = Path(__file__).parent.parent / "data"
 CACHE_PATH = DATA_DIR / "earliest_balances.json"
+YEARLY_PATH = DATA_DIR / "orestar_yearly_summaries.json"
 
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -70,8 +73,51 @@ def _parse_beginning_balance(html: str) -> float:
     return val
 
 
-def _scrape_filer_earliest(page, filer_id: str) -> dict | None:
-    """Navigate to a filer's Account Summary and click Prev until earliest year."""
+def _parse_dollar(html: str, label: str) -> float:
+    """Extract a dollar amount following a label in the ORESTAR HTML."""
+    pattern = re.compile(
+        rf"{re.escape(label)}.*?(-\s*)?\$\s*([\d,]+\.\d{{2}})",
+        re.DOTALL,
+    )
+    m = pattern.search(html)
+    if not m:
+        return 0.0
+    val = float(m.group(2).replace(",", ""))
+    if m.group(1) and m.group(1).strip() == "-":
+        val = -val
+    return val
+
+
+def _parse_yearly_summary(html: str) -> dict:
+    """Parse all Account Summary fields from an ORESTAR year page."""
+    return {
+        "beginning_balance": _parse_dollar(html, "Beginning Balance \\(Previous Year\\)"),
+        "contributions": _parse_dollar(html, "Total Contributions"),
+        "expenditures": _parse_dollar(html, "Total Expenditures"),
+        "other_receipts": _parse_dollar(html, "Other Receipts"),
+        "other_disbursements": _parse_dollar(html, "Other Disbursements"),
+        "balance_adjustments": _parse_dollar(html, "Balance Adjustments"),
+        "ending_cash_balance": _parse_dollar(html, "Ending Cash Balance"),
+        "loans_received": _parse_dollar(html, "Loans Received \\(Non-Exempt\\)"),
+        "loans_received_exempt": _parse_dollar(html, "Loans Received \\(Exempt\\)"),
+        "loan_payments": _parse_dollar(html, "Loan Payments \\(Non-Exempt\\)"),
+        "loan_payments_exempt": _parse_dollar(html, "Loan Payments \\(Exempt\\)"),
+        "inkind_contributions": _parse_dollar(html, "In-Kind Contributions"),
+        "inkind_expenditures": _parse_dollar(html, "In-Kind Expenditures"),
+        "accounts_receivable": _parse_dollar(html, "Accounts Receivable"),
+        "accounts_payable": _parse_dollar(html, "Accounts Payable"),
+        "total_outstanding_loans": _parse_dollar(html, "Total Outstanding Loans"),
+        "outstanding_personal_expenditures": _parse_dollar(html, "Outstanding Personal Expenditures"),
+    }
+
+
+def _scrape_filer_earliest(page, filer_id: str) -> tuple[dict | None, dict]:
+    """Navigate to a filer's Account Summary and click Prev until earliest year.
+
+    Returns (earliest_balance_info, yearly_summaries) where yearly_summaries
+    is {year_str: {beginning_balance, contributions, expenditures, ...}}.
+    """
+    yearly = {}  # year_str → summary dict
     url = f"{BASE_URL}/publicAccountSummary.do?filerId={filer_id}"
 
     try:
@@ -79,15 +125,18 @@ def _scrape_filer_earliest(page, filer_id: str) -> dict | None:
         time.sleep(PAGE_RENDER_WAIT)
     except Exception as e:
         log.warning("Failed to load page for filer %s: %s", filer_id, e)
-        return None
+        return None, yearly
 
     html = page.content()
     year = _parse_year(html)
     if not year:
         log.warning("No year found on page for filer %s", filer_id)
-        return None
+        return None, yearly
 
     log.info("Filer %s: starting at year %d", filer_id, year)
+
+    # Collect the current year's data
+    yearly[str(year)] = _parse_yearly_summary(html)
 
     # Click "Prev" until we reach the earliest year (when Prev stops changing the year)
     prev_year = year
@@ -122,6 +171,8 @@ def _scrape_filer_earliest(page, filer_id: str) -> dict | None:
             break
 
         log.debug("Filer %s: navigated to year %d", filer_id, new_year)
+        # Collect this year's data
+        yearly[str(new_year)] = _parse_yearly_summary(html)
         prev_year = new_year
         year = new_year
 
@@ -130,14 +181,15 @@ def _scrape_filer_earliest(page, filer_id: str) -> dict | None:
     final_year = _parse_year(html) or year
     beg_bal = _parse_beginning_balance(html)
 
-    log.info("Filer %s: earliest year = %d, beginning balance = $%.2f",
-             filer_id, final_year, beg_bal)
+    log.info("Filer %s: earliest year = %d, beginning balance = $%.2f, years collected = %d",
+             filer_id, final_year, beg_bal, len(yearly))
 
-    return {
+    earliest = {
         "earliest_year": final_year,
         "beginning_balance": beg_bal,
         "ts": datetime.now().timestamp(),
     }
+    return earliest, yearly
 
 
 def get_all_filer_ids() -> list[str]:
@@ -219,6 +271,13 @@ def main():
     log.info("Will scrape earliest balances for %d filers (%d already cached)",
              len(ids_to_fetch), len(cache))
 
+    # Load yearly summaries cache
+    yearly_cache: dict = {}
+    if YEARLY_PATH.exists():
+        with open(YEARLY_PATH) as f:
+            yearly_cache = json.load(f)
+        log.info("Loaded %d cached yearly summary entries", len(yearly_cache))
+
     # Launch Playwright
     from playwright.sync_api import sync_playwright
 
@@ -237,16 +296,25 @@ def main():
         done = 0
         failed = 0
         for fid in ids_to_fetch:
-            result = _scrape_filer_earliest(page, fid)
+            result, yearly_data = _scrape_filer_earliest(page, fid)
             done += 1
 
             if result:
                 cache[fid] = result
-                # Save cache after each successful scrape (crash safety)
+                # Save yearly summaries
+                if yearly_data:
+                    if fid not in yearly_cache:
+                        yearly_cache[fid] = {"years": {}, "ts": 0}
+                    yearly_cache[fid]["years"].update(yearly_data)
+                    yearly_cache[fid]["ts"] = datetime.now().timestamp()
+
+                # Save caches after each successful scrape (crash safety)
                 if done % 10 == 0:
                     CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
                     with open(CACHE_PATH, "w") as f:
                         json.dump(cache, f, separators=(",", ":"))
+                    with open(YEARLY_PATH, "w") as f:
+                        json.dump(yearly_cache, f, separators=(",", ":"))
                     # Write remaining count so workflow can retrigger even on cancel
                     remaining_now = all_remaining - done
                     remaining_path = DATA_DIR / "earliest_balances_remaining.txt"
@@ -265,6 +333,8 @@ def main():
     CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(CACHE_PATH, "w") as f:
         json.dump(cache, f, separators=(",", ":"))
+    with open(YEARLY_PATH, "w") as f:
+        json.dump(yearly_cache, f, separators=(",", ":"))
 
     log.info("Done. Scraped %d filers (%d failed). Cache has %d total entries at %s",
              done, failed, len(cache), CACHE_PATH)

@@ -46,12 +46,16 @@
     <button class="btn-small" id="sign-out-btn">Sign Out</button>
   </div>
 
-  <!-- Pending merges -->
+  <!-- Pending merges from review_queue.json -->
   <section class="admin-section">
-    <h2>Pending Duplicate Clusters</h2>
-    <p class="section-desc">Probable duplicates identified by the normalization engine. Review and merge or reject.</p>
+    <h2>Pending Duplicate Pairs</h2>
+    <p class="section-desc">Probable duplicates from fuzzy matching (score 80–95). Click merge to combine, or reject to dismiss.</p>
+    <div class="review-controls">
+      <input type="search" id="review-search" class="table-search" placeholder="Filter pairs…" />
+      <span id="review-count" class="review-count"></span>
+    </div>
     <div id="pending-list" class="cluster-list"></div>
-    <p id="pending-empty" class="empty-msg" hidden>No pending clusters.</p>
+    <p id="pending-empty" class="empty-msg" hidden>No pending pairs.</p>
   </section>
 
   <!-- Merge history -->

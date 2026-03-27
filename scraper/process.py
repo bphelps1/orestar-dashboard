@@ -522,7 +522,7 @@ def process() -> None:
             all_names,
             entity_map,
             auto_threshold=95.0,
-            review_threshold=85.0,
+            review_threshold=80.0,
         )
 
         df["contributor_payee_canonical"] = df["contributor_payee"].map(
@@ -1091,12 +1091,23 @@ def aggregate_filers(
     else:
         log.warning("No earliest_balances.json found — beginning balances will default to $0")
 
+    # Load per-year ORESTAR summaries
+    _yearly_path = DATA_DIR / "orestar_yearly_summaries.json"
+    _yearly_summaries: dict[str, dict] = {}  # filer_id → {years: {yr: {...}}, ts}
+    if _yearly_path.exists():
+        with open(_yearly_path) as f:
+            _yearly_summaries = json.load(f)
+        log.info("Loaded yearly ORESTAR summaries for %d filers", len(_yearly_summaries))
+
     # Build canonical-name → earliest balance mapping
     _name_to_earliest: dict[str, dict] = {}
+    _name_to_yearly: dict[str, dict] = {}  # canonical name → {yr: summary}
     if _filer_id_col:
         for canon_name, fid in _name_to_fid.items():
             if fid in _earliest_balances:
                 _name_to_earliest[canon_name] = _earliest_balances[fid]
+            if fid in _yearly_summaries:
+                _name_to_yearly[canon_name] = _yearly_summaries[fid].get("years", {})
 
     # Load filer metadata (party, office, committee type) from scraper cache
     _filer_metadata_path = DATA_DIR / "filer_metadata.json"
@@ -1342,6 +1353,7 @@ def aggregate_filers(
             "orestar_discrepancy": orestar_discrepancy,
             "orestar_year": orestar_year,
             "orestar_account_summary": _acct_summary,
+            "orestar_yearly": _name_to_yearly.get(name, {}),
             "beginning_balances": beginning_balances,
             "timeline": timeline,
             "top_donors": top_donors_list,

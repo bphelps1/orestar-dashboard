@@ -219,6 +219,18 @@ function hideStatus() {
 // RECOMMENDATION ENGINE
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Donors to always exclude from recommendations (aggregated/non-individual entries)
+const EXCLUDED_DONORS = new Set([
+  "miscellaneous cash contributions $100 and under",
+  "miscellaneous contributors",
+  "miscellaneous cash contributions",
+  "misc cash contributions $100 and under",
+  "aggregate contributions $100 or less",
+]);
+function isDonorExcluded(name) {
+  return EXCLUDED_DONORS.has(name.toLowerCase().trim());
+}
+
 async function runRecommendations() {
   const filer = window._getSelectedFiler();
   if (!filer) return;
@@ -529,6 +541,9 @@ function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years
   const results = [];
 
   for (const [key, donor] of donorHistory) {
+    // Skip aggregated/non-individual entries
+    if (isDonorExcluded(donor.name)) continue;
+
     const cycleNums = Object.keys(donor.cycles).map(Number).sort((a, b) => a - b);
 
     // Must have given in at least 2 distinct cycles
@@ -649,6 +664,9 @@ function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
   const results = [];
 
   for (const [key, donor] of donorMap) {
+    // Skip aggregated/non-individual entries
+    if (isDonorExcluded(donor.name)) continue;
+
     const alreadyGiven = targetDonorMap.get(key) || 0;
 
     // ── EXCLUSION: donors who gave to only 1 person or donated ≤2 times ──

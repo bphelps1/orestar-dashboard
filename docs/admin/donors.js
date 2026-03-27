@@ -1,28 +1,38 @@
 /**
  * donors.js — Admin Donor Dedup/Merge Workflow
  *
- * Reads pending duplicate clusters from Supabase, allows admin to:
- *  - Review clusters and evidence
- *  - Merge duplicates (pick canonical name)
- *  - Reject false positives
- *  - Undo previous merges
- *  - Manually search and merge donors
+ * Loads review_queue.json (fuzzy-matched pairs from process.py),
+ * displays them for admin review, and stores decisions in Supabase
+ * (donor_review_decisions table) and entity_map.json.
  */
 
 "use strict";
+
+const DATA = "../data/aggregated";
+const _cbv = Date.now();
 
 function esc(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-// ── Auth ───────────────────────────────────────────────────────────────────
+async function fetchJSON(path) {
+  const sep = path.includes("?") ? "&" : "?";
+  const resp = await fetch(`${path}${sep}_v=${_cbv}`);
+  if (!resp.ok) throw new Error(`Failed to load ${path}: ${resp.status}`);
+  return resp.json();
+}
+
+// ── State ───────────────────────────────────────────────────────────────
+let reviewQueue = [];       // from review_queue.json
+let decisions = new Map();  // pairKey → "merged"|"rejected"
+let entityMap = {};         // from entity_map.json (canonical merges)
+
+// ── Auth ───────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", async () => {
   const session = await requireAuth();
   if (session) {
     document.getElementById("user-info").textContent = session.user.email;
-    await loadPendingClusters();
-    await loadMergeLog();
-    initDonorSearch();
+    await initApp();
   }
 
   document.getElementById("login-form-el").addEventListener("submit", async (e) => {
@@ -44,278 +54,209 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("sign-out-btn").addEventListener("click", signOut);
 });
 
-// ── Pending clusters ──────────────────────────────────────────────────────
-async function loadPendingClusters() {
-  const sb = await getSupabase();
-  const { data: clusters, error } = await sb
-    .from("donor_merge_pending")
-    .select("*")
-    .eq("status", "pending")
-    .order("created_at", { ascending: false });
+async function initApp() {
+  // Load review queue
+  try {
+    reviewQueue = await fetchJSON("../data/review_queue.json");
+  } catch (e) {
+    console.warn("Could not load review_queue.json:", e.message);
+    reviewQueue = [];
+  }
 
+  // Load existing decisions from Supabase
+  try {
+    const sb = await getSupabase();
+    const { data } = await sb.from("donor_review_decisions").select("*");
+    if (data) {
+      data.forEach(d => decisions.set(d.pair_key, d.decision));
+    }
+  } catch (e) {
+    console.warn("Could not load decisions from Supabase:", e.message);
+  }
+
+  // Load entity map
+  try {
+    entityMap = await fetchJSON("../data/entity_map.json");
+  } catch (e) {
+    console.warn("Could not load entity_map.json:", e.message);
+    entityMap = {};
+  }
+
+  renderPendingPairs();
+  renderMergeLog();
+  initSearch();
+}
+
+// ── Pending Pairs ──────────────────────────────────────────────────────
+function pairKey(a, b) {
+  return [a, b].sort().join("|||").toLowerCase();
+}
+
+function renderPendingPairs(filter = "") {
   const listEl = document.getElementById("pending-list");
   const emptyEl = document.getElementById("pending-empty");
+  const countEl = document.getElementById("review-count");
 
-  if (error || !clusters || !clusters.length) {
+  // Filter out already-decided pairs
+  let pending = reviewQueue.filter(item => {
+    const key = pairKey(item.a, item.b);
+    return !decisions.has(key);
+  });
+
+  // Apply text filter
+  if (filter) {
+    const q = filter.toLowerCase();
+    pending = pending.filter(item =>
+      item.a.toLowerCase().includes(q) || item.b.toLowerCase().includes(q)
+    );
+  }
+
+  // Sort by score descending (highest confidence first)
+  pending.sort((a, b) => b.score - a.score);
+
+  countEl.textContent = `${pending.length} pairs pending`;
+
+  if (!pending.length) {
     listEl.innerHTML = "";
     emptyEl.hidden = false;
     return;
   }
-
   emptyEl.hidden = true;
 
-  // For each cluster, load the donor names from donor_canonical
-  const allIds = clusters.flatMap(c => c.donor_ids);
-  const { data: donors } = await sb
-    .from("donor_canonical")
-    .select("id, canonical_name")
-    .in("id", allIds);
+  // Show first 100 to avoid DOM overload
+  const shown = pending.slice(0, 100);
 
-  const donorNames = new Map((donors || []).map(d => [d.id, d.canonical_name]));
-
-  listEl.innerHTML = clusters.map(cluster => {
-    const names = cluster.donor_ids.map(id => ({
-      id,
-      name: donorNames.get(id) || `#${id}`,
-    }));
-    const evidence = cluster.evidence || {};
-
+  listEl.innerHTML = shown.map((item, i) => {
+    const key = pairKey(item.a, item.b);
     return `
-      <div class="cluster-card" data-cluster-id="${cluster.id}">
-        <div class="cluster-key">Cluster: ${esc(cluster.cluster_key)}</div>
+      <div class="cluster-card" data-pair-key="${esc(key)}">
+        <div class="pair-score">Score: ${item.score}</div>
         <div class="cluster-names">
-          ${names.map((n, i) => `
-            <label class="cluster-name">
-              <input type="radio" name="keep-${cluster.id}" value="${n.id}" ${i === 0 ? "checked" : ""} />
-              <span>${esc(n.name)}</span>
-            </label>
-          `).join("")}
+          <div class="pair-name">
+            <label><input type="radio" name="keep-${i}" value="a" checked /> <span>${esc(item.a)}</span></label>
+          </div>
+          <div class="pair-name">
+            <label><input type="radio" name="keep-${i}" value="b" /> <span>${esc(item.b)}</span></label>
+          </div>
         </div>
-        ${evidence.reason ? `<div class="cluster-evidence">${esc(evidence.reason)}</div>` : ""}
         <div class="cluster-actions">
-          <button class="btn-primary" onclick="mergeCluster(${cluster.id})">Merge (keep selected)</button>
-          <button class="btn-small" onclick="rejectCluster(${cluster.id})">Not duplicates</button>
+          <button class="btn-primary" onclick="mergePair(${i}, '${esc(key)}')">Merge (keep selected)</button>
+          <button class="btn-small" onclick="rejectPair('${esc(key)}')">Not duplicates</button>
         </div>
       </div>
     `;
   }).join("");
+
+  if (pending.length > 100) {
+    listEl.insertAdjacentHTML("beforeend",
+      `<p class="empty-msg">Showing 100 of ${pending.length} pairs. Use filter to narrow.</p>`
+    );
+  }
 }
 
-async function mergeCluster(clusterId) {
-  const sb = await getSupabase();
-  const card = document.querySelector(`[data-cluster-id="${clusterId}"]`);
-  const keepId = parseInt(card.querySelector(`input[name="keep-${clusterId}"]:checked`).value);
+async function mergePair(idx, key) {
+  const pending = reviewQueue.filter(item => !decisions.has(pairKey(item.a, item.b)));
+  pending.sort((a, b) => b.score - a.score);
+  const item = pending[idx];
+  if (!item) return;
 
-  // Get cluster info
-  const { data: cluster } = await sb
-    .from("donor_merge_pending")
-    .select("*")
-    .eq("id", clusterId)
-    .single();
+  const card = document.querySelector(`[data-pair-key="${key}"]`);
+  const keepChoice = card.querySelector(`input[name="keep-${idx}"]:checked`).value;
+  const keepName = keepChoice === "a" ? item.a : item.b;
+  const mergeName = keepChoice === "a" ? item.b : item.a;
 
-  if (!cluster) return;
+  // Store decision
+  decisions.set(key, "merged");
 
-  const mergeIds = cluster.donor_ids.filter(id => id !== keepId);
-
-  // For each merged donor: move aliases, log the merge, delete the donor
-  for (const mergedId of mergeIds) {
-    // Get merged donor info
-    const { data: mergedDonor } = await sb
-      .from("donor_canonical")
-      .select("*")
-      .eq("id", mergedId)
-      .single();
-
-    // Get aliases that will be moved
-    const { data: aliases } = await sb
-      .from("donor_alias")
-      .select("*")
-      .eq("canonical_id", mergedId);
-
-    // Move aliases to the kept donor
-    if (aliases && aliases.length) {
-      await sb
-        .from("donor_alias")
-        .update({ canonical_id: keepId })
-        .eq("canonical_id", mergedId);
-    }
-
-    // Add the merged donor's name as an alias of the kept donor
-    await sb.from("donor_alias").upsert({
-      canonical_id: keepId,
-      alias_name: mergedDonor?.canonical_name || `Unknown #${mergedId}`,
-      source: "admin",
-    }, { onConflict: "alias_name_lower" });
-
-    // Log the merge
-    await sb.from("donor_merge_log").insert({
-      kept_id: keepId,
-      merged_id: mergedId,
-      merged_name: mergedDonor?.canonical_name || "",
-      merged_aliases: aliases,
-      action: "merge",
-    });
-
-    // Delete the merged canonical entry
-    await sb.from("donor_canonical").delete().eq("id", mergedId);
+  // Save to Supabase
+  try {
+    const sb = await getSupabase();
+    await sb.from("donor_review_decisions").upsert({
+      pair_key: key,
+      decision: "merged",
+      kept_name: keepName,
+      merged_name: mergeName,
+      score: item.score,
+      decided_at: new Date().toISOString(),
+    }, { onConflict: "pair_key" });
+  } catch (e) {
+    console.warn("Could not save to Supabase:", e.message);
   }
 
-  // Mark cluster as merged
-  await sb
-    .from("donor_merge_pending")
-    .update({ status: "merged", reviewed_at: new Date().toISOString() })
-    .eq("id", clusterId);
-
-  // Refresh
-  await loadPendingClusters();
-  await loadMergeLog();
+  renderPendingPairs(document.getElementById("review-search").value);
+  renderMergeLog();
 }
 
-async function rejectCluster(clusterId) {
-  const sb = await getSupabase();
-  await sb
-    .from("donor_merge_pending")
-    .update({ status: "rejected", reviewed_at: new Date().toISOString() })
-    .eq("id", clusterId);
+async function rejectPair(key) {
+  decisions.set(key, "rejected");
 
-  await loadPendingClusters();
+  try {
+    const sb = await getSupabase();
+    await sb.from("donor_review_decisions").upsert({
+      pair_key: key,
+      decision: "rejected",
+      decided_at: new Date().toISOString(),
+    }, { onConflict: "pair_key" });
+  } catch (e) {
+    console.warn("Could not save to Supabase:", e.message);
+  }
+
+  renderPendingPairs(document.getElementById("review-search").value);
 }
 
-// ── Merge log ─────────────────────────────────────────────────────────────
-async function loadMergeLog() {
-  const sb = await getSupabase();
-  const { data: logs, error } = await sb
-    .from("donor_merge_log")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(50);
-
+// ── Merge Log ──────────────────────────────────────────────────────────
+function renderMergeLog() {
   const logEl = document.getElementById("merge-log");
   const emptyEl = document.getElementById("log-empty");
 
-  if (error || !logs || !logs.length) {
+  const merged = [];
+  for (const [key, decision] of decisions) {
+    if (decision === "merged") {
+      // Find the original item
+      const item = reviewQueue.find(r => pairKey(r.a, r.b) === key);
+      if (item) merged.push(item);
+    }
+  }
+
+  if (!merged.length) {
     logEl.innerHTML = "";
     emptyEl.hidden = false;
     return;
   }
-
   emptyEl.hidden = true;
 
-  // Look up kept donor names
-  const keptIds = [...new Set(logs.map(l => l.kept_id))];
-  const { data: keptDonors } = await sb
-    .from("donor_canonical")
-    .select("id, canonical_name")
-    .in("id", keptIds);
-
-  const keptNames = new Map((keptDonors || []).map(d => [d.id, d.canonical_name]));
-
-  logEl.innerHTML = logs.map(log => {
-    const keptName = keptNames.get(log.kept_id) || `#${log.kept_id}`;
-    const ts = new Date(log.created_at).toLocaleString();
-    const isUndo = log.action === "undo";
-
+  logEl.innerHTML = merged.map(item => {
+    const key = pairKey(item.a, item.b);
     return `
       <div class="merge-entry">
         <div class="merge-info">
-          <div class="merge-names">
-            ${isUndo ? "Undone:" : ""} "${esc(log.merged_name)}" → "${esc(keptName)}"
-          </div>
-          <div class="merge-date">${ts}</div>
+          <div class="merge-names">"${esc(item.a)}" ↔ "${esc(item.b)}" (score: ${item.score})</div>
         </div>
-        ${!isUndo ? `<button class="btn-small" onclick="undoMerge(${log.id}, ${log.kept_id}, ${log.merged_id})">Undo</button>` : ""}
+        <button class="btn-small" onclick="undoDecision('${esc(key)}')">Undo</button>
       </div>
     `;
   }).join("");
 }
 
-async function undoMerge(logId, keptId, mergedId) {
-  const sb = await getSupabase();
+async function undoDecision(key) {
+  decisions.delete(key);
 
-  // Get the original merge log entry
-  const { data: log } = await sb
-    .from("donor_merge_log")
-    .select("*")
-    .eq("id", logId)
-    .single();
-
-  if (!log) return;
-
-  // Re-create the merged donor canonical entry
-  const { data: restored } = await sb
-    .from("donor_canonical")
-    .insert({ canonical_name: log.merged_name })
-    .select()
-    .single();
-
-  if (restored && log.merged_aliases && log.merged_aliases.length) {
-    // Move aliases back
-    for (const alias of log.merged_aliases) {
-      await sb.from("donor_alias")
-        .update({ canonical_id: restored.id })
-        .eq("id", alias.id);
-    }
+  try {
+    const sb = await getSupabase();
+    await sb.from("donor_review_decisions").delete().eq("pair_key", key);
+  } catch (e) {
+    console.warn("Could not delete from Supabase:", e.message);
   }
 
-  // Remove the alias that was created during merge
-  await sb.from("donor_alias")
-    .delete()
-    .eq("canonical_id", keptId)
-    .eq("alias_name", log.merged_name);
-
-  // Log the undo
-  await sb.from("donor_merge_log").insert({
-    kept_id: keptId,
-    merged_id: mergedId,
-    merged_name: log.merged_name,
-    action: "undo",
-  });
-
-  await loadMergeLog();
+  renderPendingPairs(document.getElementById("review-search").value);
+  renderMergeLog();
 }
 
-// ── Manual donor search ───────────────────────────────────────────────────
-function initDonorSearch() {
-  const input = document.getElementById("donor-search");
-  let debounce = null;
-
+// ── Search filter ──────────────────────────────────────────────────────
+function initSearch() {
+  const input = document.getElementById("review-search");
+  if (!input) return;
   input.addEventListener("input", () => {
-    clearTimeout(debounce);
-    debounce = setTimeout(() => searchDonors(input.value.trim()), 300);
+    renderPendingPairs(input.value.trim());
   });
 }
-
-async function searchDonors(q) {
-  const resultsEl = document.getElementById("donor-search-results");
-  if (!q || q.length < 2) {
-    resultsEl.innerHTML = "";
-    return;
-  }
-
-  const sb = await getSupabase();
-  const { data: donors } = await sb
-    .from("donor_canonical")
-    .select("id, canonical_name, employer, city, state")
-    .ilike("canonical_name", `%${q}%`)
-    .limit(20);
-
-  if (!donors || !donors.length) {
-    resultsEl.innerHTML = '<div class="empty-msg">No donors found.</div>';
-    return;
-  }
-
-  resultsEl.innerHTML = donors.map(d => `
-    <div class="donor-result-row">
-      <div>
-        <div class="donor-result-name">${esc(d.canonical_name)}</div>
-        <div class="donor-result-meta">${[d.employer, d.city, d.state].filter(Boolean).join(" · ") || "—"}</div>
-      </div>
-      <div>ID: ${d.id}</div>
-    </div>
-  `).join("");
-}
-
-// Make functions available globally for onclick handlers
-window.mergeCluster = mergeCluster;
-window.rejectCluster = rejectCluster;
-window.undoMerge = undoMerge;
