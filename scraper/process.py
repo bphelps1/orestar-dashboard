@@ -914,6 +914,16 @@ def scrape_account_summaries(
             if ending is None:
                 return fid, None  # Page didn't load properly
 
+            # Extract Financial Status section separately to avoid
+            # ambiguous label matches (e.g. "Cash Balance" appears as both
+            # a section header in Cash Balance and a line item in Financial Status)
+            fs_html = ""
+            fs_start = html.find("<h5>Financial Status</h5>")
+            if fs_start == -1:
+                fs_start = html.find("Financial Status-->")
+            if fs_start >= 0:
+                fs_html = html[fs_start:]
+
             result = {
                 "year": year,
                 # Contributions section
@@ -932,13 +942,13 @@ def scrape_account_summaries(
                 "orestar_other_disbursements": _parse_dollar(html, "Other Disbursements") or 0.0,
                 "loan_payments_exempt": _parse_dollar(html, "Loan Payments (exempt)") or 0.0,
                 "balance_adjustments": _parse_dollar(html, "Balance Adjustments") or 0.0,
-                # Financial Status section
-                "cash_balance_fs": _parse_dollar(html, "Cash Balance") or 0.0,
-                "accounts_receivable": _parse_dollar(html, "Accounts Receivable") or 0.0,
-                "total_outstanding_loans": _parse_dollar(html, "Total Outstanding Loans") or 0.0,
-                "outstanding_personal_expenditures": _parse_dollar(html, "Outstanding Personal Expenditures") or 0.0,
-                "accounts_payable": _parse_dollar(html, "Accounts Payable") or 0.0,
-                "balance_deficit": _parse_dollar(html, "Balance Deficit") or 0.0,
+                # Financial Status section (parsed from FS-only HTML to avoid ambiguous matches)
+                "cash_balance_fs": _parse_dollar(fs_html, "Cash Balance") or 0.0,
+                "accounts_receivable": _parse_dollar(fs_html, "Accounts Receivable") or 0.0,
+                "total_outstanding_loans": _parse_dollar(fs_html, "Total Outstanding Loans") or 0.0,
+                "outstanding_personal_expenditures": _parse_dollar(fs_html, "Outstanding Personal Expenditures") or 0.0,
+                "accounts_payable": _parse_dollar(fs_html, "Accounts Payable") or 0.0,
+                "balance_deficit": _parse_dollar(fs_html, "Balance Deficit") or 0.0,
             }
             return fid, result
 
