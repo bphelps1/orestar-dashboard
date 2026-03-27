@@ -1108,6 +1108,16 @@ def aggregate_filers(
     else:
         log.warning("No filer_metadata.json found — party/office data will be unavailable")
 
+    # Load leadership roles (filer_id → role info)
+    _leadership_path = DATA_DIR / "leadership_roles.json"
+    _leadership: dict[str, dict] = {}  # filer_id → {role_title, chamber, party, ...}
+    if _leadership_path.exists():
+        with open(_leadership_path) as f:
+            _leadership = json.load(f)
+        log.info("Loaded %d leadership roles", len(_leadership))
+    else:
+        log.info("No leadership_roles.json found — leadership data will be unavailable")
+
     # ── Per-filer detail files ────────────────────────────────────────────────
     # Remove stale files whose slugs are no longer in the current filer set.
     current_slugs = set(filer_slugs.values())
@@ -1357,9 +1367,31 @@ def aggregate_filers(
         _committee_type = _meta.get("committee_type", "")
         _pac_type = _meta.get("pac_type", "")
         _nature = _meta.get("nature", "")
+        _candidate_name = _meta.get("candidate_name", "")
         # Normalize office to just the title (strip district number)
         # e.g. "State Representative, 25th District" → "State Representative"
         _office = _office_raw.split(",")[0].strip() if _office_raw else ""
+
+        # Attach leadership role if available
+        _leader = _leadership.get(_fid_for_index, {}) if _fid_for_index else {}
+        _leadership_role = _leader.get("role_title", "")
+        # Assign leadership tier:
+        #   1 = Speaker of House / President of Senate (top)
+        #   2 = Majority Leaders / Ways & Means Co-Chairs
+        #   3 = Chairs, Pro Tems, other leadership
+        _leadership_tier = 0
+        if _leadership_role:
+            _lr = _leadership_role.lower()
+            if "speaker of the house" in _lr or "senate president" == _lr.strip() or (
+                "president" in _lr and "pro" not in _lr
+            ):
+                _leadership_tier = 1
+            elif ("majority leader" in _lr and "deputy" not in _lr and "assistant" not in _lr) \
+                    or "ways and means co-chair" in _lr:
+                _leadership_tier = 2
+            else:
+                _leadership_tier = 3
+
         index_rows.append({
             "slug": slug, "name": name,
             "filer_id": _fid_for_index,
@@ -1372,6 +1404,9 @@ def aggregate_filers(
             "committee_type": _committee_type,
             "pac_type": _pac_type,
             "nature": _nature,
+            "candidate_name": _candidate_name,
+            "leadership_role": _leadership_role,
+            "leadership_tier": _leadership_tier,
         })
 
     # Sort index by total_in descending

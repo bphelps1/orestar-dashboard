@@ -281,19 +281,24 @@ function isOfficeComparable(targetOffice, fOffice) {
   return false;
 }
 
+// ── Leadership tier definitions ───────────────────────────────────────────
+// Tier 1: Speaker of the House, President of the Senate
+// Tier 2: Majority Leaders, Ways & Means Co-Chairs
+// Tier 3: Chairs, Pro Tems, Whips, other leadership positions
+// Tier 0: Not in leadership
+//
+// Ask multiplier: leadership members can command higher donations.
+const LEADERSHIP_ASK_MULTIPLIER = { 1: 2.5, 2: 2.0, 3: 1.5, 0: 1.0 };
+
 // ── Step 2: Find comparable fundraisers ────────────────────────────────────
 async function findComparables(targetProfile, targetFiler, cycle) {
-  // Use scraped ORESTAR metadata (party, office) from the filer index,
-  // falling back to name-based heuristics if metadata not yet scraped.
   const officeType = getOffice(targetFiler);
   const party = getParty(targetFiler);
   const chamber = getChamber(targetFiler);
+  const targetTier = targetFiler.leadership_tier || 0;
+  const isTargetLeadership = targetTier > 0;
 
-  console.log(`[recommend] Target: office=${officeType}, party=${party}, chamber=${chamber}`);
-
-  // Check if this filer has leadership tags
-  const targetLeadership = leadershipRoles[targetFiler.filer_id] ||
-    leadershipRoles[targetFiler.slug] || null;
+  console.log(`[recommend] Target: office=${officeType}, party=${party}, chamber=${chamber}, leadership_tier=${targetTier}`);
 
   const scored = [];
 
@@ -306,6 +311,7 @@ async function findComparables(targetProfile, targetFiler, cycle) {
     const fOffice = getOffice(f);
     const fParty = getParty(f);
     const fChamber = getChamber(f);
+    const fTier = f.leadership_tier || 0;
 
     // Party filter: if target has a known party, SKIP filers from other parties.
     // PACs/committees without party affiliation are allowed through.
@@ -318,29 +324,37 @@ async function findComparables(targetProfile, targetFiler, cycle) {
       if (officeType === fOffice) {
         similarity += 40;  // Exact same office
       } else if (isOfficeComparable(officeType, fOffice)) {
-        // state_rep ↔ state_senate or legislative → statewide
-        similarity += 30;  // Strong but slightly less than exact match
+        similarity += 30;  // state_rep ↔ state_senate or legislative → statewide
       }
-      // else: not comparable, gets 0 office points
     }
 
     // Same party gets a bonus (already filtered opposite parties above)
     if (party && fParty === party) similarity += 15;
-    // Similar fundraising magnitude (within 3x)
+
+    // Similar fundraising magnitude
     const ratio = Math.min(f.total_in, targetFiler.total_in) /
                   Math.max(f.total_in, targetFiler.total_in, 1);
     similarity += ratio * 15;
 
-    // Penalize leadership committees when target is not leadership
-    const fLeadership = leadershipRoles[f.filer_id] || leadershipRoles[f.slug] || null;
-    if (fLeadership && !targetLeadership) {
-      similarity -= 20;  // Leadership PACs are not typical peers
+    // Leadership-to-leadership affinity: heavy preference
+    if (isTargetLeadership && fTier > 0) {
+      // Both are leadership — strong bonus
+      similarity += 25;
+      // Extra bonus if same tier or adjacent tier
+      if (fTier === targetTier) similarity += 10;
+      else if (Math.abs(fTier - targetTier) === 1) similarity += 5;
+    } else if (isTargetLeadership && fTier === 0) {
+      // Target is leadership but comparable is not — mild penalty
+      similarity -= 5;
+    } else if (!isTargetLeadership && fTier > 0) {
+      // Target is NOT leadership but comparable IS — bigger penalty
+      similarity -= 15;
     }
 
     // Check admin tags for exclusions
     const fTags = adminTags[f.slug] || [];
     if (fTags.some(t => t.tag === "exclude")) continue;
-    if (fTags.some(t => t.tag === "prolific") && !targetLeadership) {
+    if (fTags.some(t => t.tag === "prolific") && !isTargetLeadership) {
       similarity -= 10;
     }
 
@@ -349,8 +363,7 @@ async function findComparables(targetProfile, targetFiler, cycle) {
     }
   }
 
-  // Sort by similarity descending, take top 50 (increased from 30 to
-  // accommodate the broader legislative pool)
+  // Sort by similarity descending, take top 50
   scored.sort((a, b) => b.similarity - a.similarity);
   return scored.slice(0, 50);
 }
@@ -460,7 +473,15 @@ function _getAllYearGifts(donorName, compProfiles, comparables) {
 
 // ── Step 4: Score donors ──────────────────────────────────────────────────
 function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
-  // Build: donor name → { compFilers: [{name, amount}], totalToComps, distinctComps }
+  const targetTier = targetProfile.leadership_tier ||
+    (filerIndex.find(f => f.slug === targetProfile.slug) || {}).leadership_tier || 0;
+
+  // Build a set of leadership filer slugs for quick lookup
+  const leadershipSlugs = new Set(
+    comparables.filter(c => c.leadership_tier > 0).map(c => c.slug)
+  );
+
+  // Build: donor name → { compGifts, totalToComps, distinctComps, leadershipComps }
   const donorMap = new Map(); // lowered name → data
 
   compProfiles.forEach((profile, idx) => {
@@ -472,9 +493,10 @@ function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
       if (!donorMap.has(key)) {
         donorMap.set(key, {
           name: d.name,
-          compGifts: [],          // {filer, amount, similarity}
+          compGifts: [],
           totalToComps: 0,
           distinctComps: 0,
+          leadershipComps: 0,  // how many leadership members this donor gave to
         });
       }
       const entry = donorMap.get(key);
@@ -482,9 +504,11 @@ function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
         filer: comp.name,
         amount: d.total,
         similarity: comp.similarity,
+        isLeadership: (comp.leadership_tier || 0) > 0,
       });
       entry.totalToComps += d.total;
       entry.distinctComps = entry.compGifts.length;
+      if ((comp.leadership_tier || 0) > 0) entry.leadershipComps++;
     });
   });
 
@@ -498,6 +522,15 @@ function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
   for (const [key, donor] of donorMap) {
     const alreadyGiven = targetDonorMap.get(key) || 0;
 
+    // ── EXCLUSION: donors who gave to only 1 person or donated ≤2 times ──
+    const allYearGifts = _getAllYearGifts(donor.name, compProfiles, comparables);
+    const distinctYears = new Set(allYearGifts).size;
+    const totalDonationInstances = allYearGifts.length; // times across all years × filers
+
+    if (donor.distinctComps <= 1 && totalDonationInstances <= 2) {
+      continue; // Exclude: gave to only 1 person and only 1-2 donation instances
+    }
+
     // Compute target ask from comparable gifts
     const compAmounts = donor.compGifts.map(g => g.amount).sort((a, b) => a - b);
     const median = percentile(compAmounts, 0.5);
@@ -505,7 +538,12 @@ function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
 
     // Target = upper-median (between median and 75th) capped by donor's own max
     const maxGift = Math.max(...compAmounts);
-    const targetAsk = Math.min(Math.round(((median + p75) / 2) * 100) / 100, maxGift);
+    let targetAsk = Math.min(Math.round(((median + p75) / 2) * 100) / 100, maxGift);
+
+    // Scale target ask by leadership tier multiplier
+    const askMultiplier = LEADERSHIP_ASK_MULTIPLIER[targetTier] || 1.0;
+    targetAsk = Math.round(targetAsk * askMultiplier * 100) / 100;
+
     const remainingAsk = Math.max(0, targetAsk - alreadyGiven);
 
     // Comparable giving range
@@ -518,7 +556,6 @@ function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
 
     // Factor 1: Number of distinct comparable filers supported (0-35 pts)
     // STRONG preference for donors who gave to MULTIPLE candidates.
-    // 1 filer = 3 pts, 2 = 10, 3 = 18, 4 = 24, 5+ = 30-35
     const distinctPts = donor.distinctComps === 1
       ? 3
       : Math.min(donor.distinctComps * 7, 35);
@@ -548,32 +585,28 @@ function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
       factors.push(`Has not given to this filer yet`);
     }
 
-    // Factor 5: Recency — reward current-cycle giving, penalize stale donors (−10 to +20 pts)
-    // We check if donor gave to comparables during the selected cycle years.
-    // Since mergeDonorsByYear already filters to cycle years, donors in the
-    // list are cycle-relevant. But we also check all-time giving years to
-    // detect one-time donors from years ago.
-    const cycleYrs = cycleYears(cycle).map(String);
-    const allYearGifts = _getAllYearGifts(donor.name, compProfiles, comparables);
+    // Factor 5: Recency — reward current-cycle giving, penalize stale donors
     const mostRecentYear = allYearGifts.length ? Math.max(...allYearGifts) : 0;
     const currentYear = new Date().getFullYear();
     const yearsAgo = mostRecentYear ? (currentYear - mostRecentYear) : 99;
 
     if (yearsAgo <= 1) {
-      // Gave this year or last year — strong recency
       score += 20;
       factors.push(`Active donor (last gave ${mostRecentYear})`);
     } else if (yearsAgo <= 3) {
-      // Gave within recent cycle
       score += 10;
     } else if (yearsAgo > 5) {
-      // Stale donor — penalize
       score -= 10;
       factors.push(`Last gave ${mostRecentYear} (${yearsAgo} years ago)`);
     }
 
-    // Penalty: one-time donors who gave to only 1 filer AND only 1 year
-    const distinctYears = new Set(allYearGifts).size;
+    // Factor 6: Leadership donor bonus — gave to multiple leadership members
+    if (donor.leadershipComps >= 2) {
+      score += Math.min(donor.leadershipComps * 5, 20);
+      factors.push(`Gave to ${donor.leadershipComps} leadership members`);
+    }
+
+    // Penalty: one-time donors (1 candidate, 1 year)
     if (donor.distinctComps === 1 && distinctYears <= 1) {
       score -= 5;
       factors.push(`One-time donor (1 candidate, 1 year)`);
@@ -603,6 +636,7 @@ function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
       comp_range: `${fmt$(compMin)}–${fmt$(compMax)}`,
       distinct_comps: donor.distinctComps,
       total_to_comps: donor.totalToComps,
+      leadership_comps: donor.leadershipComps,
       comp_gifts: donor.compGifts,
       why_summary: whySummary,
       factors,
