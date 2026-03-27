@@ -328,188 +328,242 @@ function statsFromTimeline(rows, beginningBalances) {
   };
 }
 
-// ── Shared field-metadata map (centralized tile definitions) ─────────────────
-const ACCT_FIELD_META = {
-  // Contributions group
-  orestar_contributions: {
+// ── Account summary tile definitions ─────────────────────────────────────────
+// Values are CALCULATED from our scraped transaction data, NOT taken from the
+// ORESTAR account summary page. ORESTAR account summary is used for validation
+// only (discrepancy checking). The only value taken from ORESTAR is the first
+// year's beginning balance, which anchors our running cash position.
+
+const CALC_TILE_META = {
+  // ── Calculated from transaction data ──────────────────────────────────────
+  cash_contributions: {
     label: "Cash Contributions",
-    tip: "<strong>Counted:</strong> All monetary donations received.<br><strong>Condition:</strong> ORESTAR sub-type 'Cash Contribution'.<br><strong>Meaning:</strong> Direct cash and check donations to the committee.",
-  },
-  loans_received: {
-    label: "Loans Received (non-exempt)",
-    tip: "<strong>Counted:</strong> Loans received that count toward contribution limits.<br><strong>Condition:</strong> Non-exempt loans reported to ORESTAR.<br><strong>Meaning:</strong> Borrowed money that the committee must repay and that counts as a contribution.",
+    tip: "<strong>Counted:</strong> Sum of every individual cash contribution transaction we scraped.<br><strong>Condition:</strong> Transactions with type 'C' and sub-type 'Cash Contribution'.<br><strong>Meaning:</strong> Total direct cash and check donations received by this committee.",
   },
   inkind_contributions: {
     label: "In-Kind Contributions",
-    tip: "<strong>Counted:</strong> Non-cash contributions (goods, services, etc.).<br><strong>Condition:</strong> Reported as in-kind under ORESTAR contribution types.<br><strong>Meaning:</strong> Things of value given to the committee instead of cash.",
+    tip: "<strong>Counted:</strong> Sum of every in-kind contribution transaction we scraped.<br><strong>Condition:</strong> Transactions with type 'C' and sub-type containing 'In-Kind'.<br><strong>Meaning:</strong> The estimated fair-market value of goods, services, or event space donated instead of cash.",
   },
-  total_contributions_calc: {
+  total_contributions: {
     label: "Total Contributions",
     subtotal: true,
-    fields: ["orestar_contributions", "loans_received", "inkind_contributions"],
-    tip: "<strong>Counted:</strong> Sum of cash, loans (non-exempt), and in-kind contributions.<br><strong>Meaning:</strong> Everything received that counts toward contribution limits.",
+    compute: d => d.cash_contributions + d.inkind_contributions,
+    tip: "<strong>Counted:</strong> Cash contributions + in-kind contributions.<br><strong>Meaning:</strong> Everything the committee received from donors.",
   },
-  // Expenditures group
-  orestar_expenditures: {
+  cash_expenditures: {
     label: "Cash Expenditures",
-    tip: "<strong>Counted:</strong> All cash payments made by the committee.<br><strong>Condition:</strong> ORESTAR sub-type 'Cash Expenditure'.<br><strong>Meaning:</strong> Money spent on campaign operations, ads, staff, etc.",
+    tip: "<strong>Counted:</strong> Sum of every cash expenditure transaction we scraped.<br><strong>Condition:</strong> Transactions with type 'E', excluding non-cash-affecting sub-types like 'Account Payable' and 'Personal Expenditure for Reimbursement'.<br><strong>Meaning:</strong> Total cash actually spent on campaign operations.",
   },
-  loan_payments: {
-    label: "Loan Payments (non-exempt)",
-    tip: "<strong>Counted:</strong> Loan repayments that count toward expenditure totals.<br><strong>Condition:</strong> Non-exempt loan payments reported to ORESTAR.<br><strong>Meaning:</strong> Money used to repay non-exempt loans.",
-  },
-  inkind_expenditures: {
-    label: "In-Kind Expenditures",
-    tip: "<strong>Counted:</strong> Non-cash expenditures (goods, services provided).<br><strong>Condition:</strong> Reported as in-kind under ORESTAR expenditure types.<br><strong>Meaning:</strong> Non-monetary costs borne by the committee.",
-  },
-  total_expenditures_calc: {
-    label: "Total Expenditures",
-    subtotal: true,
-    fields: ["orestar_expenditures", "loan_payments", "inkind_expenditures"],
-    tip: "<strong>Counted:</strong> Sum of cash, loan payments (non-exempt), and in-kind expenditures.<br><strong>Meaning:</strong> Everything spent that counts toward expenditure totals.",
-  },
-  // Cash Balance group
-  beginning_balance: {
-    label: "Beginning Balance (Previous Year)",
-    tip: "<strong>Counted:</strong> Cash the committee had at the start of the reporting year.<br><strong>Condition:</strong> Carried over from the prior year's ending balance in ORESTAR.<br><strong>Meaning:</strong> Starting cash position for the year.",
-  },
-  orestar_other_receipts: {
-    label: "Other Receipts",
-    tip: "<strong>Counted:</strong> Non-contribution money received (refunds, interest, etc.).<br><strong>Condition:</strong> ORESTAR 'Other Receipt' types (OR, O, OA).<br><strong>Meaning:</strong> Miscellaneous income that isn't a contribution.",
-  },
-  loans_received_exempt: {
-    label: "Loans Received (exempt)",
-    tip: "<strong>Counted:</strong> Loans that do not count toward contribution limits.<br><strong>Condition:</strong> Exempt loans as classified by ORESTAR.<br><strong>Meaning:</strong> Borrowed money not subject to contribution limits.",
-  },
-  cash_balance_inflow_subtotal: {
-    label: "Subtotal (Inflows)",
-    subtotal: true,
-    fields: ["beginning_balance", "orestar_contributions", "orestar_other_receipts", "loans_received_exempt"],
-    tip: "<strong>Meaning:</strong> Total money available before expenditures.",
-  },
-  orestar_other_disbursements: {
+  other_disbursements: {
     label: "Other Disbursements",
-    tip: "<strong>Counted:</strong> Non-expenditure cash outflows.<br><strong>Condition:</strong> ORESTAR 'Other Disbursement' type (OD).<br><strong>Meaning:</strong> Miscellaneous payments that aren't standard expenditures.",
+    tip: "<strong>Counted:</strong> Sum of non-expenditure cash outflows from our scraped transactions.<br><strong>Condition:</strong> Transactions with type 'OD' (Other Disbursement).<br><strong>Meaning:</strong> Miscellaneous cash payments that are not standard campaign expenditures.",
   },
-  loan_payments_exempt: {
-    label: "Loan Payments (exempt)",
-    tip: "<strong>Counted:</strong> Repayments on exempt loans.<br><strong>Condition:</strong> Payments on loans classified as exempt by ORESTAR.<br><strong>Meaning:</strong> Money used to repay loans not subject to limits.",
-  },
-  cash_balance_outflow_subtotal: {
-    label: "Subtotal (Outflows)",
+  total_outflows: {
+    label: "Total Outflows",
     subtotal: true,
-    fields: ["orestar_expenditures", "orestar_other_disbursements", "loan_payments_exempt"],
-    tip: "<strong>Meaning:</strong> Total money paid out.",
+    compute: d => d.cash_expenditures + d.other_disbursements,
+    tip: "<strong>Counted:</strong> Cash expenditures + other disbursements.<br><strong>Meaning:</strong> Total cash paid out by the committee.",
   },
-  balance_adjustments: {
-    label: "Balance Adjustments",
-    tip: "<strong>Counted:</strong> Manual corrections to the cash balance.<br><strong>Condition:</strong> Filed as 'Balance Adjustment' in ORESTAR.<br><strong>Meaning:</strong> Corrections for errors, write-offs, or reclassifications.",
+  // ── Cash Balance (calculated from transactions + first-year anchor) ───────
+  beginning_balance: {
+    label: "Beginning Balance",
+    tip: "<strong>Counted:</strong> The committee's cash position at the start of the selected period.<br><strong>Condition:</strong> Anchored to the first-ever ORESTAR beginning balance for this committee, then rolled forward year-to-year using our transaction data.<br><strong>Meaning:</strong> How much cash the committee started with. Only the very first year's balance comes from ORESTAR; every subsequent year is calculated from the prior year's ending balance.",
+  },
+  other_receipts: {
+    label: "Other Receipts",
+    tip: "<strong>Counted:</strong> Sum of non-contribution cash received from our scraped transactions.<br><strong>Condition:</strong> Transactions with type 'OR', 'O', or 'OA' (excluding 'Account Payable Rescinded').<br><strong>Meaning:</strong> Refunds, interest, and other miscellaneous income that is not a contribution.",
+  },
+  net_cash_flow: {
+    label: "Net Cash Flow",
+    subtotal: true,
+    compute: d => d.cash_contributions + d.other_receipts - d.cash_expenditures - d.other_disbursements,
+    tip: "<strong>Counted:</strong> (Cash contributions + other receipts) minus (cash expenditures + other disbursements).<br><strong>Meaning:</strong> How much cash the committee gained or lost during this period.",
   },
   ending_cash_balance: {
     label: "Ending Cash Balance",
     subtotal: true,
-    tip: "<strong>Counted:</strong> Inflow subtotal minus outflow subtotal plus adjustments.<br><strong>Condition:</strong> From ORESTAR account summary page.<br><strong>Meaning:</strong> How much cash the committee has at year-end.",
+    compute: d => d.beginning_balance + d.cash_contributions + d.other_receipts - d.cash_expenditures - d.other_disbursements,
+    tip: "<strong>Counted:</strong> Beginning balance + net cash flow.<br><strong>Meaning:</strong> Our calculated cash position at the end of the period. This should closely match the ORESTAR ending balance if our transaction data is complete.",
   },
-  // Financial Status group
-  cash_balance_fs: {
-    label: "Cash Balance",
-    tip: "<strong>Counted:</strong> Current cash on hand per ORESTAR financial status.<br><strong>Condition:</strong> From ORESTAR account summary 'Financial Status' section.<br><strong>Meaning:</strong> Liquid cash the committee currently holds.",
+  // ── ORESTAR-reported values (for comparison / validation) ─────────────────
+  orestar_ending: {
+    label: "ORESTAR Ending Balance",
+    orestar: true,
+    tip: "<strong>Source:</strong> Scraped directly from the ORESTAR account summary page.<br><strong>Meaning:</strong> The official ending cash balance reported to the state. Compare this to our calculated ending balance above — any difference means our transaction data may be incomplete or categorized differently.",
   },
+  orestar_discrepancy: {
+    label: "Discrepancy",
+    orestar: true,
+    subtotal: true,
+    tip: "<strong>Counted:</strong> Our calculated ending balance minus the ORESTAR-reported ending balance.<br><strong>Meaning:</strong> A positive number means we calculate more cash than ORESTAR reports; negative means less. Large discrepancies signal missing transactions or categorization differences.",
+  },
+  // ── ORESTAR-only balance sheet items (cannot be calculated from transactions) ──
   accounts_receivable: {
     label: "Accounts Receivable",
-    tip: "<strong>Counted:</strong> Money owed to the committee but not yet received.<br><strong>Condition:</strong> Outstanding receivables reported to ORESTAR.<br><strong>Meaning:</strong> Pledged or expected payments not yet collected.",
-  },
-  fs_assets_subtotal: {
-    label: "Subtotal (Assets)",
-    subtotal: true,
-    fields: ["cash_balance_fs", "accounts_receivable"],
-    tip: "<strong>Meaning:</strong> Total assets: cash plus receivables.",
-  },
-  total_outstanding_loans: {
-    label: "Total Outstanding Loans",
-    tip: "<strong>Counted:</strong> All unpaid loan balances.<br><strong>Condition:</strong> Loans reported in ORESTAR that haven't been fully repaid.<br><strong>Meaning:</strong> How much the committee still owes on loans.",
-  },
-  outstanding_personal_expenditures: {
-    label: "Outstanding Personal Expenditures",
-    tip: "<strong>Counted:</strong> Personal spending awaiting reimbursement.<br><strong>Condition:</strong> Expenditures made personally by a candidate/treasurer not yet repaid.<br><strong>Meaning:</strong> Personal money spent on behalf of the committee.",
+    orestar: true,
+    tip: "<strong>Source:</strong> ORESTAR account summary only (not calculable from transactions).<br><strong>Meaning:</strong> Money pledged or owed to the committee that hasn't been received yet — like outstanding pledges or reimbursements expected.",
   },
   accounts_payable: {
     label: "Accounts Payable",
-    tip: "<strong>Counted:</strong> Bills and obligations not yet paid.<br><strong>Condition:</strong> Outstanding payables reported to ORESTAR.<br><strong>Meaning:</strong> Money the committee owes to vendors or service providers.",
+    orestar: true,
+    tip: "<strong>Source:</strong> ORESTAR account summary only (not calculable from transactions).<br><strong>Meaning:</strong> Bills the committee owes but hasn't paid yet — like vendor invoices or outstanding obligations.",
   },
-  fs_liabilities_subtotal: {
-    label: "Subtotal (Liabilities)",
-    subtotal: true,
-    fields: ["total_outstanding_loans", "outstanding_personal_expenditures", "accounts_payable"],
-    tip: "<strong>Meaning:</strong> Total outstanding obligations.",
+  total_outstanding_loans: {
+    label: "Outstanding Loans",
+    orestar: true,
+    tip: "<strong>Source:</strong> ORESTAR account summary only (not calculable from transactions).<br><strong>Meaning:</strong> Total unpaid loan balances — how much the committee still owes on borrowed money.",
   },
-  balance_deficit: {
-    label: "Balance / Deficit",
-    subtotal: true,
-    tip: "<strong>Counted:</strong> Assets minus liabilities.<br><strong>Condition:</strong> From ORESTAR account summary.<br><strong>Meaning:</strong> The committee's net financial position. Negative means deficit.",
+  outstanding_personal_expenditures: {
+    label: "Personal Expenditures Owed",
+    orestar: true,
+    tip: "<strong>Source:</strong> ORESTAR account summary only (not calculable from transactions).<br><strong>Meaning:</strong> Money a candidate or treasurer spent personally on behalf of the committee that hasn't been reimbursed yet.",
   },
 };
 
-const ACCT_GROUPS = [
+const CALC_GROUPS = [
   {
-    title: "Contributions",
-    fields: ["orestar_contributions", "loans_received", "inkind_contributions", "total_contributions_calc"],
+    title: "Contributions (Calculated from Transactions)",
+    fields: ["cash_contributions", "inkind_contributions", "total_contributions"],
   },
   {
-    title: "Expenditures",
-    fields: ["orestar_expenditures", "loan_payments", "inkind_expenditures", "total_expenditures_calc"],
+    title: "Outflows (Calculated from Transactions)",
+    fields: ["cash_expenditures", "other_disbursements", "total_outflows"],
   },
   {
-    title: "Cash Balance",
+    title: "Cash Balance (Calculated)",
     fields: [
-      "beginning_balance", "orestar_contributions", "orestar_other_receipts", "loans_received_exempt",
-      "cash_balance_inflow_subtotal",
-      "orestar_expenditures", "orestar_other_disbursements", "loan_payments_exempt",
-      "cash_balance_outflow_subtotal",
-      "balance_adjustments", "ending_cash_balance",
+      "beginning_balance", "cash_contributions", "other_receipts",
+      "cash_expenditures", "other_disbursements",
+      "net_cash_flow", "ending_cash_balance",
     ],
   },
   {
-    title: "Financial Status",
-    fields: [
-      "cash_balance_fs", "accounts_receivable", "fs_assets_subtotal",
-      "total_outstanding_loans", "outstanding_personal_expenditures", "accounts_payable",
-      "fs_liabilities_subtotal", "balance_deficit",
-    ],
+    title: "ORESTAR Validation",
+    fields: ["orestar_ending", "orestar_discrepancy"],
+  },
+  {
+    title: "ORESTAR-Reported Balances",
+    fields: ["accounts_receivable", "accounts_payable", "total_outstanding_loans", "outstanding_personal_expenditures"],
   },
 ];
 
-function renderAcctSummary(acctData) {
+/**
+ * Build a calculated account summary from the filer's transaction data.
+ * All values come from our scraped row-by-row transaction data, NOT from
+ * the ORESTAR account summary page. The only exception is the first-year
+ * beginning balance (the anchor).
+ */
+function buildCalcSummary(profile) {
+  const timeline = profile.timeline || [];
+  if (!timeline.length) return null;
+
+  // Sum transaction-based values from the timeline
+  let cashContrib = 0, inkind = 0, cashExpend = 0, otherReceipts = 0, otherDisburse = 0;
+  for (const row of timeline) {
+    cashContrib   += row.contributions       || 0;
+    inkind        += row.inkind              || 0;
+    cashExpend    += row.expenditures        || 0;
+    otherReceipts += row.other_receipts      || 0;
+    otherDisburse += row.other_disbursements || 0;
+  }
+
+  // Beginning balance: only use ORESTAR anchor for pre-2006 filers.
+  // Filers whose data starts after 2006 have all transactions in our data,
+  // so their beginning balance is $0 (no pre-existing cash to account for).
+  const beginBalances = profile.beginning_balances || {};
+  const sortedYears = Object.keys(beginBalances).sort();
+  const firstYear = sortedYears[0] || "";
+  const beginBal = firstYear ? (beginBalances[firstYear] || 0) : 0;
+
+  // Our calculated ending balance
+  const endingCalc = beginBal + cashContrib + otherReceipts - cashExpend - otherDisburse;
+
+  // ORESTAR-reported values (for comparison only)
+  const orestar = profile.orestar_account_summary || {};
+  const orestarEnding = orestar.ending_cash_balance != null ? orestar.ending_cash_balance : null;
+
+  return {
+    cash_contributions: Math.round(cashContrib * 100) / 100,
+    inkind_contributions: Math.round(inkind * 100) / 100,
+    cash_expenditures: Math.round(cashExpend * 100) / 100,
+    other_disbursements: Math.round(otherDisburse * 100) / 100,
+    beginning_balance: Math.round(beginBal * 100) / 100,
+    other_receipts: Math.round(otherReceipts * 100) / 100,
+    ending_cash_balance: Math.round(endingCalc * 100) / 100,
+    // ORESTAR values for validation
+    orestar_ending: orestarEnding,
+    orestar_discrepancy: orestarEnding != null
+      ? Math.round((endingCalc - orestarEnding) * 100) / 100
+      : null,
+    accounts_receivable: orestar.accounts_receivable || 0,
+    accounts_payable: orestar.accounts_payable || 0,
+    total_outstanding_loans: orestar.total_outstanding_loans || 0,
+    outstanding_personal_expenditures: orestar.outstanding_personal_expenditures || 0,
+    _has_orestar: !!orestar.year,
+  };
+}
+
+function renderAcctSummary(profile) {
   const grid = document.getElementById("acct-summary-grid");
   const details = document.getElementById("acct-summary-details");
   if (!grid || !details) return;
 
-  if (!acctData || !acctData.year) {
+  const calcData = profile ? buildCalcSummary(profile) : null;
+  if (!calcData) {
     details.hidden = true;
     return;
   }
   details.hidden = false;
 
-  grid.innerHTML = ACCT_GROUPS.map(group => {
+  grid.innerHTML = CALC_GROUPS.map(group => {
+    // Hide ORESTAR validation/balance groups if no ORESTAR data
+    if (group.title.startsWith("ORESTAR") && !calcData._has_orestar) return "";
+
     const tiles = group.fields.map(field => {
-      const meta = ACCT_FIELD_META[field];
+      const meta = CALC_TILE_META[field];
       if (!meta) return "";
+
       let val;
-      if (meta.subtotal && meta.fields) {
-        val = meta.fields.reduce((s, f) => s + (acctData[f] || 0), 0);
+      if (meta.compute) {
+        val = meta.compute(calcData);
       } else {
-        val = acctData[field] != null ? acctData[field] : 0;
+        val = calcData[field] != null ? calcData[field] : 0;
       }
-      const cls = meta.subtotal ? "acct-tile acct-tile-subtotal" : "acct-tile";
+
+      // For discrepancy, show N/A if no ORESTAR data
+      if (field === "orestar_discrepancy" && val === null) return "";
+      if (field === "orestar_ending" && val === null) return "";
+
+      const isSubtotal = meta.subtotal;
+      const isOrestar = meta.orestar;
+      let cls = "acct-tile";
+      if (isSubtotal) cls += " acct-tile-subtotal";
+      if (isOrestar) cls += " acct-tile-orestar";
+
+      // Color the discrepancy tile by severity
+      let extraStyle = "";
+      if (field === "orestar_discrepancy" && val !== null) {
+        const abs = Math.abs(val);
+        const sev = discrepancySeverity(abs);
+        if (sev === "red") extraStyle = ' style="border-color:#fc8181;background:#fff5f5"';
+        else if (sev === "yellow") extraStyle = ' style="border-color:#ecc94b;background:#fffff0"';
+      }
+
       const helpBtn = meta.tip
         ? `<span class="acct-tile-help" tabindex="0" role="button" aria-label="Info">?<span class="acct-tile-tip">${meta.tip}</span></span>`
         : "";
-      return `<div class="${cls}">
+
+      const displayVal = val != null ? fmt$(val) : "N/A";
+
+      return `<div class="${cls}"${extraStyle}>
         ${helpBtn}
         <div class="acct-tile-label">${esc(meta.label)}</div>
-        <div class="acct-tile-value">${fmt$(val)}</div>
+        <div class="acct-tile-value">${displayVal}</div>
       </div>`;
     }).join("");
+
+    if (!tiles.trim()) return "";
+
     return `<div class="acct-group">
       <div class="acct-group-title">${esc(group.title)}</div>
       <div class="acct-tile-grid">${tiles}</div>
@@ -1268,9 +1322,7 @@ function renderOverviewGlobal() {
   }
   updateCohIndicator(null);  // No single-filer indicator for global view
   const cohNote = document.getElementById("coh-note");
-  if (cohNote) cohNote.textContent = summaryData.global_beginning_balances
-    ? "Includes ORESTAR beginning balances"
-    : "";
+  if (cohNote) cohNote.textContent = "Calculated from transaction data";
   document.getElementById("stat-cards").hidden             = false;
   document.getElementById("filer-comparison-grid").hidden  = true;
   document.getElementById("overview-donut-box").hidden     = false;
@@ -1381,7 +1433,7 @@ function updateCohIndicator(profile) {
     ind.className = "coh-indicator coh-estimated";
     ind.textContent = "EST";
     ind.setAttribute("tabindex", "0");
-    ind.title = "Estimated: no ORESTAR beginning balance available. Cash on hand is calculated from transactions only.";
+    ind.title = "Estimated: no ORESTAR beginning balance data scraped yet. Cash on hand is calculated from transactions with a $0 starting balance.";
   } else {
     ind.hidden = true;
   }
@@ -1393,7 +1445,7 @@ function cohIndicatorHTML(profile) {
   const disc = profile.orestar_discrepancy || 0;
   const absDisc = Math.abs(disc);
   if (src === "calculated") {
-    return '<span class="coh-indicator coh-estimated" tabindex="0" title="Estimated: no ORESTAR beginning balance available">EST</span>';
+    return '<span class="coh-indicator coh-estimated" tabindex="0" title="Estimated: no ORESTAR beginning balance data scraped yet">EST</span>';
   }
   if (absDisc > 0.01) {
     const severity = discrepancySeverity(absDisc);
@@ -1424,9 +1476,7 @@ function renderOverviewSingleFiler(profile) {
   }
   updateCohIndicator(profile);
   const cohNote = document.getElementById("coh-note");
-  if (cohNote) cohNote.textContent = profile.cash_on_hand_source === "orestar"
-    ? "Includes ORESTAR beginning balances"
-    : "Estimated from transactions only";
+  if (cohNote) cohNote.textContent = "Calculated from transaction data";
   document.getElementById("stat-cards").hidden             = false;
   document.getElementById("filer-comparison-grid").hidden  = true;
   document.getElementById("overview-donut-box").hidden     = false;
@@ -1452,7 +1502,7 @@ function renderOverviewSingleFiler(profile) {
   }
 
   document.getElementById("filer-comparison-grid").hidden = true;
-  renderAcctSummary(profile.orestar_account_summary || null);
+  renderAcctSummary(profile);
   fitStatCards();
 }
 

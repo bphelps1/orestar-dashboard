@@ -81,10 +81,9 @@
         <div class="card-value" id="stat-expenditures">—</div>
       </div>
       <div class="card">
-        <span class="card-help" tabindex="0" role="button" aria-label="Info">?<span class="card-help-tip"><strong>Counted:</strong> Cash contributions minus cash expenditures, anchored to ORESTAR beginning balances when available.<br><strong>Condition:</strong> Uses each committee's official beginning-of-year balance as a starting point, then adds contributions and subtracts expenditures.<br><strong>Meaning:</strong> An estimate of how much liquid cash committees currently hold. The ORESTAR indicator (if shown) flags any difference between this estimate and the official ORESTAR ending balance.</span></span>
+        <span class="card-help" tabindex="0" role="button" aria-label="Info">?<span class="card-help-tip"><strong>Calculated from:</strong> Beginning balance + cash contributions + other receipts &minus; cash expenditures &minus; other disbursements, summed across all recorded transactions.<br><strong>Beginning balance:</strong> For committees that pre-date ORESTAR (before 2006), the beginning balance is their "Beginning Balance (Previous Year)" from the earliest year on record. Committees created in 2006 or later start at $0 since all their transactions are captured.<br><strong>Meaning:</strong> How much liquid cash a committee currently holds, calculated entirely from transaction-level data. If a warning icon appears, it shows the difference between this calculation and the official ORESTAR ending cash balance.</span></span>
         <div class="card-label">Cash on Hand <span id="coh-indicator" class="coh-indicator" title="" hidden></span></div>
         <div class="card-value" id="stat-cash-on-hand">—</div>
-        <div class="card-note" id="coh-note"></div>
       </div>
       <div class="card">
         <span class="card-help" tabindex="0" role="button" aria-label="Info">?<span class="card-help-tip"><strong>Counted:</strong> Every individual contribution and expenditure record.<br><strong>Condition:</strong> All transaction rows in the ORESTAR dataset (both contributions and expenditures).<br><strong>Meaning:</strong> The total number of individual financial transactions recorded across all committees.</span></span>

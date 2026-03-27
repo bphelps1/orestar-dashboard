@@ -1081,6 +1081,23 @@ def aggregate_filers(
                 _orestar_data[canon_name] = _fid_to_summary[fid]
         log.info("ORESTAR account summaries mapped for %d / %d filers", len(_orestar_data), len(all_filer_names))
 
+    # ── Load earliest-year beginning balances (from Playwright scraper) ──────
+    _earliest_balances_path = DATA_DIR / "earliest_balances.json"
+    _earliest_balances: dict[str, dict] = {}  # filer_id → {earliest_year, beginning_balance, ts}
+    if _earliest_balances_path.exists():
+        with open(_earliest_balances_path) as f:
+            _earliest_balances = json.load(f)
+        log.info("Loaded %d earliest-year beginning balances", len(_earliest_balances))
+    else:
+        log.warning("No earliest_balances.json found — beginning balances will default to $0")
+
+    # Build canonical-name → earliest balance mapping
+    _name_to_earliest: dict[str, dict] = {}
+    if _filer_id_col:
+        for canon_name, fid in _name_to_fid.items():
+            if fid in _earliest_balances:
+                _name_to_earliest[canon_name] = _earliest_balances[fid]
+
     # ── Per-filer detail files ────────────────────────────────────────────────
     # Remove stale files whose slugs are no longer in the current filer set.
     current_slugs = set(filer_slugs.values())
@@ -1141,59 +1158,40 @@ def aggregate_filers(
 
         yearly_nets = _yearly_net(_cash_contrib, _e_for_coh, _or_for_coh, filer_od)
 
-        # Determine beginning balances using ORESTAR anchor
+        # Determine beginning balances and cash-on-hand
+        # Strategy: use the earliest-year beginning balance scraped directly from
+        # ORESTAR (via Playwright), then roll forward through yearly transaction nets.
+        # This avoids error-prone back-calculation from the current year.
         orestar_info = _orestar_data.get(name)
         beginning_balances: dict[str, float] = {}
         cash_on_hand_source = "calculated"
         orestar_discrepancy = 0.0
         orestar_year = 0
 
+        sorted_years = sorted(yearly_nets.keys())
+
+        # Look up earliest beginning balance from the Playwright-scraped cache
+        earliest_info = _name_to_earliest.get(name)
+        first_year_begin = earliest_info["beginning_balance"] if earliest_info else 0.0
+
+        # Roll forward: beginning balance for each year, then cash on hand
+        running = first_year_begin
+        for yr_s in sorted_years:
+            beginning_balances[yr_s] = round(running, 2)
+            running += yearly_nets.get(yr_s, 0.0)
+        cash_on_hand = round(running, 2)
+
+        # Compare against ORESTAR-reported ending balance for validation
         if orestar_info and orestar_info.get("year", 0) > 0:
-            # We have an ORESTAR anchor
-            anchor_year = orestar_info["year"]
-            anchor_beginning = orestar_info.get("beginning_balance", 0.0)
+            orestar_year = orestar_info["year"]
             orestar_ending = orestar_info.get("ending_cash_balance", 0.0)
-            orestar_year = anchor_year
             cash_on_hand_source = "orestar"
-
-            # Set the anchor year's beginning balance
-            beginning_balances[str(anchor_year)] = round(anchor_beginning, 2)
-
-            # Work backward from anchor to compute prior years' beginning balances
-            sorted_years = sorted(yearly_nets.keys())
-            years_before_anchor = [y for y in sorted_years if int(y) < anchor_year]
-            # Go from the year just before anchor backward
-            running_balance = anchor_beginning
-            for yr_s in reversed(years_before_anchor):
-                # beginning_balance[yr] + net[yr] = beginning_balance[yr+1]
-                # So: beginning_balance[yr] = running_balance - net[yr]
-                net = yearly_nets.get(yr_s, 0.0)
-                running_balance = running_balance - net
-                beginning_balances[yr_s] = round(running_balance, 2)
-
-            # Compute cash on hand (ending balance = anchor beginning + all transactions from anchor year onward)
-            years_from_anchor = [y for y in sorted_years if int(y) >= anchor_year]
-            net_from_anchor = sum(yearly_nets.get(y, 0.0) for y in years_from_anchor)
-            cash_on_hand = round(anchor_beginning + net_from_anchor, 2)
-
-            # Check discrepancy: our calculated ending should match ORESTAR
-            # (Only meaningful if we have complete data for the anchor year)
-            our_anchor_ending = round(anchor_beginning + yearly_nets.get(str(anchor_year), 0.0), 2)
+            # Our calculated ending for the ORESTAR anchor year
+            our_anchor_ending = round(
+                beginning_balances.get(str(orestar_year), 0.0)
+                + yearly_nets.get(str(orestar_year), 0.0), 2
+            )
             orestar_discrepancy = round(our_anchor_ending - orestar_ending, 2)
-        else:
-            # No ORESTAR data — pure transaction-based fallback
-            _total_in_full  = round(float(_cash_contrib["amount"].sum()) if not _cash_contrib.empty else 0.0, 2)
-            _total_out_full = round(float(_e_for_coh["amount"].sum())    if not _e_for_coh.empty    else 0.0, 2)
-            _total_or_coh   = round(float(_or_for_coh["amount"].sum())   if not _or_for_coh.empty   else 0.0, 2)
-            cash_on_hand    = round(_total_in_full + _total_or_coh - _total_out_full - total_od, 2)
-
-            # Set beginning balance for earliest year to 0 (no anchor available)
-            sorted_years = sorted(yearly_nets.keys())
-            if sorted_years:
-                running = 0.0
-                for yr_s in sorted_years:
-                    beginning_balances[yr_s] = round(running, 2)
-                    running += yearly_nets.get(yr_s, 0.0)
 
         # Accumulate global beginning balances (sum across all filers per year)
         for yr_s, bal in beginning_balances.items():

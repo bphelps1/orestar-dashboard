@@ -1,0 +1,279 @@
+#!/usr/bin/env python3
+"""
+fetch_earliest_balances.py — Scrape earliest-year Beginning Balance from ORESTAR.
+
+Uses Playwright (headed browser) to navigate ORESTAR Account Summary pages
+backwards via the "Prev" button, reaching the earliest year to grab the true
+"Beginning Balance (Previous Year)" for each filer.
+
+This is needed because:
+  - ORESTAR's default Account Summary page shows the current year only
+  - Year navigation uses POST forms with OWASP CSRF tokens
+  - Plain HTTP requests can't navigate years; a real browser session is required
+  - Back-calculating from the current year's beginning balance introduces errors
+
+Output: data/earliest_balances.json
+  { "filer_id": { "earliest_year": int, "beginning_balance": float, "ts": float }, ... }
+
+Usage:
+    python scraper/fetch_earliest_balances.py [--filer-ids 19763 12345] [--max-filers 100]
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+import re
+import time
+from datetime import datetime
+from pathlib import Path
+
+log = logging.getLogger(__name__)
+
+BASE_URL = "https://secure.sos.state.or.us/orestar"
+DATA_DIR = Path(__file__).parent.parent / "data"
+CACHE_PATH = DATA_DIR / "earliest_balances.json"
+
+USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/120.0.0.0 Safari/537.36"
+)
+
+# Wait time after initial page load (F5 bot defense)
+PAGE_RENDER_WAIT = 5
+# Wait between "Prev" clicks
+PREV_CLICK_WAIT = 1.5
+# Polite delay between filers
+FILER_DELAY = 1.0
+
+_YEAR_RE = re.compile(r"Account Summary Information for the year\s+(\d{4})")
+_BEG_BAL_RE = re.compile(
+    r"Beginning Balance \(Previous Year\).*?(-\s*)?\$\s*([\d,]+\.\d{2})",
+    re.DOTALL,
+)
+
+
+def _parse_year(html: str) -> int | None:
+    m = _YEAR_RE.search(html)
+    return int(m.group(1)) if m else None
+
+
+def _parse_beginning_balance(html: str) -> float:
+    m = _BEG_BAL_RE.search(html)
+    if not m:
+        return 0.0
+    val = float(m.group(2).replace(",", ""))
+    if m.group(1) and m.group(1).strip() == "-":
+        val = -val
+    return val
+
+
+def _scrape_filer_earliest(page, filer_id: str) -> dict | None:
+    """Navigate to a filer's Account Summary and click Prev until earliest year."""
+    url = f"{BASE_URL}/publicAccountSummary.do?filerId={filer_id}"
+
+    try:
+        page.goto(url, timeout=30_000)
+        time.sleep(PAGE_RENDER_WAIT)
+    except Exception as e:
+        log.warning("Failed to load page for filer %s: %s", filer_id, e)
+        return None
+
+    html = page.content()
+    year = _parse_year(html)
+    if not year:
+        log.warning("No year found on page for filer %s", filer_id)
+        return None
+
+    log.info("Filer %s: starting at year %d", filer_id, year)
+
+    # Click "Prev" until we reach the earliest year (when Prev stops changing the year)
+    prev_year = year
+    max_clicks = 30  # safety limit (covers 2006-2026 range + margin)
+
+    for click_num in range(max_clicks):
+        # Find Prev button
+        prev_btn = page.locator('input[type="submit"][value="Prev"]').first
+        if prev_btn.count() == 0:
+            log.info("Filer %s: no Prev button at year %d — this is the earliest", filer_id, year)
+            break
+
+        try:
+            prev_btn.click()
+            page.wait_for_load_state("networkidle", timeout=15_000)
+            time.sleep(PREV_CLICK_WAIT)
+        except Exception as e:
+            log.warning("Filer %s: Prev click failed at year %d: %s", filer_id, year, e)
+            break
+
+        html = page.content()
+        new_year = _parse_year(html)
+
+        if not new_year:
+            log.warning("Filer %s: lost year after Prev click %d", filer_id, click_num + 1)
+            break
+
+        if new_year >= prev_year:
+            # Year didn't decrease — we've hit the floor
+            log.info("Filer %s: year stopped decreasing at %d (was %d) — earliest reached",
+                     filer_id, new_year, prev_year)
+            break
+
+        log.debug("Filer %s: navigated to year %d", filer_id, new_year)
+        prev_year = new_year
+        year = new_year
+
+    # Now we're on the earliest year page — extract beginning balance
+    html = page.content()
+    final_year = _parse_year(html) or year
+    beg_bal = _parse_beginning_balance(html)
+
+    log.info("Filer %s: earliest year = %d, beginning balance = $%.2f",
+             filer_id, final_year, beg_bal)
+
+    return {
+        "earliest_year": final_year,
+        "beginning_balance": beg_bal,
+        "ts": datetime.now().timestamp(),
+    }
+
+
+def get_all_filer_ids() -> list[str]:
+    """Extract unique filer IDs from the ORESTAR cash balances cache."""
+    cache_path = DATA_DIR / "orestar_cash_balances.json"
+    if not cache_path.exists():
+        log.error("No ORESTAR cache found at %s — run aggregation first", cache_path)
+        return []
+    with open(cache_path) as f:
+        cache = json.load(f)
+    return sorted(cache.keys())
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Scrape earliest-year beginning balances from ORESTAR Account Summary pages."
+    )
+    parser.add_argument(
+        "--filer-ids", nargs="+",
+        help="Specific filer IDs to scrape (default: all from ORESTAR cache)",
+    )
+    parser.add_argument(
+        "--max-filers", type=int, default=0,
+        help="Max number of filers to process (0 = all)",
+    )
+    parser.add_argument(
+        "--force", action="store_true",
+        help="Re-scrape even if already cached",
+    )
+    parser.add_argument(
+        "--max-age-days", type=int, default=30,
+        help="Re-scrape entries older than this many days (default: 30)",
+    )
+    args = parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s  %(levelname)-8s  %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    # Determine which filer IDs to process
+    filer_ids = args.filer_ids or get_all_filer_ids()
+    if not filer_ids:
+        log.error("No filer IDs to process")
+        return
+
+    # Load existing cache
+    cache: dict = {}
+    if CACHE_PATH.exists():
+        with open(CACHE_PATH) as f:
+            cache = json.load(f)
+        log.info("Loaded %d cached earliest balances", len(cache))
+
+    # Filter to only IDs that need fetching
+    now_ts = datetime.now().timestamp()
+    cutoff = now_ts - args.max_age_days * 86_400
+
+    if args.force:
+        ids_to_fetch = filer_ids
+    else:
+        ids_to_fetch = [
+            fid for fid in filer_ids
+            if fid not in cache or cache[fid].get("ts", 0) < cutoff
+        ]
+
+    # Total remaining (before --max-filers cap) for retrigger logic
+    all_remaining = len(ids_to_fetch)
+
+    if args.max_filers > 0:
+        ids_to_fetch = ids_to_fetch[:args.max_filers]
+
+    if not ids_to_fetch:
+        log.info("All %d filer IDs are already cached and fresh — nothing to do", len(filer_ids))
+        remaining_path = DATA_DIR / "earliest_balances_remaining.txt"
+        remaining_path.write_text("0")
+        return
+
+    log.info("Will scrape earliest balances for %d filers (%d already cached)",
+             len(ids_to_fetch), len(cache))
+
+    # Launch Playwright
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        log.info("Launching browser (headed mode — required for ORESTAR)...")
+        browser = pw.chromium.launch(
+            headless=False,
+            args=["--no-sandbox", "--disable-dev-shm-usage"],
+        )
+        context = browser.new_context(
+            user_agent=USER_AGENT,
+            accept_downloads=False,
+        )
+        page = context.new_page()
+
+        done = 0
+        failed = 0
+        for fid in ids_to_fetch:
+            result = _scrape_filer_earliest(page, fid)
+            done += 1
+
+            if result:
+                cache[fid] = result
+                # Save cache after each successful scrape (crash safety)
+                if done % 10 == 0:
+                    CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+                    with open(CACHE_PATH, "w") as f:
+                        json.dump(cache, f, separators=(",", ":"))
+                    log.info("Progress: %d / %d done (%d failed), cache saved",
+                             done, len(ids_to_fetch), failed)
+            else:
+                failed += 1
+
+            if done < len(ids_to_fetch):
+                time.sleep(FILER_DELAY)
+
+        browser.close()
+
+    # Final cache save
+    CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(CACHE_PATH, "w") as f:
+        json.dump(cache, f, separators=(",", ":"))
+
+    log.info("Done. Scraped %d filers (%d failed). Cache has %d total entries at %s",
+             done, failed, len(cache), CACHE_PATH)
+
+    # Report how many remain uncached (for workflow retrigger logic)
+    still_remaining = all_remaining - done
+    if args.max_filers > 0 and still_remaining > 0:
+        log.info("REMAINING: %d filers still need scraping", still_remaining)
+
+    # Write remaining count to a file for the workflow to read
+    remaining_path = DATA_DIR / "earliest_balances_remaining.txt"
+    remaining_path.write_text(str(still_remaining))
+
+
+if __name__ == "__main__":
+    main()

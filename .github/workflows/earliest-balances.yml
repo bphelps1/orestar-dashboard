@@ -1,0 +1,99 @@
+name: Scrape Earliest Balances
+
+on:
+  schedule:
+    # Run weekly on Sundays at 06:00 UTC (Sat 11 PM PST)
+    - cron: "0 6 * * 0"
+  workflow_dispatch:
+    inputs:
+      max_filers:
+        description: "Max filers per batch (0 = all uncached)"
+        required: false
+        default: "500"
+      force:
+        description: "Force re-scrape even if cached"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write
+  actions: write          # needed to retrigger itself
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: scraper/requirements.txt
+
+      - name: Install Python dependencies
+        run: pip install -r scraper/requirements.txt
+
+      - name: Install Playwright browser + system dependencies
+        run: python -m playwright install chromium --with-deps
+
+      - name: Install Xvfb (virtual display for headed browser)
+        run: sudo apt-get install -y xvfb
+
+      - name: Scrape earliest-year beginning balances
+        run: |
+          MAX="${{ github.event.inputs.max_filers || '500' }}"
+          FORCE="${{ github.event.inputs.force || 'false' }}"
+          ARGS="--max-age-days 30"
+          if [ "$MAX" != "0" ]; then
+            ARGS="$ARGS --max-filers $MAX"
+          fi
+          if [ "$FORCE" = "true" ]; then
+            ARGS="$ARGS --force"
+          fi
+          xvfb-run --auto-servernum python scraper/fetch_earliest_balances.py $ARGS
+
+      - name: Re-aggregate with updated beginning balances
+        run: python scraper/process.py
+
+      - name: Commit and push updated data
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          mkdir -p docs/data/aggregated
+          cp -r data/aggregated/. docs/data/aggregated/
+          git add data/ docs/data/
+          git diff --cached --quiet || git commit -m "chore: update earliest balances $(date -u +%Y-%m-%d)"
+          for attempt in 1 2 3 4 5; do
+            git pull --rebase -X ours && git push && break
+            echo "Push attempt $attempt failed, retrying in $((attempt * 15))s..."
+            sleep $((attempt * 15))
+          done
+
+      - name: Check if more filers remain and retrigger
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          REMAINING_FILE="data/earliest_balances_remaining.txt"
+          if [ -f "$REMAINING_FILE" ]; then
+            REMAINING=$(cat "$REMAINING_FILE")
+            echo "Filers remaining: $REMAINING"
+            if [ "$REMAINING" -gt 0 ] 2>/dev/null; then
+              echo "Retriggering workflow for next batch..."
+              gh workflow run earliest-balances.yml \
+                -f max_filers="${{ github.event.inputs.max_filers || '500' }}" \
+                -f force="false"
+              echo "Retrigger dispatched."
+            else
+              echo "All filers scraped — no retrigger needed."
+            fi
+          else
+            echo "No remaining count file found — skipping retrigger."
+          fi
