@@ -142,6 +142,11 @@ main { max-width: 1200px; margin: 32px auto; padding: 0 24px; }
 .card-help:focus { background: var(--color-border); }
 .card-help:hover .card-help-tip,
 .card-help:focus .card-help-tip { display: block; }
+/* Raise the entire card above siblings so tooltip clears neighboring ? icons */
+.card:has(.card-help:hover),
+.card:has(.card-help:focus) {
+  z-index: 100;
+}
 .card-help-tip {
   display: none;
   position: absolute;
@@ -365,6 +370,11 @@ main { max-width: 1200px; margin: 32px auto; padding: 0 24px; }
 .acct-tile-help:hover .acct-tile-tip,
 .acct-tile-help:focus .acct-tile-tip {
   display: block;
+}
+/* Raise the entire tile above its siblings so the tooltip clears neighboring ? icons */
+.acct-tile:has(.acct-tile-help:hover),
+.acct-tile:has(.acct-tile-help:focus) {
+  z-index: 100;
 }
 .acct-tile-tip {
   display: none;
