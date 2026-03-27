@@ -1461,6 +1461,10 @@ def aggregate_filers(
             for d in yr_list:
                 all_donor_names.add(d["name"])
 
+        # Regex for extracting parenthetical filer IDs from donor names
+        # e.g. "Oregon Hospital Political Action Committee (161)"
+        _PAREN_FID_RE = re.compile(r"\((\d+)\)\s*$")
+
         for donor_name in all_donor_names:
             dn_lower = donor_name.lower().strip()
             dn_norm = _normalize_name(donor_name)
@@ -1485,7 +1489,31 @@ def aggregate_filers(
                 }
                 continue
 
-            # 3. Multiple matches → ambiguous
+            # 3. Parenthetical filer ID match — e.g. "Name Here (12345)"
+            # Check if the donor name ends with a number in parentheses
+            # and that number corresponds to a filer ID.
+            paren_m = _PAREN_FID_RE.search(donor_name)
+            if paren_m:
+                paren_fid = paren_m.group(1)
+                if paren_fid in filer_by_fid:
+                    filer_entry = filer_by_fid[paren_fid]
+                    # Sanity check: some name similarity between donor and filer
+                    donor_base = donor_name[:paren_m.start()].strip().lower()
+                    filer_name_lower = filer_entry["name"].lower()
+                    # Check if any significant word (3+ chars) from donor base
+                    # appears in the filer name, or vice versa
+                    donor_words = {w for w in donor_base.split() if len(w) >= 3}
+                    filer_words = {w for w in filer_name_lower.split() if len(w) >= 3}
+                    overlap = donor_words & filer_words
+                    if overlap or donor_base in filer_name_lower or filer_name_lower in donor_base:
+                        donor_filer_map[dn_lower] = {
+                            "slug": filer_entry["slug"],
+                            "name": filer_entry["name"],
+                            "confidence": "high",
+                        }
+                        continue
+
+            # 4. Multiple matches → ambiguous
             if len(norm_matches) > 1 or len(exact_matches) > 1:
                 matches = exact_matches if len(exact_matches) > 1 else norm_matches
                 donor_filer_map[dn_lower] = {
