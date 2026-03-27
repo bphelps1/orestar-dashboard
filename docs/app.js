@@ -491,7 +491,7 @@ function renderAcctSummary(acctData) {
   details.hidden = false;
 
   grid.innerHTML = ACCT_GROUPS.map(group => {
-    const rows = group.fields.map(field => {
+    const tiles = group.fields.map(field => {
       const meta = ACCT_FIELD_META[field];
       if (!meta) return "";
       let val;
@@ -500,18 +500,19 @@ function renderAcctSummary(acctData) {
       } else {
         val = acctData[field] != null ? acctData[field] : 0;
       }
-      const cls = meta.subtotal ? "acct-row acct-subtotal" : "acct-row";
+      const cls = meta.subtotal ? "acct-tile acct-tile-subtotal" : "acct-tile";
       const helpBtn = meta.tip
-        ? `<span class="acct-help" tabindex="0" role="button" aria-label="Info">?<span class="acct-tip">${meta.tip}</span></span>`
+        ? `<span class="acct-tile-help" tabindex="0" role="button" aria-label="Info">?<span class="acct-tile-tip">${meta.tip}</span></span>`
         : "";
       return `<div class="${cls}">
-        <span class="acct-label">${esc(meta.label)} ${helpBtn}</span>
-        <span class="acct-value">${fmt$(val)}</span>
+        ${helpBtn}
+        <div class="acct-tile-label">${esc(meta.label)}</div>
+        <div class="acct-tile-value">${fmt$(val)}</div>
       </div>`;
     }).join("");
     return `<div class="acct-group">
       <div class="acct-group-title">${esc(group.title)}</div>
-      ${rows}
+      <div class="acct-tile-grid">${tiles}</div>
     </div>`;
   }).join("");
 }

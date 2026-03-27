@@ -85,6 +85,7 @@ main { max-width: 1200px; margin: 32px auto; padding: 0 24px; }
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 16px;
   margin-bottom: 32px;
+  overflow: visible;
 }
 .card {
   background: var(--color-surface);
@@ -92,6 +93,8 @@ main { max-width: 1200px; margin: 32px auto; padding: 0 24px; }
   border-radius: var(--radius);
   padding: 20px 24px;
   box-shadow: var(--shadow);
+  position: relative;
+  overflow: visible;
 }
 .card-label {
   font-size: 0.8rem;
@@ -113,6 +116,54 @@ main { max-width: 1200px; margin: 32px auto; padding: 0 24px; }
   color: var(--color-text-muted);
   margin-top: 4px;
   line-height: 1.3;
+}
+
+/* ── Card help tooltip ("?" icon on stat cards) ───────────────────────── */
+.card-help {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  cursor: help;
+  z-index: 2;
+  line-height: 1;
+}
+.card-help:hover,
+.card-help:focus { background: var(--color-border); }
+.card-help:hover .card-help-tip,
+.card-help:focus .card-help-tip { display: block; }
+.card-help-tip {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  right: -4px;
+  z-index: 300;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0,0,0,.14);
+  padding: 12px 14px;
+  width: 280px;
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--color-text);
+  line-height: 1.45;
+  white-space: normal;
+  text-align: left;
+}
+.card-help-tip strong { font-weight: 600; }
+@media (max-width: 600px) {
+  .card-help-tip { width: 220px; right: -8px; }
 }
 
 /* ── Cash on Hand indicator ────────────────────────────────────────────── */
@@ -199,16 +250,13 @@ main { max-width: 1200px; margin: 32px auto; padding: 0 24px; }
   color: var(--color-text-muted);
 }
 
-/* ── Account Summary Details (collapsible) ─────────────────────────────── */
+/* ── Account Summary Details (collapsible tile grid) ───────────────────── */
 .acct-summary-details {
-  margin-bottom: 24px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  margin-bottom: 28px;
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
 }
 .acct-summary-toggle {
-  padding: 14px 20px;
+  padding: 10px 4px;
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
@@ -228,46 +276,72 @@ main { max-width: 1200px; margin: 32px auto; padding: 0 24px; }
   transform: rotate(90deg);
 }
 .acct-summary-grid {
-  padding: 4px 20px 20px;
+  padding: 0;
 }
+
+/* Group sections within the tile grid */
 .acct-group {
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
+.acct-group:last-child { margin-bottom: 0; }
 .acct-group-title {
   font-size: 0.78rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--color-text-muted);
-  padding-bottom: 6px;
+  padding-bottom: 8px;
   border-bottom: 1px solid var(--color-border);
+  margin-bottom: 12px;
+}
+.acct-tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+/* Individual tiles */
+.acct-tile {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  position: relative;
+  min-height: 72px;
+  overflow: visible;
+}
+.acct-tile.acct-tile-subtotal {
+  background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
+  border-color: #cbd5e0;
+}
+.acct-tile-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
   margin-bottom: 6px;
+  padding-right: 20px; /* room for ? icon */
+  line-height: 1.3;
 }
-.acct-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 4px 0;
-  font-size: 0.85rem;
-}
-.acct-row.acct-subtotal {
-  font-weight: 600;
-  border-top: 1px solid var(--color-border);
-  padding-top: 6px;
-  margin-top: 2px;
-}
-.acct-label {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--color-text);
-}
-.acct-value {
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
+.acct-tile-value {
+  font-size: 1.25rem;
+  font-weight: 700;
   color: var(--color-accent);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  white-space: nowrap;
 }
-.acct-help {
+.acct-tile-subtotal .acct-tile-value {
+  color: var(--color-accent-dark);
+}
+
+/* "?" help icon on tiles */
+.acct-tile-help {
+  position: absolute;
+  top: 8px;
+  right: 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -276,45 +350,54 @@ main { max-width: 1200px; margin: 32px auto; padding: 0 24px; }
   border-radius: 50%;
   background: var(--color-bg);
   border: 1px solid var(--color-border);
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   font-weight: 700;
   color: var(--color-text-muted);
   cursor: help;
-  position: relative;
-  flex-shrink: 0;
+  z-index: 2;
+  line-height: 1;
 }
-.acct-help:hover .acct-tip,
-.acct-help:focus .acct-tip {
+.acct-tile-help:hover,
+.acct-tile-help:focus {
+  background: var(--color-border);
+  color: var(--color-text);
+}
+.acct-tile-help:hover .acct-tile-tip,
+.acct-tile-help:focus .acct-tile-tip {
   display: block;
 }
-.acct-tip {
+.acct-tile-tip {
   display: none;
   position: absolute;
-  bottom: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 200;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 9999;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
-  box-shadow: 0 4px 12px rgba(0,0,0,.12);
-  padding: 10px 12px;
-  width: 260px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.14);
+  padding: 12px 14px;
+  width: 280px;
+  max-width: 90vw;
   font-size: 0.78rem;
   font-weight: 400;
   color: var(--color-text);
-  line-height: 1.4;
+  line-height: 1.45;
   text-transform: none;
   letter-spacing: 0;
   white-space: normal;
+  text-align: left;
 }
-.acct-tip strong { font-weight: 600; }
+.acct-tile-tip strong { font-weight: 600; }
+
 @media (max-width: 600px) {
-  .acct-tip {
-    left: 0;
-    transform: none;
-    width: 220px;
+  .acct-tile-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px;
   }
+  .acct-tile { padding: 10px 12px; min-height: 60px; }
+  .acct-tile-value { font-size: 1.05rem; }
+  .acct-tile-tip { width: 220px; right: -8px; }
 }
 
 /* ── Chart boxes ────────────────────────────────────────────────────────── */
