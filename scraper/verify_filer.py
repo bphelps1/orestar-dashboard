@@ -28,8 +28,15 @@ import argparse
 import json
 import logging
 import re
+import sys
 import time
 from pathlib import Path
+
+# Ensure the repo root is on sys.path so "from scraper.process import ..." works
+# when invoked as "python scraper/verify_filer.py"
+_REPO_ROOT = str(Path(__file__).resolve().parent.parent)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
 import pandas as pd
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
