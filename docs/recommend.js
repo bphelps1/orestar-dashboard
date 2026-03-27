@@ -257,6 +257,30 @@ async function runRecommendations() {
   }
 }
 
+// ── Office hierarchy for asymmetric comparability ─────────────────────────
+// Legislative donors flow UP to statewide, but not down.
+const LEGISLATIVE_OFFICES = new Set(["state_rep", "state_senate"]);
+const STATEWIDE_OFFICES = new Set(["governor", "sos", "ag", "treasurer"]);
+
+/**
+ * Check if fOffice is comparable to targetOffice.
+ * - state_rep ↔ state_senate: always comparable (bidirectional)
+ * - legislative → statewide: comparable (donors flow up)
+ * - statewide → legislative: NOT comparable (donors don't flow down)
+ * - same office: always comparable
+ */
+function isOfficeComparable(targetOffice, fOffice) {
+  if (!targetOffice || !fOffice) return false;
+  if (targetOffice === fOffice) return true;
+  // state_rep ↔ state_senate: bidirectional
+  if (LEGISLATIVE_OFFICES.has(targetOffice) && LEGISLATIVE_OFFICES.has(fOffice)) return true;
+  // Legislative → statewide: filer is legislative, target is statewide
+  if (STATEWIDE_OFFICES.has(targetOffice) && LEGISLATIVE_OFFICES.has(fOffice)) return true;
+  // Statewide ↔ statewide: comparable
+  if (STATEWIDE_OFFICES.has(targetOffice) && STATEWIDE_OFFICES.has(fOffice)) return true;
+  return false;
+}
+
 // ── Step 2: Find comparable fundraisers ────────────────────────────────────
 async function findComparables(targetProfile, targetFiler, cycle) {
   // Use scraped ORESTAR metadata (party, office) from the filer index,
@@ -289,10 +313,17 @@ async function findComparables(targetProfile, targetFiler, cycle) {
 
     let similarity = 0;
 
-    // Same office type is the strongest signal
-    if (officeType && fOffice === officeType) similarity += 40;
-    // Same chamber/level is important
-    if (chamber && fChamber === chamber) similarity += 20;
+    // Office comparability (asymmetric: legislative → statewide but not reverse)
+    if (officeType && fOffice) {
+      if (officeType === fOffice) {
+        similarity += 40;  // Exact same office
+      } else if (isOfficeComparable(officeType, fOffice)) {
+        // state_rep ↔ state_senate or legislative → statewide
+        similarity += 30;  // Strong but slightly less than exact match
+      }
+      // else: not comparable, gets 0 office points
+    }
+
     // Same party gets a bonus (already filtered opposite parties above)
     if (party && fParty === party) similarity += 15;
     // Similar fundraising magnitude (within 3x)
@@ -318,9 +349,10 @@ async function findComparables(targetProfile, targetFiler, cycle) {
     }
   }
 
-  // Sort by similarity descending, take top 30
+  // Sort by similarity descending, take top 50 (increased from 30 to
+  // accommodate the broader legislative pool)
   scored.sort((a, b) => b.similarity - a.similarity);
-  return scored.slice(0, 30);
+  return scored.slice(0, 50);
 }
 
 // ── Metadata helpers: use scraped ORESTAR data, fall back to name heuristics ─
@@ -408,6 +440,24 @@ function detectOfficeFromName(name) {
   return null;
 }
 
+/**
+ * Get all years a donor gave to any comparable filer (across ALL years, not just cycle).
+ * Returns array of year numbers, e.g. [2020, 2022, 2024].
+ */
+function _getAllYearGifts(donorName, compProfiles, comparables) {
+  const key = donorName.toLowerCase();
+  const years = [];
+  for (const profile of compProfiles) {
+    const byYear = profile.top_donors_by_year || {};
+    for (const [yr, donors] of Object.entries(byYear)) {
+      if (donors.some(d => d.name.toLowerCase() === key)) {
+        years.push(parseInt(yr));
+      }
+    }
+  }
+  return years;
+}
+
 // ── Step 4: Score donors ──────────────────────────────────────────────────
 function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
   // Build: donor name → { compFilers: [{name, amount}], totalToComps, distinctComps }
@@ -466,25 +516,31 @@ function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
     let score = 0;
     const factors = [];
 
-    // Factor 1: Number of distinct comparable filers supported (0-25 pts)
-    const distinctPts = Math.min(donor.distinctComps * 5, 25);
+    // Factor 1: Number of distinct comparable filers supported (0-35 pts)
+    // STRONG preference for donors who gave to MULTIPLE candidates.
+    // 1 filer = 3 pts, 2 = 10, 3 = 18, 4 = 24, 5+ = 30-35
+    const distinctPts = donor.distinctComps === 1
+      ? 3
+      : Math.min(donor.distinctComps * 7, 35);
     score += distinctPts;
     if (donor.distinctComps >= 3) {
-      factors.push(`Gave to ${donor.distinctComps} similar filers`);
+      factors.push(`Gave to ${donor.distinctComps} similar candidates`);
+    } else if (donor.distinctComps === 1) {
+      factors.push(`Only gave to 1 comparable candidate`);
     }
 
-    // Factor 2: Total amount to comparable filers (0-20 pts)
-    const totalPts = Math.min(donor.totalToComps / 500, 20);
+    // Factor 2: Total amount to comparable filers (0-15 pts)
+    const totalPts = Math.min(donor.totalToComps / 500, 15);
     score += totalPts;
 
-    // Factor 3: Similarity-weighted giving (0-20 pts)
+    // Factor 3: Similarity-weighted giving (0-15 pts)
     const simWeighted = donor.compGifts.reduce((s, g) => s + g.amount * (g.similarity / 100), 0);
-    const simPts = Math.min(simWeighted / 300, 20);
+    const simPts = Math.min(simWeighted / 300, 15);
     score += simPts;
 
-    // Factor 4: Gap between comparable giving and current giving (0-20 pts)
+    // Factor 4: Gap between comparable giving and current giving (0-15 pts)
     const gap = targetAsk - alreadyGiven;
-    const gapPts = gap > 0 ? Math.min(gap / 200, 20) : 0;
+    const gapPts = gap > 0 ? Math.min(gap / 200, 15) : 0;
     score += gapPts;
     if (alreadyGiven > 0 && gap > 0) {
       factors.push(`Gave ${fmt$(alreadyGiven)} but target is ${fmt$(targetAsk)}`);
@@ -492,16 +548,39 @@ function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
       factors.push(`Has not given to this filer yet`);
     }
 
-    // Factor 5: Recency bonus — gave in the current cycle year (0-15 pts)
-    const currentYearStr = String(cycle);
-    const gaveThisCycleYear = donor.compGifts.some(g => {
-      // We don't have per-year breakdown here, but donor is in cycle data
-      return true;  // All donors in the years filter are cycle-relevant
-    });
-    if (gaveThisCycleYear) score += 10;
+    // Factor 5: Recency — reward current-cycle giving, penalize stale donors (−10 to +20 pts)
+    // We check if donor gave to comparables during the selected cycle years.
+    // Since mergeDonorsByYear already filters to cycle years, donors in the
+    // list are cycle-relevant. But we also check all-time giving years to
+    // detect one-time donors from years ago.
+    const cycleYrs = cycleYears(cycle).map(String);
+    const allYearGifts = _getAllYearGifts(donor.name, compProfiles, comparables);
+    const mostRecentYear = allYearGifts.length ? Math.max(...allYearGifts) : 0;
+    const currentYear = new Date().getFullYear();
+    const yearsAgo = mostRecentYear ? (currentYear - mostRecentYear) : 99;
+
+    if (yearsAgo <= 1) {
+      // Gave this year or last year — strong recency
+      score += 20;
+      factors.push(`Active donor (last gave ${mostRecentYear})`);
+    } else if (yearsAgo <= 3) {
+      // Gave within recent cycle
+      score += 10;
+    } else if (yearsAgo > 5) {
+      // Stale donor — penalize
+      score -= 10;
+      factors.push(`Last gave ${mostRecentYear} (${yearsAgo} years ago)`);
+    }
+
+    // Penalty: one-time donors who gave to only 1 filer AND only 1 year
+    const distinctYears = new Set(allYearGifts).size;
+    if (donor.distinctComps === 1 && distinctYears <= 1) {
+      score -= 5;
+      factors.push(`One-time donor (1 candidate, 1 year)`);
+    }
 
     // Normalize to 0-100
-    score = Math.min(Math.round(score), 100);
+    score = Math.max(0, Math.min(Math.round(score), 100));
 
     // Tier assignment
     const tier = score >= 60 ? "A" : score >= 35 ? "B" : "C";
