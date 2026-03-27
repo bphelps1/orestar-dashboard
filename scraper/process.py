@@ -1098,6 +1098,16 @@ def aggregate_filers(
             if fid in _earliest_balances:
                 _name_to_earliest[canon_name] = _earliest_balances[fid]
 
+    # Load filer metadata (party, office, committee type) from scraper cache
+    _filer_metadata_path = DATA_DIR / "filer_metadata.json"
+    _filer_metadata: dict[str, dict] = {}  # filer_id → {committee_type, office, party, ...}
+    if _filer_metadata_path.exists():
+        with open(_filer_metadata_path) as f:
+            _filer_metadata = json.load(f)
+        log.info("Loaded %d filer metadata entries", len(_filer_metadata))
+    else:
+        log.warning("No filer_metadata.json found — party/office data will be unavailable")
+
     # ── Per-filer detail files ────────────────────────────────────────────────
     # Remove stale files whose slugs are no longer in the current filer set.
     current_slugs = set(filer_slugs.values())
@@ -1340,12 +1350,28 @@ def aggregate_filers(
         _fid_for_index = ""
         if _filer_id_col:
             _fid_for_index = _name_to_fid.get(name, "")
+        # Attach scraped metadata (party, office, committee type) if available
+        _meta = _filer_metadata.get(_fid_for_index, {}) if _fid_for_index else {}
+        _party = _meta.get("party", "")
+        _office_raw = _meta.get("office", "")
+        _committee_type = _meta.get("committee_type", "")
+        _pac_type = _meta.get("pac_type", "")
+        _nature = _meta.get("nature", "")
+        # Normalize office to just the title (strip district number)
+        # e.g. "State Representative, 25th District" → "State Representative"
+        _office = _office_raw.split(",")[0].strip() if _office_raw else ""
         index_rows.append({
             "slug": slug, "name": name,
             "filer_id": _fid_for_index,
             "total_in": total_in, "total_inkind": total_inkind,
             "total_out": total_out,
             "cash_on_hand": cash_on_hand,
+            "party": _party,
+            "office": _office,
+            "office_district": _office_raw,
+            "committee_type": _committee_type,
+            "pac_type": _pac_type,
+            "nature": _nature,
         })
 
     # Sort index by total_in descending

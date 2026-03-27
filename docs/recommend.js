@@ -128,12 +128,16 @@ function initSearch() {
     if (!q) { dropdown.hidden = true; return; }
     const results = filerFuse.search(q).slice(0, 15).map(r => r.item);
     if (!results.length) { dropdown.hidden = true; return; }
-    dropdown.innerHTML = results.map((f, i) =>
-      `<li data-idx="${i}">
+    dropdown.innerHTML = results.map((f, i) => {
+      const metaParts = [fmt$(f.total_in) + " raised"];
+      if (f.party) metaParts.push(f.party);
+      if (f.office) metaParts.push(f.office);
+      else if (f.committee_type) metaParts.push(f.committee_type);
+      return `<li data-idx="${i}">
         <span>${esc(f.name)}</span>
-        <span class="filer-meta">${fmt$(f.total_in)} raised · ${fmt$(f.cash_on_hand)} COH</span>
-      </li>`
-    ).join("");
+        <span class="filer-meta">${metaParts.join(" · ")}</span>
+      </li>`;
+    }).join("");
     dropdown.hidden = false;
     dropdown._items = results;
   });
@@ -162,8 +166,14 @@ function initSearch() {
 
     const info = document.getElementById("selected-filer-info");
     info.hidden = false;
+    const detectedOffice = getOffice(filer);
+    const detectedParty = getParty(filer);
+    const officeBadge = filer.office_district || filer.office || (detectedOffice || "");
+    const partyBadge = filer.party || (detectedParty === "D" ? "Democrat" : detectedParty === "R" ? "Republican" : "");
+    const badges = [officeBadge, partyBadge].filter(Boolean).join(" · ");
     info.innerHTML = `
       <h3>${esc(filer.name)}</h3>
+      ${badges ? `<div class="filer-badges">${esc(badges)}</div>` : ""}
       <div class="filer-stats">
         <div><span class="filer-stat-label">Cash Contributions</span><br><span class="filer-stat-value">${fmt$(profile.total_in)}</span></div>
         <div><span class="filer-stat-label">Total Expenditures</span><br><span class="filer-stat-value">${fmt$(profile.total_out)}</span></div>
@@ -249,13 +259,13 @@ async function runRecommendations() {
 
 // ── Step 2: Find comparable fundraisers ────────────────────────────────────
 async function findComparables(targetProfile, targetFiler, cycle) {
-  // Heuristic: match by name patterns for office type, party, chamber
-  const targetName = targetProfile.name.toLowerCase();
+  // Use scraped ORESTAR metadata (party, office) from the filer index,
+  // falling back to name-based heuristics if metadata not yet scraped.
+  const officeType = getOffice(targetFiler);
+  const party = getParty(targetFiler);
+  const chamber = getChamber(targetFiler);
 
-  // Detect office type from committee name
-  const officeType = detectOfficeType(targetName);
-  const party = detectParty(targetProfile);
-  const chamber = detectChamber(targetName);
+  console.log(`[recommend] Target: office=${officeType}, party=${party}, chamber=${chamber}`);
 
   // Check if this filer has leadership tags
   const targetLeadership = leadershipRoles[targetFiler.filer_id] ||
@@ -265,14 +275,17 @@ async function findComparables(targetProfile, targetFiler, cycle) {
 
   for (const f of filerIndex) {
     if (f.slug === targetFiler.slug) continue;
-    const fName = f.name.toLowerCase();
 
     // Must have some fundraising activity
     if (f.total_in < 100) continue;
 
-    const fOffice = detectOfficeType(fName);
-    const fParty = detectParty(f);
-    const fChamber = detectChamber(fName);
+    const fOffice = getOffice(f);
+    const fParty = getParty(f);
+    const fChamber = getChamber(f);
+
+    // Party filter: if target has a known party, SKIP filers from other parties.
+    // PACs/committees without party affiliation are allowed through.
+    if (party && fParty && fParty !== party) continue;
 
     let similarity = 0;
 
@@ -280,7 +293,7 @@ async function findComparables(targetProfile, targetFiler, cycle) {
     if (officeType && fOffice === officeType) similarity += 40;
     // Same chamber/level is important
     if (chamber && fChamber === chamber) similarity += 20;
-    // Same party matters
+    // Same party gets a bonus (already filtered opposite parties above)
     if (party && fParty === party) similarity += 15;
     // Similar fundraising magnitude (within 3x)
     const ratio = Math.min(f.total_in, targetFiler.total_in) /
@@ -310,38 +323,88 @@ async function findComparables(targetProfile, targetFiler, cycle) {
   return scored.slice(0, 30);
 }
 
-function detectOfficeType(name) {
-  if (/\b(state representative|state rep)\b/.test(name)) return "state_rep";
-  if (/\b(state senator|state senate)\b/.test(name)) return "state_senate";
-  if (/\bgovernor\b/.test(name)) return "governor";
-  if (/\b(secretary of state)\b/.test(name)) return "sos";
-  if (/\b(attorney general)\b/.test(name)) return "ag";
-  if (/\b(treasurer)\b/.test(name)) return "treasurer";
-  if (/\b(commissioner)\b/.test(name)) return "commissioner";
-  if (/\b(county)\b/.test(name)) return "county";
-  if (/\b(city council|mayor|city)\b/.test(name)) return "city";
-  if (/\b(school|education)\b/.test(name)) return "school";
-  if (/\b(judge|justice)\b/.test(name)) return "judicial";
-  return null;
+// ── Metadata helpers: use scraped ORESTAR data, fall back to name heuristics ─
+
+/**
+ * Normalize a scraped office string to a canonical office type.
+ * ORESTAR gives us e.g. "State Representative" or "State Senator".
+ */
+function normalizeOffice(office) {
+  if (!office) return null;
+  const o = office.toLowerCase().trim();
+  if (o.startsWith("state representative")) return "state_rep";
+  if (o.startsWith("state senator") || o.startsWith("state senate")) return "state_senate";
+  if (o === "governor") return "governor";
+  if (o.includes("secretary of state")) return "sos";
+  if (o.includes("attorney general")) return "ag";
+  if (o.includes("treasurer")) return "treasurer";
+  if (o.includes("commissioner")) return "commissioner";
+  if (o.includes("county")) return "county";
+  if (o.includes("city council") || o.includes("mayor")) return "city";
+  if (o.includes("school") || o.includes("education")) return "school";
+  if (o.includes("judge") || o.includes("justice")) return "judicial";
+  return o; // Return as-is if no normalization matched
 }
 
-function detectParty(filerOrProfile) {
-  const name = (filerOrProfile.name || "").toLowerCase();
-  // Check admin tags first
-  const tags = adminTags[filerOrProfile.slug] || [];
+function getOffice(filer) {
+  // 1. Scraped ORESTAR metadata (preferred)
+  if (filer.office) return normalizeOffice(filer.office);
+  // 2. Name-based fallback
+  return detectOfficeFromName(filer.name || "");
+}
+
+function getParty(filer) {
+  // 1. Scraped ORESTAR metadata (preferred)
+  if (filer.party) {
+    const p = filer.party.toLowerCase();
+    if (p.startsWith("democrat")) return "D";
+    if (p.startsWith("republican")) return "R";
+    if (p.startsWith("independent") || p.startsWith("nonaffiliated")) return "I";
+    return filer.party.charAt(0).toUpperCase();
+  }
+  // 2. Admin tags
+  const tags = adminTags[filer.slug] || [];
   const partyTag = tags.find(t => t.tag === "party");
   if (partyTag) return partyTag.value;
-
-  // Heuristic from name — very rough
+  // 3. PAC nature may hint at party (e.g. "Supporting House Democratic Candidates")
+  if (filer.nature) {
+    const n = filer.nature.toLowerCase();
+    if (n.includes("democrat")) return "D";
+    if (n.includes("republican")) return "R";
+  }
+  // 4. Name-based fallback (rare)
+  const name = (filer.name || "").toLowerCase();
   if (/\bdemocrat\b/.test(name)) return "D";
   if (/\brepublican\b/.test(name)) return "R";
-  // Would need a lookup table for accuracy; return null to avoid wrong assumptions
   return null;
 }
 
-function detectChamber(name) {
-  if (/\b(state representative|state rep|house)\b/.test(name)) return "house";
-  if (/\b(state senator|state senate|senate)\b/.test(name)) return "senate";
+function getChamber(filer) {
+  // Use office metadata first
+  const office = getOffice(filer);
+  if (office === "state_rep") return "house";
+  if (office === "state_senate") return "senate";
+  // Fallback to name
+  const name = (filer.name || "").toLowerCase();
+  if (/\b(house)\b/.test(name)) return "house";
+  if (/\b(senate)\b/.test(name)) return "senate";
+  return null;
+}
+
+// Legacy name-based detection (fallback when metadata not scraped)
+function detectOfficeFromName(name) {
+  const n = name.toLowerCase();
+  if (/\b(state representative|state rep)\b/.test(n)) return "state_rep";
+  if (/\b(state senator|state senate)\b/.test(n)) return "state_senate";
+  if (/\bgovernor\b/.test(n)) return "governor";
+  if (/\b(secretary of state)\b/.test(n)) return "sos";
+  if (/\b(attorney general)\b/.test(n)) return "ag";
+  if (/\b(treasurer)\b/.test(n)) return "treasurer";
+  if (/\b(commissioner)\b/.test(n)) return "commissioner";
+  if (/\b(county)\b/.test(n)) return "county";
+  if (/\b(city council|mayor|city)\b/.test(n)) return "city";
+  if (/\b(school|education)\b/.test(n)) return "school";
+  if (/\b(judge|justice)\b/.test(n)) return "judicial";
   return null;
 }
 
