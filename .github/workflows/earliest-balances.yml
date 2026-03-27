@@ -9,7 +9,7 @@ on:
       max_filers:
         description: "Max filers per batch (0 = all uncached)"
         required: false
-        default: "500"
+        default: "200"
       force:
         description: "Force re-scrape even if cached"
         required: false
@@ -48,7 +48,7 @@ jobs:
 
       - name: Scrape earliest-year beginning balances
         run: |
-          MAX="${{ github.event.inputs.max_filers || '500' }}"
+          MAX="${{ github.event.inputs.max_filers || '200' }}"
           FORCE="${{ github.event.inputs.force || 'false' }}"
           ARGS="--max-age-days 30"
           if [ "$MAX" != "0" ]; then
@@ -60,9 +60,11 @@ jobs:
           xvfb-run --auto-servernum python scraper/fetch_earliest_balances.py $ARGS
 
       - name: Re-aggregate with updated beginning balances
+        if: always()
         run: python scraper/process.py
 
       - name: Commit and push updated data
+        if: always()
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -88,7 +90,7 @@ jobs:
             if [ "$REMAINING" -gt 0 ] 2>/dev/null; then
               echo "Retriggering workflow for next batch..."
               gh workflow run earliest-balances.yml \
-                -f max_filers="${{ github.event.inputs.max_filers || '500' }}" \
+                -f max_filers="${{ github.event.inputs.max_filers || '200' }}" \
                 -f force="false"
               echo "Retrigger dispatched."
             else

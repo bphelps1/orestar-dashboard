@@ -1128,17 +1128,19 @@ def aggregate_filers(
         total_or        = round(float(filer_or["amount"].sum())      if not filer_or.empty      else 0.0, 2)
         total_od        = round(float(filer_od["amount"].sum())      if not filer_od.empty      else 0.0, 2)
         # ── Cash-on-hand calculation ───────────────────────────────────────────
-        # Uses ORESTAR "Beginning Balance (Previous Year)" as an anchor, then
-        # calculates per-year beginning balances by working backward through
-        # our transaction data.
+        # All cash-affecting transactions contribute to COH:
         #
-        # Sub-types excluded from cash-affecting expenditures:
+        # Contributions (type C): all sub-types EXCEPT in-kind (which don't affect cash).
+        #   Includes: Cash Contribution, Loan Received, etc.
+        # Expenditures (type E): all sub-types EXCEPT non-cash obligations:
         #   "Personal Expenditure for Reimbursement" — obligation only
         #   "Account Payable" — outstanding payable; cash outflow is later
-        # Sub-types excluded from other receipts:
+        # Other Receipts: all sub-types EXCEPT:
         #   "Account Payable Rescinded" — reverses a payable; no cash effect
+        _COH_EXCLUDE_C  = set()  # In-kind already separated into filer_inkind
         _COH_EXCLUDE_E  = {"Personal Expenditure for Reimbursement", "Account Payable"}
         _COH_EXCLUDE_OR = {"Account Payable Rescinded"}
+        _c_for_coh      = filer_contrib[~filer_contrib["sub_type"].isin(_COH_EXCLUDE_C)] if not filer_contrib.empty else filer_contrib
         _e_for_coh      = filer_expend[~filer_expend["sub_type"].isin(_COH_EXCLUDE_E)] if not filer_expend.empty else filer_expend
         _or_for_coh     = filer_or[~filer_or["sub_type"].isin(_COH_EXCLUDE_OR)] if not filer_or.empty else filer_or
         tran_count      = int(len(filer_all))
@@ -1156,7 +1158,7 @@ def aggregate_filers(
                         nets[yr_s] = nets.get(yr_s, 0.0) + sign * float(amt)
             return nets
 
-        yearly_nets = _yearly_net(_cash_contrib, _e_for_coh, _or_for_coh, filer_od)
+        yearly_nets = _yearly_net(_c_for_coh, _e_for_coh, _or_for_coh, filer_od)
 
         # Determine beginning balances and cash-on-hand
         # Strategy: use the earliest-year beginning balance scraped directly from
@@ -1201,7 +1203,7 @@ def aggregate_filers(
 
         # Timeline — includes other_receipts and other_disbursements for proper
         # cash-on-hand calculation in the frontend
-        c_monthly  = monthly_sum(filer_contrib, "contributions")
+        c_monthly  = monthly_sum(_c_for_coh, "contributions")
         i_monthly  = monthly_sum(filer_inkind,  "inkind")
         e_monthly  = monthly_sum(_e_for_coh,    "expenditures")
         or_monthly = monthly_sum(_or_for_coh,   "other_receipts")

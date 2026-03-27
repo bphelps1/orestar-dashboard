@@ -247,6 +247,10 @@ def main():
                     CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
                     with open(CACHE_PATH, "w") as f:
                         json.dump(cache, f, separators=(",", ":"))
+                    # Write remaining count so workflow can retrigger even on cancel
+                    remaining_now = all_remaining - done
+                    remaining_path = DATA_DIR / "earliest_balances_remaining.txt"
+                    remaining_path.write_text(str(remaining_now))
                     log.info("Progress: %d / %d done (%d failed), cache saved",
                              done, len(ids_to_fetch), failed)
             else:
