@@ -1413,7 +1413,7 @@ function updateCohIndicator(profile) {
     popover.setAttribute("role", "tooltip");
     popover.innerHTML = `
       <div class="disc-row"><span>ORESTAR ending cash balance:</span><span>${orestarEnding != null ? fmt$(orestarEnding) : "N/A"}</span></div>
-      <div class="disc-row"><span>Website cash on hand:</span><span>${fmt$(profile.cash_on_hand)}</span></div>
+      <div class="disc-row"><span>Calculated cash on hand:</span><span>${fmt$(profile.cash_on_hand)}</span></div>
       <div class="disc-row disc-diff"><span>Difference:</span><span>${disc >= 0 ? "+" : ""}${fmt$(disc)}</span></div>
       <div class="disc-ts">ORESTAR account summary scraped at: ${formatTimestamp(scrapeTs)}</div>
     `;
