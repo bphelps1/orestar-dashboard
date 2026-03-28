@@ -2696,8 +2696,21 @@ function renderRacesToWatch() {
   if (!el || !list) return;
   el.hidden = false;
 
+  function raceRowHTML(c) {
+    const partyClass = c.party === "Democrat" ? "party-d" : c.party === "Republican" ? "party-r" : "party-other";
+    const badge = c.party ? `<span class="pulse-entry-party ${partyClass}">${c.party.charAt(0)}</span>` : "";
+    return `<div class="race-row" ${c.slug ? `data-slug="${esc(c.slug)}" style="cursor:pointer"` : ""}>
+        <span class="race-col-name">${badge} ${esc(c.candidate_name || c.name)}</span>
+        <span class="race-col-raised">${fmt$(c.raised_cycle)}</span>
+        <span class="race-col-coh">${fmt$(c.cash_on_hand)}</span>
+      </div>`;
+  }
+
   let html = "";
-  for (const race of races) {
+  for (let ri = 0; ri < races.length; ri++) {
+    const race = races[ri];
+    const visible = race.candidates.slice(0, 5);
+    const extra = race.candidates.slice(5);
     html += `<div class="race-card">
       <div class="race-card-header">
         <span class="race-office">${esc(race.office)}</span>
@@ -2709,21 +2722,34 @@ function renderRacesToWatch() {
           <span class="race-col-raised">Raised</span>
           <span class="race-col-coh">Cash on Hand</span>
         </div>`;
-    for (const c of race.candidates) {
-      const partyClass = c.party === "Democrat" ? "party-d" : c.party === "Republican" ? "party-r" : "party-other";
-      const badge = c.party ? `<span class="pulse-entry-party ${partyClass}">${c.party.charAt(0)}</span>` : "";
-      html += `<div class="race-row" ${c.slug ? `onclick="selectFilerBySlug('${c.slug}')" style="cursor:pointer"` : ""}>
-          <span class="race-col-name">${badge} ${esc(c.candidate_name || c.name)}</span>
-          <span class="race-col-raised">${fmt$(c.raised_cycle)}</span>
-          <span class="race-col-coh">${fmt$(c.cash_on_hand)}</span>
-        </div>`;
-    }
-    if (race.more_candidates > 0) {
-      html += `<div class="race-show-more" data-office="${esc(race.office)}">Show ${race.more_candidates} more</div>`;
+    for (const c of visible) html += raceRowHTML(c);
+    if (extra.length > 0) {
+      html += `<div class="race-extra" id="race-extra-${ri}" hidden>`;
+      for (const c of extra) html += raceRowHTML(c);
+      html += `</div>`;
+      html += `<div class="race-show-more" data-race-idx="${ri}">Show ${extra.length} more</div>`;
     }
     html += `</div></div>`;
   }
   list.innerHTML = html;
+
+  // Wire up click-to-navigate on race rows
+  list.querySelectorAll(".race-row[data-slug]").forEach(row => {
+    row.addEventListener("click", () => selectFilerBySlug(row.dataset.slug));
+  });
+
+  // Wire up show-more toggles
+  list.querySelectorAll(".race-show-more").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const idx = btn.dataset.raceIdx;
+      const extra = document.getElementById(`race-extra-${idx}`);
+      if (!extra) return;
+      extra.hidden = !extra.hidden;
+      btn.textContent = extra.hidden
+        ? `Show ${extra.children.length} more`
+        : "Show fewer";
+    });
+  });
 }
 
 // ── Campaign Pulse ──────────────────────────────────────────────────────

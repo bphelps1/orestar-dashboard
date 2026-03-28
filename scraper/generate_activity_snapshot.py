@@ -122,9 +122,12 @@ def build_races(filer_metrics: list[dict], index: list[dict]) -> list[dict]:
     import re as _re
     metric_by_slug = {fm["slug"]: fm for fm in filer_metrics}
 
-    # Determine current election year
+    # Show races for the current year and next year. This covers:
+    # - Even years (2026): statewide + legislative elections
+    # - Odd years (2027): local/municipal elections
+    # The window automatically advances as time passes.
     now = datetime.now()
-    current_cycle_year = now.year if now.year % 2 == 0 else now.year + 1
+    valid_election_years = {now.year, now.year + 1}
 
     races = defaultdict(list)
     for row in index:
@@ -134,7 +137,7 @@ def build_races(filer_metrics: list[dict], index: list[dict]) -> list[dict]:
         if not od:
             continue
 
-        # STRICT: only include candidates with a current-cycle election
+        # STRICT: only include candidates with an upcoming election
         # field from ORESTAR (e.g., "2026 Primary Election")
         election = row.get("election", "")
         if not election:
@@ -143,8 +146,8 @@ def build_races(filer_metrics: list[dict], index: list[dict]) -> list[dict]:
         if not yr_match:
             continue
         election_year = int(yr_match.group(1))
-        if election_year != current_cycle_year:
-            continue  # Not a 2026 race
+        if election_year not in valid_election_years:
+            continue
 
         slug = row.get("slug", "")
         fm = metric_by_slug.get(slug, {})
@@ -171,8 +174,7 @@ def build_races(filer_metrics: list[dict], index: list[dict]) -> list[dict]:
             "office": office,
             "total_raised": round(total, 2),
             "is_statewide": is_statewide,
-            "candidates": candidates[:5],
-            "more_candidates": max(0, len(candidates) - 5),
+            "candidates": candidates,  # All candidates (frontend shows top 5 + expand)
         })
 
     # Sort: statewide first (by total raised), then non-statewide (by total raised)
