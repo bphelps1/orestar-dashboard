@@ -2194,7 +2194,8 @@ function renderOverviewMultiFiler(profiles) {
       legend: {
         data: profiles.map(p => p.name),
         bottom: 0,
-        textStyle: { fontSize: IS_MOBILE ? 9 : 12 },
+        itemGap: IS_MOBILE ? 8 : 20,
+        textStyle: { fontSize: IS_MOBILE ? 8 : 12 },
       },
       radar: {
         indicator: (() => {
@@ -2207,10 +2208,10 @@ function renderOverviewMultiFiler(profiles) {
           return baseTypes.map(bt => ({ name: shortTypeName(bt), max: uniformMax }));
         })(),
         shape: 'polygon',
-        radius: IS_MOBILE ? '55%' : '65%',
-        center: ['50%', '45%'],
+        radius: IS_MOBILE ? '40%' : '65%',
+        center: ['50%', IS_MOBILE ? '50%' : '45%'],
         axisName: {
-          fontSize: IS_MOBILE ? 9 : 11,
+          fontSize: IS_MOBILE ? 8 : 11,
           color: '#6b7280',
         },
         splitArea: { areaStyle: { color: ['#fff', '#f9fafb'] } },
