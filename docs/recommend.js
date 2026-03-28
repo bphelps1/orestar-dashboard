@@ -689,12 +689,24 @@ function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
     for (const d of donors) allTargetDonors.add(d.name.toLowerCase());
   }
 
+  // Build set of candidate filer names for exclusion (lowercased)
+  const candidateFilerNames = new Set();
+  if (filerIndex) {
+    for (const f of filerIndex) {
+      candidateFilerNames.add(f.name.toLowerCase());
+    }
+  }
+
   // Score each donor
   const results = [];
 
   for (const [key, donor] of donorMap) {
     // Skip aggregated/non-individual entries
     if (isDonorExcluded(donor.name)) continue;
+
+    // Skip candidate filers (e.g. "Kate Lieber for State Senate (20136)")
+    const nameNoId = donor.name.replace(/\s*\(\d+\)\s*$/, "").toLowerCase();
+    if (candidateFilerNames.has(key) || candidateFilerNames.has(nameNoId)) continue;
 
     // Skip donors who have ever given to this filer — they belong in Donor Targets
     if (allTargetDonors.has(key)) continue;
