@@ -2237,17 +2237,17 @@ function renderOverviewMultiFiler(profiles) {
     });
     thtml += `</tr></thead><tbody>`;
 
-    // One row per base type
+    // One row per base type — store donor data for hover tooltips
+    const cellDonorData = []; // [{bt, filerIdx, donors}]
     baseTypes.forEach(bt => {
       thtml += `<tr><td class="radar-table-type">${esc(shortTypeName(bt))}</td>`;
       profiles.forEach((p, i) => {
         const amt = filerData[i].byBase[bt] || 0;
         const donors = filerData[i].topDonorsByBase[bt] || [];
-        const donorTip = donors.length
-          ? donors.map(d => `${d.name}: ${fmtCompact$(d.total)}`).join('\n')
-          : '';
-        const tipAttr = donorTip ? ` title="${esc(donorTip)}" style="cursor:help"` : '';
-        thtml += `<td class="num"${tipAttr}>${fmtCompact$(amt)}</td>`;
+        const cellId = `radar-cell-${baseTypes.indexOf(bt)}-${i}`;
+        const hasdonors = donors.length > 0;
+        thtml += `<td class="num${hasdonors ? ' radar-cell-hover' : ''}" ${hasdonors ? `id="${cellId}" data-cell-idx="${cellDonorData.length}"` : ''}>${fmtCompact$(amt)}</td>`;
+        if (hasdonors) cellDonorData.push({ bt, filerName: p.name, donors });
       });
       thtml += `</tr>`;
     });
@@ -2261,6 +2261,47 @@ function renderOverviewMultiFiler(profiles) {
 
     tableDiv.innerHTML = thtml;
     box.appendChild(tableDiv);
+
+    // Create a shared tooltip div for table hovers
+    let radarTip = document.getElementById("radar-table-tip");
+    if (!radarTip) {
+      radarTip = document.createElement("div");
+      radarTip.id = "radar-table-tip";
+      radarTip.className = "radar-table-tip";
+      document.body.appendChild(radarTip);
+    }
+
+    // Wire hover tooltips on cells with donor data
+    tableDiv.querySelectorAll(".radar-cell-hover").forEach(cell => {
+      const idx = parseInt(cell.dataset.cellIdx);
+      const info = cellDonorData[idx];
+      if (!info) return;
+
+      cell.addEventListener("mouseenter", (e) => {
+        let html = `<div style="font-weight:600;margin-bottom:4px">Top ${shortTypeName(info.bt)} Donors</div>`;
+        html += `<div style="font-size:11px;color:#6b7280;margin-bottom:4px">${esc(info.filerName)}</div>`;
+        info.donors.forEach(d => {
+          html += `<div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;padding:1px 0">
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.name)}</span>
+            <span style="font-weight:500;white-space:nowrap">${fmtCompact$(d.total)}</span>
+          </div>`;
+        });
+        radarTip.innerHTML = html;
+        radarTip.hidden = false;
+        const rect = cell.getBoundingClientRect();
+        let left = rect.left;
+        let top = rect.bottom + 6;
+        // Keep within viewport horizontally
+        if (left + 260 > window.innerWidth) left = window.innerWidth - 265;
+        if (left < 5) left = 5;
+        radarTip.style.left = left + "px";
+        radarTip.style.top = (top + window.scrollY) + "px";
+      });
+
+      cell.addEventListener("mouseleave", () => {
+        radarTip.hidden = true;
+      });
+    });
   }
 
   document.getElementById("filer-comparison-grid").innerHTML = profiles.map(p => {

@@ -1043,6 +1043,24 @@ main {
   border-top: 2px solid var(--color-border);
   border-bottom: none;
 }
+.radar-cell-hover {
+  cursor: help;
+  text-decoration: underline dotted var(--color-text-light);
+  text-underline-offset: 2px;
+}
+.radar-table-tip {
+  position: absolute;
+  z-index: 9999;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: 10px 14px;
+  max-width: 260px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  pointer-events: none;
+}
 
 /* ── Overview Charts Layout ───────────────────────────────────────────── */
 .overview-charts {
