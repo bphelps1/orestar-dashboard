@@ -272,29 +272,68 @@ function makeStackedAreaChart(containerId, byMonthData, byTypeRows) {
   };
   chart.setOption(option);
 
-  // 7. Click handler — toggle selection, then re-show tooltip with updated donors
+  // 7. Click handler — use ZRender click since stacked areas with symbol:none
+  //    don't fire ECharts series click events. Determine which series was
+  //    clicked by checking the y-value against cumulative stack heights.
+  function applySelection(typeName, dataIndex) {
+    selectedDonorTypeGroup = selectedDonorTypeGroup === typeName ? null : typeName;
+    const newSeries = baseTypes.map(base => ({
+      name: base,
+      areaStyle: {
+        opacity: selectedDonorTypeGroup === null ? 0.6
+          : selectedDonorTypeGroup === base ? 0.85 : 0.05,
+      },
+      lineStyle: {
+        width: selectedDonorTypeGroup === base ? 2.5 : 1,
+        opacity: selectedDonorTypeGroup === null ? 1
+          : selectedDonorTypeGroup === base ? 1 : 0.1,
+      },
+    }));
+    chart.setOption({ series: newSeries });
+    updateStackedAreaLegendStyles(el.parentElement || el.closest('#overview-donut-box'), baseTypes);
+    // Hide then re-show tooltip so formatter re-runs with updated selection
+    // (ECharts won't re-render if tooltip is already visible at same position)
+    chart.dispatchAction({ type: 'hideTip' });
+    if (dataIndex != null) {
+      setTimeout(() => {
+        chart.dispatchAction({ type: 'showTip', seriesIndex: 0, dataIndex });
+      }, 80);
+    }
+  }
+
+  chart.getZr().on('click', function(params) {
+    // Convert pixel coords to data coords
+    const pointInGrid = chart.containPixel('grid', [params.offsetX, params.offsetY]);
+    if (!pointInGrid) return;
+
+    const dataCoord = chart.convertFromPixel({ seriesIndex: 0 }, [params.offsetX, params.offsetY]);
+    const dataIndex = Math.round(dataCoord[0]);
+    if (dataIndex < 0 || dataIndex >= months.length) return;
+
+    const month = months[dataIndex];
+    const mData = monthlyBaseData[month] || {};
+    const clickY = dataCoord[1]; // value at click position
+
+    // Walk up the stack to find which series was clicked
+    let cumulative = 0;
+    let clickedType = null;
+    for (const base of baseTypes) {
+      const val = mData[base]?.total || 0;
+      cumulative += val;
+      if (clickY <= cumulative) {
+        clickedType = base;
+        break;
+      }
+    }
+    if (!clickedType && baseTypes.length) clickedType = baseTypes[baseTypes.length - 1];
+
+    applySelection(clickedType, dataIndex);
+  });
+
+  // Also keep ECharts series click as fallback (works on desktop with hover)
   chart.on('click', function(params) {
     if (params.componentType === 'series') {
-      const clicked = params.seriesName;
-      selectedDonorTypeGroup = selectedDonorTypeGroup === clicked ? null : clicked;
-      const newSeries = baseTypes.map(base => ({
-        name: base,
-        areaStyle: {
-          opacity: selectedDonorTypeGroup === null ? 0.6
-            : selectedDonorTypeGroup === base ? 0.85 : 0.05,
-        },
-        lineStyle: {
-          width: selectedDonorTypeGroup === base ? 2.5 : 1,
-          opacity: selectedDonorTypeGroup === null ? 1
-            : selectedDonorTypeGroup === base ? 1 : 0.1,
-        },
-      }));
-      chart.setOption({ series: newSeries });
-      updateStackedAreaLegendStyles(el.parentElement || el.closest('#overview-donut-box'), baseTypes);
-      // Re-show tooltip so formatter picks up new selectedDonorTypeGroup
-      setTimeout(() => {
-        chart.dispatchAction({ type: 'showTip', seriesIndex: params.seriesIndex, dataIndex: params.dataIndex });
-      }, 60);
+      applySelection(params.seriesName, params.dataIndex);
     }
   });
 
