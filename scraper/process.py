@@ -1069,7 +1069,7 @@ def aggregate_filers(
             .dropna(subset=[_filer_id_col])
             .assign(_fid=lambda x: x[_filer_id_col].astype(str).str.strip())
             .query("_fid != ''")
-            .drop_duplicates(subset=[filer_col])
+            .drop_duplicates(subset=[filer_col], keep="last")
             .set_index(filer_col)["_fid"]
             .to_dict()
         )
@@ -1427,6 +1427,79 @@ def aggregate_filers(
     log.info(
         "Wrote filer_index.json (%d filers) and %d filer detail files",
         len(index_rows), len(index_rows),
+    )
+
+    # ── by_party_type.json — Donor type composition by party by year ────────
+    # Cross-references filer_index party data with per-filer donor type
+    # breakdowns to produce a partisan comparison dataset.
+    _party_type_by_year: dict[str, dict[str, dict[str, dict]]] = {}
+    _party_filer_count = {"Democrat": 0, "Republican": 0}
+
+    for row in index_rows:
+        _party = row.get("party", "")
+        if _party not in ("Democrat", "Republican"):
+            continue
+        _slug = row["slug"]
+        _detail_path = filers_dir / f"{_slug}.json"
+        if not _detail_path.exists():
+            continue
+        _party_filer_count[_party] += 1
+        with open(_detail_path) as f:
+            _detail = json.load(f)
+        _by_type_year = _detail.get("by_contributor_type_by_year", {})
+        for _yr, _type_rows in _by_type_year.items():
+            if _yr not in _party_type_by_year:
+                _party_type_by_year[_yr] = {}
+            if _party not in _party_type_by_year[_yr]:
+                _party_type_by_year[_yr][_party] = {}
+            for _tr in _type_rows:
+                _t = _tr["type"]
+                if _t not in _party_type_by_year[_yr][_party]:
+                    _party_type_by_year[_yr][_party][_t] = {
+                        "total": 0.0, "donors": {}
+                    }
+                _party_type_by_year[_yr][_party][_t]["total"] += _tr.get("total", 0)
+                for _d in _tr.get("top_donors", []):
+                    _donors = _party_type_by_year[_yr][_party][_t]["donors"]
+                    _donors[_d["name"]] = _donors.get(_d["name"], 0) + _d["total"]
+
+    # Flatten to output format
+    _party_output: dict = {"by_year": {}, "meta": {
+        "democrat_committees": _party_filer_count["Democrat"],
+        "republican_committees": _party_filer_count["Republican"],
+    }}
+    for _yr in sorted(_party_type_by_year.keys()):
+        _party_output["by_year"][_yr] = {}
+        for _p in ("Democrat", "Republican"):
+            _types = _party_type_by_year[_yr].get(_p, {})
+            _party_output["by_year"][_yr][_p] = [
+                {
+                    "type": _t,
+                    "total": round(_data["total"], 2),
+                    "top_donors": sorted(
+                        [{"name": _n, "total": round(_v, 2)}
+                         for _n, _v in _data["donors"].items()],
+                        key=lambda x: -x["total"],
+                    )[:5],
+                }
+                for _t, _data in sorted(
+                    _types.items(), key=lambda x: -x[1]["total"]
+                )
+            ]
+
+    _write_json("by_party_type.json", _party_output)
+    log.info(
+        "Wrote by_party_type.json (D: %d committees, R: %d committees)",
+        _party_filer_count["Democrat"], _party_filer_count["Republican"],
+    )
+
+    # ── activity_snapshot.json — Campaign Pulse module data ────────────────
+    from generate_activity_snapshot import generate as _gen_snapshot
+    _snapshot = _gen_snapshot(agg_dir=AGG_DIR, filers_dir=filers_dir)
+    _write_json("activity_snapshot.json", _snapshot)
+    log.info(
+        "Wrote activity_snapshot.json (%d candidates)",
+        _snapshot["meta"]["total_candidates"],
     )
 
     # ── Build donor → filer mapping for clickable donor links ──────────────
