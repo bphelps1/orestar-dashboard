@@ -1897,7 +1897,17 @@ function renderOverviewGlobal() {
   resetChartBox();
   if (byTypeRows.length && byTypeDataGlobal && byTypeDataGlobal.by_month) {
     document.getElementById("overview-donut-title").textContent = "Who Funds Oregon Campaigns";
-    makeStackedAreaChart("chart-contributor-type", byTypeDataGlobal.by_month, byTypeRows);
+    // Filter by_month data to the active date range
+    let filteredByMonth = byTypeDataGlobal.by_month;
+    if (hasDate) {
+      const sm = state.dateStart ? state.dateStart.slice(0, 7) : null;
+      const em = state.dateEnd ? state.dateEnd.slice(0, 7) : null;
+      filteredByMonth = {};
+      for (const [m, entries] of Object.entries(byTypeDataGlobal.by_month)) {
+        if ((!sm || m >= sm) && (!em || m <= em)) filteredByMonth[m] = entries;
+      }
+    }
+    makeStackedAreaChart("chart-contributor-type", filteredByMonth, byTypeRows);
   } else if (byTypeRows.length) {
     makeSimplePieChart("chart-contributor-type", byTypeRows);
   }
@@ -2706,9 +2716,12 @@ async function loadPartyFundraising() {
     if (!box) return;
     box.hidden = false;
 
-    // Aggregate all years by BASE donor type, tracking in-state vs out-of-state separately
+    // Aggregate years by BASE donor type, tracking in-state vs out-of-state separately
+    // Respect the active date range filter
     const demIn = {}, demOut = {}, repIn = {}, repOut = {};
-    const years = Object.keys(data.by_year).filter(y => y >= "2006");
+    const startYr = state.dateStart ? state.dateStart.slice(0, 4) : "2006";
+    const endYr = state.dateEnd ? state.dateEnd.slice(0, 4) : "9999";
+    const years = Object.keys(data.by_year).filter(y => y >= startYr && y <= endYr);
     for (const y of years) {
       for (const t of (data.by_year[y]?.Democrat || [])) {
         const isOOS = t.type.endsWith(" (out of state)");
