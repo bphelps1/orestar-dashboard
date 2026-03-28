@@ -216,6 +216,7 @@ function makeStackedAreaChart(containerId, byMonthData, byTypeRows) {
       trigger: 'axis',
       triggerOn: IS_MOBILE ? 'click' : 'mousemove',
       alwaysShowContent: false,
+      confine: true,
       axisPointer: { type: 'cross' },
       formatter: function(params) {
         if (!params || !params.length) return '';
@@ -524,6 +525,7 @@ function makeSimplePieChart(containerId, typeRows) {
   chart.setOption({
     tooltip: {
       trigger: 'item',
+      confine: true,
       formatter: '{b}: {c} ({d}%)',
     },
     series: [{
@@ -1221,6 +1223,7 @@ function makeBarChart(containerId, labels, values, label, color = "#3182ce") {
   chart.setOption({
     tooltip: {
       trigger: 'axis',
+      confine: true,
       axisPointer: { type: 'shadow' },
       formatter: params => params[0] ? `${params[0].name}<br/>${fmt$(params[0].value)}` : '',
     },
@@ -1281,6 +1284,7 @@ function makeLineChart(containerId, labels, datasets) {
   chart.setOption({
     tooltip: {
       trigger: 'axis',
+      confine: true,
       formatter: params => {
         let html = `<div style="font-weight:600;margin-bottom:4px">${params[0]?.axisValue || ''}</div>`;
         params.forEach(p => {
@@ -2726,6 +2730,7 @@ async function loadPartyFundraising() {
     chart.setOption({
       tooltip: {
         trigger: 'axis',
+        confine: true,
         axisPointer: { type: 'shadow' },
         formatter: params => {
           if (!params || !params.length) return '';
