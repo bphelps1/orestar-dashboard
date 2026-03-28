@@ -260,7 +260,7 @@ function makeStackedAreaChart(containerId, byMonthData, byTypeRows) {
     yAxis: {
       type: 'value',
       axisLabel: {
-        formatter: v => IS_MOBILE ? fmtCompact$(v) : fmt$(v),
+        formatter: v => fmtCompact$(v),
         fontSize: IS_MOBILE ? 9 : 12,
       },
     },
@@ -302,9 +302,15 @@ function makeStackedAreaChart(containerId, byMonthData, byTypeRows) {
   }
 
   chart.getZr().on('click', function(params) {
-    // Convert pixel coords to data coords
     const pointInGrid = chart.containPixel('grid', [params.offsetX, params.offsetY]);
-    if (!pointInGrid) return;
+    if (!pointInGrid) {
+      // Clicked outside the grid (margins, title area) — reset selection
+      if (selectedDonorTypeGroup) {
+        applySelection(selectedDonorTypeGroup, null); // toggle off
+      }
+      chart.dispatchAction({ type: 'hideTip' });
+      return;
+    }
 
     const dataCoord = chart.convertFromPixel({ seriesIndex: 0 }, [params.offsetX, params.offsetY]);
     const dataIndex = Math.round(dataCoord[0]);
@@ -312,7 +318,20 @@ function makeStackedAreaChart(containerId, byMonthData, byTypeRows) {
 
     const month = months[dataIndex];
     const mData = monthlyBaseData[month] || {};
-    const clickY = dataCoord[1]; // value at click position
+    const clickY = dataCoord[1];
+
+    // Check if click is above all stacked data (white space above the chart data)
+    let totalAtIndex = 0;
+    for (const base of baseTypes) totalAtIndex += mData[base]?.total || 0;
+
+    if (clickY > totalAtIndex) {
+      // Clicked above the data — reset selection
+      if (selectedDonorTypeGroup) {
+        applySelection(selectedDonorTypeGroup, null);
+      }
+      chart.dispatchAction({ type: 'hideTip' });
+      return;
+    }
 
     // Walk up the stack to find which series was clicked
     let cumulative = 0;
@@ -1201,7 +1220,7 @@ function makeBarChart(containerId, labels, values, label, color = "#3182ce") {
     xAxis: {
       type: 'value',
       axisLabel: {
-        formatter: v => IS_MOBILE ? fmtCompact$(v) : fmt$(v),
+        formatter: v => fmtCompact$(v),
         fontSize: IS_MOBILE ? 9 : 12,
       },
     },
@@ -1279,7 +1298,7 @@ function makeLineChart(containerId, labels, datasets) {
     yAxis: {
       type: 'value',
       axisLabel: {
-        formatter: v => IS_MOBILE ? fmtCompact$(v) : fmt$(v),
+        formatter: v => fmtCompact$(v),
         fontSize: IS_MOBILE ? 9 : 12,
       },
     },
@@ -2747,7 +2766,7 @@ async function loadPartyFundraising() {
       yAxis: {
         type: 'value',
         axisLabel: {
-          formatter: v => IS_MOBILE ? fmtCompact$(v) : fmt$(v),
+          formatter: v => fmtCompact$(v),
           fontSize: IS_MOBILE ? 9 : 12,
         },
       },
