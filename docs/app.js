@@ -55,6 +55,19 @@ const TYPE_COLOR_MAP = {};
   "Unregistered Committee", "Political Party Committee",
 ].forEach((t, i) => { TYPE_COLOR_MAP[t] = PALETTE[i]; });
 
+// Short display names for donor type labels (used in legends and chart axes)
+const TYPE_SHORT_NAMES = {
+  "Business Entity": "Business",
+  "Political Committee": "Political Cmte",
+  "Individual": "Individual",
+  "Other": "Other",
+  "Labor Organization": "Labor",
+  "Candidate & Immediate Family": "Candidate/Family",
+  "Unregistered Committee": "Unreg. Cmte",
+  "Political Party Committee": "Party Cmte",
+};
+function shortTypeName(name) { return TYPE_SHORT_NAMES[name] || name; }
+
 function typeColor(label) {
   const base  = label.endsWith(" (out of state)") ? label.slice(0, -15) : label;
   const color = TYPE_COLOR_MAP[base] ?? PALETTE[Object.keys(TYPE_COLOR_MAP).length % PALETTE.length];
@@ -428,7 +441,7 @@ function renderStackedAreaLegend(chart, baseTypes, baseTotals, grandTotal, byTyp
     const item = document.createElement("span");
     item.className = "stacked-area-legend-item";
     item.innerHTML = `<span class="swatch" style="background:${color}"></span>
-      <span class="legend-type-name">${esc(base)}</span>
+      <span class="legend-type-name">${esc(shortTypeName(base))}</span>
       <span class="legend-type-amount">${fmt$(total)}</span>
       <span class="legend-type-pct">(${pct}%)</span>`;
 
@@ -2698,18 +2711,7 @@ async function loadPartyFundraising() {
     }
     const allTypes = Object.keys(allTotals).sort((a, b) => allTotals[b] - allTotals[a]);
 
-    // Short labels for the chart
-    const shortNames = {
-      "Business Entity": "Business",
-      "Political Committee": "Political Cmte",
-      "Individual": "Individual",
-      "Other": "Other",
-      "Labor Organization": "Labor",
-      "Candidate & Immediate Family": "Candidate/Family",
-      "Unregistered Committee": "Unreg. Cmte",
-      "Political Party Committee": "Party Cmte",
-    };
-    const displayLabels = allTypes.map(t => shortNames[t] || t);
+    const displayLabels = allTypes.map(t => shortTypeName(t));
 
     const el = document.getElementById("chart-party-fundraising");
     if (!el) return;
