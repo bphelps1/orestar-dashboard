@@ -2197,18 +2197,15 @@ function renderOverviewMultiFiler(profiles) {
         textStyle: { fontSize: IS_MOBILE ? 9 : 12 },
       },
       radar: {
-        indicator: baseTypes.map((bt, idx) => {
-          // Scale each axis to the max value across filers (+ 15% headroom)
-          let axisMax = 0;
+        indicator: (() => {
+          // Uniform scale: same max on all axes so each ring = same %
+          let globalMax = 0;
           series.forEach(s => {
-            const val = s.data[0].value[idx] || 0;
-            if (val > axisMax) axisMax = val;
+            s.data[0].value.forEach(v => { if (v > globalMax) globalMax = v; });
           });
-          return {
-            name: shortTypeName(bt),
-            max: Math.max(Math.ceil(axisMax * 1.15), 1),
-          };
-        }),
+          const uniformMax = Math.max(Math.ceil(globalMax * 1.15), 1);
+          return baseTypes.map(bt => ({ name: shortTypeName(bt), max: uniformMax }));
+        })(),
         shape: 'polygon',
         radius: IS_MOBILE ? '55%' : '65%',
         center: ['50%', '45%'],
