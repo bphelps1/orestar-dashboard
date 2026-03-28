@@ -270,16 +270,11 @@ function makeStackedAreaChart(containerId, byMonthData, byTypeRows) {
   };
   chart.setOption(option);
 
-  // 7. Click handler for selecting a type
-  let _skipOutsideClick = false;
+  // 7. Click handler — same behavior as legend click: toggle selection
   chart.on('click', function(params) {
     if (params.componentType === 'series') {
-      _skipOutsideClick = true;
-      setTimeout(() => { _skipOutsideClick = false; }, 100);
-
       const clicked = params.seriesName;
       selectedDonorTypeGroup = selectedDonorTypeGroup === clicked ? null : clicked;
-      // Update opacity
       const newSeries = baseTypes.map(base => ({
         name: base,
         areaStyle: {
@@ -293,22 +288,12 @@ function makeStackedAreaChart(containerId, byMonthData, byTypeRows) {
         },
       }));
       chart.setOption({ series: newSeries });
-      // Re-trigger tooltip after a tick so the formatter sees the new selection
-      setTimeout(() => {
-        chart.dispatchAction({
-          type: 'showTip',
-          seriesIndex: params.seriesIndex,
-          dataIndex: params.dataIndex,
-        });
-      }, 50);
-      // Update legend styles
       updateStackedAreaLegendStyles(el.parentElement || el.closest('#overview-donut-box'), baseTypes);
     }
   });
 
   // 8. Dismiss tooltip when tapping outside chart
   document.addEventListener("click", function(e) {
-    if (_skipOutsideClick) return;
     if (!el.contains(e.target)) {
       chart.dispatchAction({ type: "hideTip" });
     }
