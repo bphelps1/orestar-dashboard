@@ -294,7 +294,14 @@ function makeStackedAreaChart(containerId, byMonthData, byTypeRows) {
     }
   });
 
-  // 8. Render custom legend (keep existing pattern)
+  // 8. Dismiss tooltip when tapping outside chart
+  document.addEventListener("click", function(e) {
+    if (!el.contains(e.target)) {
+      chart.dispatchAction({ type: "hideTip" });
+    }
+  });
+
+  // 9. Render custom legend (keep existing pattern)
   renderStackedAreaLegend(chart, baseTypes, baseTotals, grandTotal, byTypeRows);
 
   return chart;
