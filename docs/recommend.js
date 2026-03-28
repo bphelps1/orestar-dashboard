@@ -799,11 +799,15 @@ function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
       factors.push(`One-time donor (1 candidate, 1 year)`);
     }
 
+    // Heavy penalty: single-cycle donors (all giving in one 2-year cycle)
+    const giftCycles = new Set(allYearGifts.map(yr => yr % 2 === 0 ? yr : yr + 1));
+    if (giftCycles.size <= 1) {
+      score -= 25;
+      factors.push(`Single-cycle donor — all giving in one election cycle`);
+    }
+
     // Normalize to 0-100
     score = Math.max(0, Math.min(Math.round(score), 100));
-
-    // Tier assignment
-    const tier = score >= 60 ? "A" : score >= 35 ? "B" : "C";
 
     // Build explanation summary
     const topComps = donor.compGifts
@@ -814,7 +818,6 @@ function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
     results.push({
       donor: donor.name,
       score,
-      tier,
       already_given: alreadyGiven,
       target_ask: targetAsk,
       remaining_ask: remainingAsk,
@@ -830,9 +833,12 @@ function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
     });
   }
 
+  // Filter out prospects with target ask below $1,000
+  const filtered = results.filter(r => r.target_ask >= 1000);
+
   // Sort by score descending
-  results.sort((a, b) => b.score - a.score);
-  return results;
+  filtered.sort((a, b) => b.score - a.score);
+  return filtered;
 }
 
 function mergeDonorsByYear(byYear, years) {
@@ -891,7 +897,6 @@ function displayResults(recommendations, repeatTargets, targetProfile, comparabl
   // Summary cards
   const repeatRemaining = repeatTargets.reduce((s, r) => s + r.remaining, 0);
   const newRemaining = recommendations.reduce((s, r) => s + r.remaining_ask, 0);
-  const tierACnt = recommendations.filter(r => r.tier === "A").length;
   const summaryEl = document.getElementById("results-summary");
   summaryEl.innerHTML = `
     <div class="summary-card"><span class="sc-label">Donor Targets</span><br><span class="sc-value">${fmtNum(repeatTargets.length)}</span></div>
@@ -1090,7 +1095,7 @@ function renderFilteredRec() {
 function renderRecTable(rows) {
   const tbody = document.getElementById("rec-tbody");
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#718096;padding:24px">No recommendations found.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#718096;padding:24px">No recommendations found.</td></tr>';
     return;
   }
 
@@ -1104,7 +1109,6 @@ function renderRecTable(rows) {
           <span>${r.score}</span>
         </div>
       </td>
-      <td><span class="tier-badge tier-${r.tier}">${r.tier}</span></td>
       <td class="num">${fmt$(r.already_given)}</td>
       <td class="num">${fmt$(r.target_ask)}</td>
       <td class="num">${fmt$(r.remaining_ask)}</td>
@@ -1146,7 +1150,7 @@ function toggleDetail(idx, btn) {
 
   const topGifts = r.comp_gifts.sort((a, b) => b.amount - a.amount).slice(0, 10);
 
-  detailRow.innerHTML = `<td colspan="9"><div class="detail-content">
+  detailRow.innerHTML = `<td colspan="8"><div class="detail-content">
     <h4>Comparable Filer Gifts (${r.distinct_comps} filers, ${fmt$(r.total_to_comps)} total)</h4>
     ${topGifts.map(g => `
       <div class="comp-filer-row">
@@ -1196,7 +1200,6 @@ function exportData(format, scope = "new") {
     "Filer": target ? target.name : "",
     "Cycle": cycleLabel,
     "Score": r.score,
-    "Tier": r.tier,
     "Previous Cycles": "",
     "Last Cycle Amount": "",
     "Comparable Max": r.comp_max,
