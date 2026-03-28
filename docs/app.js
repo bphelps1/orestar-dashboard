@@ -16,11 +16,23 @@
 // ── Data base path (relative to GitHub Pages root) ───────────────────────────
 const DATA = "data/aggregated";
 
-// ── Chart.js default theme ───────────────────────────────────────────────────
+// ── ECharts — no global defaults needed (configured per-instance) ────────────
 const IS_MOBILE = window.innerWidth <= 768;
-Chart.defaults.font.family = "system-ui, -apple-system, 'Segoe UI', sans-serif";
-Chart.defaults.font.size   = IS_MOBILE ? 10 : 13;
-Chart.defaults.color       = "#4a5568";
+
+/** Initialize or re-initialize an ECharts instance on a DOM element */
+function initEChart(el) {
+  let instance = echarts.getInstanceByDom(el);
+  if (instance) instance.dispose();
+  return echarts.init(el, null, { renderer: 'svg' });
+}
+
+/** Resize all active ECharts instances */
+window.addEventListener('resize', () => {
+  document.querySelectorAll('.echart-container, .echart-container-tall').forEach(el => {
+    const instance = echarts.getInstanceByDom(el);
+    if (instance) instance.resize();
+  });
+});
 
 const PALETTE = [
   "#3182ce", "#e53e3e", "#38a169", "#d69e2e", "#805ad5",
@@ -49,201 +61,115 @@ function typeColor(label) {
   return label.endsWith(" (out of state)") ? hexToRgba(color, 0.45) : color;
 }
 
-// ── Donut box DOM helpers ─────────────────────────────────────────────────────
+// ── Chart box DOM helpers ─────────────────────────────────────────────────────
 
-function resetDonutBox() {
+function resetChartBox() {
   const box = document.getElementById("overview-donut-box");
-  box.querySelectorAll("canvas").forEach(c => { if (c._chart) { c._chart.destroy(); c._chart = null; } });
-  const multiRow = box.querySelector(".multi-donut-row");
-  if (multiRow) multiRow.remove();
-  const legend = box.querySelector(".multi-donut-legend");
-  if (legend) legend.remove();
-  const areaLegend = box.querySelector(".stacked-area-legend");
-  if (areaLegend) areaLegend.remove();
-  if (!document.getElementById("chart-contributor-type")) {
-    const canvas = document.createElement("canvas");
-    canvas.id = "chart-contributor-type";
-    box.appendChild(canvas);
+  // Dispose any ECharts instances inside
+  box.querySelectorAll('.echart-container, .echart-container-tall').forEach(el => {
+    const inst = echarts.getInstanceByDom(el);
+    if (inst) inst.dispose();
+  });
+  // Remove any dynamically added elements (legends, multi-filer divs)
+  box.querySelectorAll('.stacked-area-legend, .multi-chart-row').forEach(el => el.remove());
+  // Ensure the main chart div exists
+  let chartEl = document.getElementById("chart-contributor-type");
+  if (!chartEl) {
+    chartEl = document.createElement("div");
+    chartEl.id = "chart-contributor-type";
+    chartEl.className = "echart-container";
+    box.appendChild(chartEl);
   }
+  chartEl.className = "echart-container";
 }
 
-function buildMultiDonutBox(profiles) {
+function buildMultiChartBox(profiles) {
   const box = document.getElementById("overview-donut-box");
-  box.querySelectorAll("canvas").forEach(c => { if (c._chart) { c._chart.destroy(); c._chart = null; } });
-  const single = document.getElementById("chart-contributor-type");
-  if (single) single.remove();
-  box.querySelectorAll(".multi-donut-row, .multi-donut-legend").forEach(el => el.remove());
-  // Shared legend placeholder — populated by renderMultiDonutLegend after data is ready
-  const legendEl = document.createElement("div");
-  legendEl.className = "multi-donut-legend";
-  box.appendChild(legendEl);
+  // Dispose existing charts
+  box.querySelectorAll('.echart-container, .echart-container-tall').forEach(el => {
+    const inst = echarts.getInstanceByDom(el);
+    if (inst) inst.dispose();
+  });
+  // Remove old elements
+  const main = document.getElementById("chart-contributor-type");
+  if (main) main.remove();
+  box.querySelectorAll('.multi-chart-row, .stacked-area-legend').forEach(el => el.remove());
+
+  // Create container for each filer
   const row = document.createElement("div");
-  row.className = "multi-donut-row";
+  row.className = "multi-chart-row";
   profiles.forEach((p, i) => {
-    const unit   = document.createElement("div");
-    unit.className = "donut-unit";
-    const title  = document.createElement("div");
-    title.className = "donut-unit-title";
+    const unit = document.createElement("div");
+    unit.className = "multi-chart-unit";
+    const title = document.createElement("div");
+    title.className = "multi-chart-title";
     title.textContent = p.name;
-    const canvas = document.createElement("canvas");
-    canvas.id = `chart-type-${i}`;
+    const chartDiv = document.createElement("div");
+    chartDiv.id = `chart-type-${i}`;
+    chartDiv.className = "echart-container";
     unit.appendChild(title);
-    unit.appendChild(canvas);
+    unit.appendChild(chartDiv);
     row.appendChild(unit);
   });
   box.appendChild(row);
 }
 
-function renderMultiDonutLegend(types) {
-  const el = document.querySelector("#overview-donut-box .multi-donut-legend");
-  if (!el) return;
-  el.innerHTML = types.map(t => `
-    <span class="mdl-item">
-      <span class="mdl-swatch" style="background:${typeColor(t)}"></span>
-      <span class="mdl-label">${esc(t)}</span>
-    </span>`).join("");
-}
-
 // ── Stacked Area Chart (Who Funds Oregon Campaigns) ─────────────────────────
 
-function makeStackedAreaChart(canvasId, byMonthData, byTypeRows) {
-  const ctx = document.getElementById(canvasId);
-  if (!ctx) return null;
-  if (ctx._chart) ctx._chart.destroy();
+function makeStackedAreaChart(containerId, byMonthData, byTypeRows) {
+  const el = document.getElementById(containerId);
+  if (!el) return null;
+  el.className = "echart-container";
 
-  // 1. Compute base types by stripping " (out of state)" suffix
-  const baseTypeMap = {};   // baseType → { total across all months }
+  // 1. Compute base types (merge "out of state" variants)
+  const baseTypeMap = {};
   const months = Object.keys(byMonthData).filter(m => m >= "2006-01").sort();
-  for (const month of months) {
-    for (const entry of byMonthData[month]) {
-      const base = entry.type.endsWith(" (out of state)") ? entry.type.slice(0, -15) : entry.type;
-      if (!baseTypeMap[base]) baseTypeMap[base] = 0;
-      baseTypeMap[base] += entry.total;
-    }
-  }
+  const monthlyBaseData = {};
 
-  // Order base types by all_time totals (descending) if available, else by accumulated total
-  let baseTypes;
-  if (byTypeRows && byTypeRows.length) {
-    const seen = new Set();
-    baseTypes = [];
-    for (const r of byTypeRows) {
-      const base = r.type.endsWith(" (out of state)") ? r.type.slice(0, -15) : r.type;
-      if (!seen.has(base) && baseTypeMap[base]) {
-        seen.add(base);
-        baseTypes.push(base);
-      }
-    }
-    // Add any base types found in by_month but not in all_time
-    for (const bt of Object.keys(baseTypeMap)) {
-      if (!seen.has(bt)) baseTypes.push(bt);
-    }
-  } else {
-    baseTypes = Object.keys(baseTypeMap).sort((a, b) => baseTypeMap[b] - baseTypeMap[a]);
-  }
-
-  // 2. Build per-month totals for each base type, plus a merged top_donors lookup
-  const monthlyBaseData = {};  // month → baseType → { total, top_donors }
   for (const month of months) {
     monthlyBaseData[month] = {};
     for (const entry of byMonthData[month]) {
       const base = entry.type.endsWith(" (out of state)") ? entry.type.slice(0, -15) : entry.type;
+      if (!baseTypeMap[base]) baseTypeMap[base] = 0;
+      baseTypeMap[base] += entry.total;
       if (!monthlyBaseData[month][base]) {
         monthlyBaseData[month][base] = { total: 0, top_donors: [] };
       }
       monthlyBaseData[month][base].total += entry.total;
-      if (entry.top_donors) {
-        monthlyBaseData[month][base].top_donors.push(...entry.top_donors);
-      }
+      if (entry.top_donors) monthlyBaseData[month][base].top_donors.push(...entry.top_donors);
     }
-    // Sort & dedupe top donors per base type per month
+    // Merge/dedupe top donors
     for (const base of Object.keys(monthlyBaseData[month])) {
       const donors = monthlyBaseData[month][base].top_donors;
       const merged = {};
-      for (const d of donors) {
-        merged[d.name] = (merged[d.name] || 0) + d.total;
-      }
+      for (const d of donors) merged[d.name] = (merged[d.name] || 0) + d.total;
       monthlyBaseData[month][base].top_donors = Object.entries(merged)
         .map(([name, total]) => ({ name, total }))
         .sort((a, b) => b.total - a.total);
     }
   }
 
-  // 3. Build Chart.js datasets
-  const datasets = baseTypes.map(base => {
-    const color = TYPE_COLOR_MAP[base] ?? PALETTE[Object.keys(TYPE_COLOR_MAP).length % PALETTE.length];
-    return {
-      label: base,
-      data: months.map(m => (monthlyBaseData[m][base] ? monthlyBaseData[m][base].total : 0)),
-      backgroundColor: hexToRgba(color, 0.55),
-      borderColor: color,
-      borderWidth: 1.5,
-      fill: true,
-      pointRadius: 0,
-      pointHitRadius: 8,
-      tension: 0.3,
-    };
-  });
-
-  // 4. Format month labels for display
-  const labels = months.map(m => {
-    const [y, mo] = m.split("-");
-    const d = new Date(+y, +mo - 1);
-    return d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-  });
-
-  // 5. Create the chart
-  const chart = new Chart(ctx, {
-    type: "line",
-    data: { labels, datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      aspectRatio: IS_MOBILE ? 1 : 2,
-      interaction: { mode: "index", intersect: false },
-      onClick: (evt) => {
-        const elements = chart.getElementsAtEventForMode(evt, "nearest", { intersect: true }, false);
-        if (elements.length > 0) {
-          const dsIndex = elements[0].datasetIndex;
-          const clickedBase = baseTypes[dsIndex];
-          selectedDonorTypeGroup = selectedDonorTypeGroup === clickedBase ? null : clickedBase;
-          updateStackedAreaStyles(chart, baseTypes);
-          updateStackedAreaLegendStyles(chart.canvas.parentElement, baseTypes);
-          chart.update("none");
-        }
-      },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          enabled: false,
-          external: makeStackedAreaTooltip(months, monthlyBaseData, baseTypes),
-        },
-      },
-      scales: {
-        x: {
-          ticks: { maxRotation: 45, font: { size: IS_MOBILE ? 10 : 11 }, autoSkip: true, maxTicksLimit: IS_MOBILE ? 10 : 18 },
-          grid: { color: "#e2e8f0" },
-        },
-        y: {
-          stacked: true,
-          ticks: { callback: v => IS_MOBILE ? fmtCompact$(v) : fmt$(v), font: { size: IS_MOBILE ? 10 : undefined } },
-          grid: { color: "#e2e8f0" },
-        },
-      },
-    },
-  });
-  ctx._chart = chart;
-
-  // 6. Mouseleave to hide tooltip
-  if (!ctx._areaTooltipLeaveAttached) {
-    ctx.addEventListener("mouseleave", () => {
-      const el = document.getElementById("donut-tooltip");
-      if (el) el.hidden = true;
-    });
-    ctx._areaTooltipLeaveAttached = true;
+  // 2. Order base types
+  let baseTypes;
+  if (byTypeRows && byTypeRows.length) {
+    const seen = new Set();
+    baseTypes = [];
+    for (const r of byTypeRows) {
+      const base = r.type.endsWith(" (out of state)") ? r.type.slice(0, -15) : r.type;
+      if (!seen.has(base) && baseTypeMap[base]) { seen.add(base); baseTypes.push(base); }
+    }
+    for (const bt of Object.keys(baseTypeMap)) { if (!baseTypes.includes(bt)) baseTypes.push(bt); }
+  } else {
+    baseTypes = Object.keys(baseTypeMap).sort((a, b) => baseTypeMap[b] - baseTypeMap[a]);
   }
 
-  // 7. Compute grand totals per base type for legend
+  // 3. Format month labels
+  const labels = months.map(m => {
+    const [y, mo] = m.split("-");
+    return new Date(+y, +mo - 1).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+  });
+
+  // 4. Compute totals for legend
   const baseTotals = {};
   let grandTotal = 0;
   for (const month of months) {
@@ -254,17 +180,130 @@ function makeStackedAreaChart(canvasId, byMonthData, byTypeRows) {
     }
   }
 
-  // 8. Render custom legend
+  // 5. Build ECharts series
+  const series = baseTypes.map(base => {
+    const color = TYPE_COLOR_MAP[base] ?? PALETTE[Object.keys(TYPE_COLOR_MAP).length % PALETTE.length];
+    return {
+      name: base,
+      type: 'line',
+      stack: 'total',
+      areaStyle: { opacity: 0.6 },
+      emphasis: { focus: 'series' },
+      symbol: 'none',
+      lineStyle: { width: 1.5 },
+      itemStyle: { color },
+      data: months.map(m => Math.round(monthlyBaseData[m]?.[base]?.total || 0)),
+    };
+  });
+
+  // 6. Create chart
+  const chart = initEChart(el);
+  const option = {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'cross' },
+      formatter: function(params) {
+        if (!params || !params.length) return '';
+        const idx = params[0].dataIndex;
+        const month = months[idx];
+        const data = monthlyBaseData[month] || {};
+        const total = params.reduce((s, p) => s + (p.value || 0), 0);
+        const [y, mo] = month.split("-");
+        const monthLabel = new Date(+y, +mo - 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+        // Sort by value descending
+        const sorted = [...params].sort((a, b) => (b.value || 0) - (a.value || 0));
+        let html = `<div style="font-weight:600;margin-bottom:4px">${monthLabel}</div>`;
+        sorted.forEach(p => {
+          if (!p.value) return;
+          const pct = total > 0 ? (p.value / total * 100).toFixed(1) : "0.0";
+          const isSelected = selectedDonorTypeGroup === p.seriesName;
+          const bg = isSelected ? 'background:rgba(0,0,0,0.05);border-radius:3px;' : '';
+          html += `<div style="display:flex;align-items:center;gap:6px;padding:2px 4px;${bg}">
+            ${p.marker}<span style="flex:1">${p.seriesName}</span>
+            <span style="font-weight:500">${fmtCompact$(p.value)}</span>
+            <span style="color:#999">${pct}%</span>
+          </div>`;
+        });
+        html += `<div style="border-top:1px solid #eee;margin-top:4px;padding-top:4px;font-weight:600;text-align:right">${fmtCompact$(total)}</div>`;
+
+        // Top donors for selected type
+        if (selectedDonorTypeGroup && data[selectedDonorTypeGroup]?.top_donors?.length) {
+          const donors = data[selectedDonorTypeGroup].top_donors.slice(0, 5);
+          html += `<div style="margin-top:4px;font-weight:600;font-size:11px">Top ${selectedDonorTypeGroup} Donors</div>`;
+          donors.forEach(d => {
+            html += `<div style="display:flex;justify-content:space-between;font-size:11px;padding:1px 0">
+              <span>${d.name}</span><span style="font-weight:500;margin-left:8px">${fmtCompact$(d.total)}</span>
+            </div>`;
+          });
+        } else if (!selectedDonorTypeGroup) {
+          html += `<div style="margin-top:4px;font-size:10px;color:#999;font-style:italic">Click a colored area to see top donors</div>`;
+        }
+        return html;
+      },
+    },
+    grid: {
+      left: IS_MOBILE ? 50 : 70,
+      right: 20,
+      top: 10,
+      bottom: IS_MOBILE ? 80 : 40,
+      containLabel: false,
+    },
+    xAxis: {
+      type: 'category',
+      data: labels,
+      axisLabel: { fontSize: IS_MOBILE ? 9 : 11, rotate: 45 },
+      boundaryGap: false,
+    },
+    yAxis: {
+      type: 'value',
+      axisLabel: {
+        formatter: v => IS_MOBILE ? fmtCompact$(v) : fmt$(v),
+        fontSize: IS_MOBILE ? 9 : 12,
+      },
+    },
+    dataZoom: IS_MOBILE ? [
+      { type: 'slider', start: 70, end: 100, height: 25, bottom: 5 },
+      { type: 'inside' },
+    ] : [{ type: 'inside' }],
+    series,
+  };
+  chart.setOption(option);
+
+  // 7. Click handler for selecting a type
+  chart.on('click', function(params) {
+    if (params.componentType === 'series') {
+      const clicked = params.seriesName;
+      selectedDonorTypeGroup = selectedDonorTypeGroup === clicked ? null : clicked;
+      // Update opacity
+      const newSeries = baseTypes.map(base => ({
+        name: base,
+        areaStyle: {
+          opacity: selectedDonorTypeGroup === null ? 0.6
+            : selectedDonorTypeGroup === base ? 0.85 : 0.05,
+        },
+        lineStyle: {
+          width: selectedDonorTypeGroup === base ? 2.5 : 1,
+          opacity: selectedDonorTypeGroup === null ? 1
+            : selectedDonorTypeGroup === base ? 1 : 0.1,
+        },
+      }));
+      chart.setOption({ series: newSeries });
+      // Update legend styles
+      updateStackedAreaLegendStyles(el.parentElement || el.closest('#overview-donut-box'), baseTypes);
+    }
+  });
+
+  // 8. Render custom legend (keep existing pattern)
   renderStackedAreaLegend(chart, baseTypes, baseTotals, grandTotal, byTypeRows);
 
   return chart;
 }
 
 function renderStackedAreaLegend(chart, baseTypes, baseTotals, grandTotal, byTypeRows) {
-  const canvas = chart.canvas;
-  const box = canvas.closest("#overview-donut-box");
+  const el = chart.getDom();
+  const box = el.closest("#overview-donut-box") || el.parentElement;
   if (!box) return;
-  // Remove existing legend if present
   const existing = box.querySelector(".stacked-area-legend");
   if (existing) existing.remove();
 
@@ -273,68 +312,70 @@ function renderStackedAreaLegend(chart, baseTypes, baseTotals, grandTotal, byTyp
 
   baseTypes.forEach((base, i) => {
     const color = TYPE_COLOR_MAP[base] ?? PALETTE[Object.keys(TYPE_COLOR_MAP).length % PALETTE.length];
-    const item = document.createElement("span");
-    item.className = "stacked-area-legend-item";
     const total = baseTotals[base] || 0;
     const pct = grandTotal > 0 ? (total / grandTotal * 100).toFixed(1) : "0.0";
+    const item = document.createElement("span");
+    item.className = "stacked-area-legend-item";
     item.innerHTML = `<span class="swatch" style="background:${color}"></span>
       <span class="legend-type-name">${esc(base)}</span>
       <span class="legend-type-amount">${fmt$(total)}</span>
       <span class="legend-type-pct">(${pct}%)</span>`;
 
     item.addEventListener("click", () => {
-      if (selectedDonorTypeGroup === base) {
-        selectedDonorTypeGroup = null;
-      } else {
-        selectedDonorTypeGroup = base;
-      }
-      updateStackedAreaStyles(chart, baseTypes);
-      updateStackedAreaLegendStyles(legendDiv, baseTypes);
+      selectedDonorTypeGroup = selectedDonorTypeGroup === base ? null : base;
+      // Update chart opacity
+      const newSeries = baseTypes.map(bt => ({
+        name: bt,
+        areaStyle: {
+          opacity: selectedDonorTypeGroup === null ? 0.6
+            : selectedDonorTypeGroup === bt ? 0.85 : 0.05,
+        },
+        lineStyle: {
+          width: selectedDonorTypeGroup === bt ? 2.5 : 1,
+          opacity: selectedDonorTypeGroup === null ? 1
+            : selectedDonorTypeGroup === bt ? 1 : 0.1,
+        },
+      }));
+      chart.setOption({ series: newSeries });
+      updateStackedAreaLegendStyles(box, baseTypes);
     });
 
+    // Hover tooltip for all-time top donors
     item.addEventListener("mouseenter", () => {
-      // Find top donors for this base type from byTypeRows
       const typeRow = (byTypeRows || []).find(r => {
         const b = r.type.endsWith(" (out of state)") ? r.type.slice(0, -15) : r.type;
         return b === base;
       });
       if (!typeRow || !typeRow.top_donors || !typeRow.top_donors.length) return;
-      const el = document.getElementById("donut-tooltip");
-      if (!el) return;
-      let html = `<div style="font-weight:600;margin-bottom:4px;font-size:0.82rem">Top ${base} Donors (All Time)</div>`;
-      typeRow.top_donors.slice(0, 5).forEach(d => {
-        html += `<div style="display:flex;justify-content:space-between;font-size:0.75rem;padding:1px 0">
-          <span>${esc(d.name)}</span><span style="font-weight:500;margin-left:12px">${fmt$(d.total)}</span>
-        </div>`;
-      });
-      el.innerHTML = html;
-      el.hidden = false;
-      const rect = item.getBoundingClientRect();
-      el.style.left = rect.left + "px";
-      el.style.top = (rect.bottom + 6) + "px";
-    });
-    item.addEventListener("mouseleave", () => {
-      const el = document.getElementById("donut-tooltip");
-      if (el) el.hidden = true;
+      // Use a simple title tooltip
+      const donorText = typeRow.top_donors.slice(0, 5).map(d => `${d.name}: ${fmt$(d.total)}`).join('\n');
+      item.title = `Top ${base} Donors (All Time)\n${donorText}`;
     });
 
     legendDiv.appendChild(item);
   });
 
+  // Click background to deselect
   legendDiv.addEventListener("click", (e) => {
-    // If click was on the container background (not on an item)
     if (e.target === legendDiv) {
       selectedDonorTypeGroup = null;
-      updateStackedAreaStyles(chart, baseTypes);
-      updateStackedAreaLegendStyles(legendDiv, baseTypes);
+      const newSeries = baseTypes.map(bt => ({
+        name: bt,
+        areaStyle: { opacity: 0.6 },
+        lineStyle: { width: 1.5, opacity: 1 },
+      }));
+      chart.setOption({ series: newSeries });
+      updateStackedAreaLegendStyles(box, baseTypes);
     }
   });
 
   box.appendChild(legendDiv);
-  updateStackedAreaLegendStyles(legendDiv, baseTypes);
+  updateStackedAreaLegendStyles(box, baseTypes);
 }
 
-function updateStackedAreaLegendStyles(legendDiv, baseTypes) {
+function updateStackedAreaLegendStyles(container, baseTypes) {
+  const legendDiv = container.querySelector ? container.querySelector(".stacked-area-legend") : container;
+  if (!legendDiv) return;
   const items = legendDiv.querySelectorAll(".stacked-area-legend-item");
   items.forEach((item, i) => {
     const base = baseTypes[i];
@@ -350,156 +391,30 @@ function updateStackedAreaLegendStyles(legendDiv, baseTypes) {
   });
 }
 
-function updateStackedAreaStyles(chart, baseTypes) {
-  const selectedIdx = selectedDonorTypeGroup ? baseTypes.indexOf(selectedDonorTypeGroup) : -1;
-  chart.data.datasets.forEach((ds, i) => {
-    const base = baseTypes[i];
-    const color = TYPE_COLOR_MAP[base] ?? PALETTE[Object.keys(TYPE_COLOR_MAP).length % PALETTE.length];
-    if (selectedDonorTypeGroup === null) {
-      ds.backgroundColor = hexToRgba(color, 0.55);
-      ds.borderColor = color;
-      ds.borderWidth = 1.5;
-    } else if (selectedDonorTypeGroup === base) {
-      ds.backgroundColor = hexToRgba(color, 0.85);
-      ds.borderColor = color;
-      ds.borderWidth = 2;
-    } else {
-      ds.backgroundColor = "rgba(255, 255, 255, 0.92)";
-      ds.borderColor = hexToRgba(color, 0.12);
-      ds.borderWidth = 0.5;
-    }
+// Fallback when no monthly data — simple pie chart
+function makeSimplePieChart(containerId, typeRows) {
+  const el = document.getElementById(containerId);
+  if (!el) return null;
+  el.className = "echart-container";
+  const chart = initEChart(el);
+  chart.setOption({
+    tooltip: {
+      trigger: 'item',
+      formatter: '{b}: {c} ({d}%)',
+    },
+    series: [{
+      type: 'pie',
+      radius: ['35%', '65%'],
+      data: typeRows.map(r => ({
+        name: r.type,
+        value: Math.round(r.total),
+        itemStyle: { color: typeColor(r.type) },
+      })),
+      label: { fontSize: IS_MOBILE ? 10 : 12 },
+      emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.2)' } },
+    }],
   });
-  chart.update("none");
-}
-
-function makeStackedAreaTooltip(months, monthlyBaseData, baseTypes) {
-  return function({ chart, tooltip }) {
-    const el = document.getElementById("donut-tooltip");
-    if (!el) return;
-    if (tooltip.opacity === 0 || !tooltip.dataPoints || !tooltip.dataPoints.length) {
-      el.hidden = true;
-      return;
-    }
-
-    const idx = tooltip.dataPoints[0].dataIndex;
-    const month = months[idx];
-    if (!month) { el.hidden = true; return; }
-
-    const data = monthlyBaseData[month] || {};
-    const grandTotal = baseTypes.reduce((s, bt) => s + (data[bt] ? data[bt].total : 0), 0);
-
-    // Format month header
-    const [y, mo] = month.split("-");
-    const monthLabel = new Date(+y, +mo - 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
-
-    let html = `<div style="font-weight:600;margin-bottom:6px;font-size:0.85rem">${esc(monthLabel)}</div>`;
-
-    // Category rows — sorted by amount descending
-    const sortedTypes = baseTypes.slice().sort((a, b) => {
-      const va = data[a] ? data[a].total : 0;
-      const vb = data[b] ? data[b].total : 0;
-      return vb - va;
-    });
-    sortedTypes.forEach(bt => {
-      const val = data[bt] ? data[bt].total : 0;
-      if (val === 0 && selectedDonorTypeGroup !== bt) return;
-      const pct = grandTotal > 0 ? (val / grandTotal * 100).toFixed(1) : "0.0";
-      const color = TYPE_COLOR_MAP[bt] ?? PALETTE[Object.keys(TYPE_COLOR_MAP).length % PALETTE.length];
-      const isSelected = selectedDonorTypeGroup === bt;
-      const bgStyle = isSelected ? `background:${hexToRgba(color, 0.15)};border-radius:3px;` : "";
-      html += `<div style="display:flex;align-items:center;gap:6px;padding:2px 4px;${bgStyle}">
-        <span style="width:8px;height:8px;border-radius:2px;background:${color};flex-shrink:0"></span>
-        <span style="flex:1;font-size:0.78rem">${esc(bt)}</span>
-        <span style="font-size:0.78rem;font-weight:500">${fmt$(val)}</span>
-        <span style="font-size:0.72rem;color:#718096">${pct}%</span>
-      </div>`;
-    });
-
-    // Grand total
-    html += `<div style="border-top:1px solid #e2e8f0;margin-top:4px;padding-top:4px;font-size:0.78rem;font-weight:600;text-align:right">${fmt$(grandTotal)}</div>`;
-
-    // Top donors section if a category is selected
-    if (selectedDonorTypeGroup && data[selectedDonorTypeGroup] && data[selectedDonorTypeGroup].top_donors.length) {
-      const donors = data[selectedDonorTypeGroup].top_donors.slice(0, 5);
-      html += `<div style="margin-top:6px;font-size:0.72rem;font-weight:600;color:#4a5568">Top 5 ${esc(selectedDonorTypeGroup)} Donors</div>`;
-      donors.forEach(d => {
-        html += `<div style="display:flex;justify-content:space-between;font-size:0.72rem;padding:1px 0">
-          <span>${esc(d.name)}</span>
-          <span style="font-weight:500">${fmt$(d.total)}</span>
-        </div>`;
-      });
-    } else if (!selectedDonorTypeGroup) {
-      html += `<div style="margin-top:6px;font-size:0.68rem;color:#a0aec0;font-style:italic">Click a colored area to see top donors</div>`;
-    }
-
-    el.innerHTML = html;
-    el.hidden = false;
-
-    const rect = chart.canvas.getBoundingClientRect();
-    let left = rect.left + tooltip.caretX + 16;
-    let top  = rect.top  + tooltip.caretY - 20;
-    if (left + 280 > window.innerWidth) left = rect.left + tooltip.caretX - 296;
-    top = Math.max(top, 8);
-    if (top + el.offsetHeight > window.innerHeight - 8) top = window.innerHeight - el.offsetHeight - 8;
-    el.style.left = left + "px";
-    el.style.top  = top + "px";
-  };
-}
-
-// ── Donut tooltip ─────────────────────────────────────────────────────────────
-
-function makeDonutTooltip(typeRows) {
-  return function({ chart, tooltip }) {
-    const el = document.getElementById("donut-tooltip");
-    if (!el) return;
-    if (tooltip.opacity === 0 || !tooltip.dataPoints || !tooltip.dataPoints.length) {
-      el.hidden = true;
-      return;
-    }
-
-    const label = tooltip.dataPoints[0].label;
-    const value = tooltip.dataPoints[0].raw;
-    const all   = tooltip.dataPoints[0].dataset.data;
-    const total = all.reduce((s, v) => s + v, 0);
-    const pct   = total > 0 ? (value / total * 100).toFixed(1) : "0.0";
-    const color = typeColor(label);
-    // Look up by type name rather than array index for robustness
-    const row   = typeRows ? typeRows.find(r => r.type === label) : null;
-
-    let html = `
-      <div class="dt-header">
-        <span class="dt-swatch" style="background:${color}"></span>
-        <span class="dt-type">${esc(label)}</span>
-      </div>
-      <div class="dt-amount">${fmt$(value)}</div>
-      <div class="dt-pct">${pct}% of total</div>`;
-
-    if (row && row.top_donors && row.top_donors.length) {
-      html += `<div class="dt-donors-label">Top donors</div>`;
-      row.top_donors.slice(0, 5).forEach(d => {
-        html += `<div class="dt-donor">
-          <span class="dt-donor-name">${esc(d.name)}</span>
-          <span class="dt-donor-amt">${fmt$(d.total)}</span>
-        </div>`;
-      });
-    }
-
-    el.innerHTML = html;
-    el.hidden = false;
-
-    const rect = chart.canvas.getBoundingClientRect();
-    let left = rect.left + tooltip.caretX + 16;
-    let top  = rect.top  + tooltip.caretY - 20;
-    if (left + 240 > window.innerWidth) left = rect.left + tooltip.caretX - 256;
-    top = Math.max(top, 8);
-    el.style.left = left + "px";
-    el.style.top  = top  + "px";
-    // Clamp bottom: if tooltip extends below viewport, flip it above the cursor
-    if (top + el.offsetHeight + 8 > window.innerHeight) {
-      top = Math.max(8, rect.top + tooltip.caretY - el.offsetHeight - 10);
-      el.style.top = top + "px";
-    }
-  };
+  return chart;
 }
 
 // ── Date-range filter helpers ─────────────────────────────────────────────────
@@ -1173,109 +1088,116 @@ function onStateChange() {
 
 // ── Chart helpers ─────────────────────────────────────────────────────────────
 
-function makeBarChart(canvasId, labels, values, label, color = "#3182ce") {
-  const ctx = document.getElementById(canvasId);
-  if (!ctx) return null;
-  if (ctx._chart) ctx._chart.destroy();
-  const chart = new Chart(ctx, {
-    type: "bar",
-    data: {
-      labels,
-      datasets: [{ label, data: values, backgroundColor: color, borderRadius: 4 }],
+function makeBarChart(containerId, labels, values, label, color = "#3182ce") {
+  const el = document.getElementById(containerId);
+  if (!el) return null;
+  el.className = "echart-container-tall";
+
+  const chart = initEChart(el);
+  chart.setOption({
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: params => params[0] ? `${params[0].name}<br/>${fmt$(params[0].value)}` : '',
     },
-    options: {
-      indexAxis: "y",
-      responsive: true,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: ctx => " " + fmt$(ctx.raw),
-          },
-        },
-      },
-      scales: {
-        x: {
-          ticks: { callback: v => IS_MOBILE ? fmtCompact$(v) : fmt$(v) },
-          grid: { color: "#e2e8f0" },
-        },
-        y: {
-          ticks: { font: { size: 11 } },
-          grid: { display: false },
-        },
+    grid: {
+      left: IS_MOBILE ? 120 : 180,
+      right: 30,
+      top: 10,
+      bottom: 20,
+    },
+    xAxis: {
+      type: 'value',
+      axisLabel: {
+        formatter: v => IS_MOBILE ? fmtCompact$(v) : fmt$(v),
+        fontSize: IS_MOBILE ? 9 : 12,
       },
     },
+    yAxis: {
+      type: 'category',
+      data: labels.slice().reverse(),
+      axisLabel: {
+        fontSize: IS_MOBILE ? 10 : 12,
+        width: IS_MOBILE ? 110 : 170,
+        overflow: 'truncate',
+        ellipsis: '...',
+      },
+    },
+    series: [{
+      type: 'bar',
+      data: values.slice().reverse(),
+      itemStyle: {
+        color: color,
+        borderRadius: [0, 4, 4, 0],
+      },
+      barMaxWidth: 30,
+    }],
   });
-  ctx._chart = chart;
+
   return chart;
 }
 
-function makeDonutChart(canvasId, labels, values, title, typeRows = null, showLegend = true) {
-  const ctx = document.getElementById(canvasId);
-  if (!ctx) return null;
-  if (ctx._chart) ctx._chart.destroy();
+function makeLineChart(containerId, labels, datasets) {
+  const el = document.getElementById(containerId);
+  if (!el) return null;
+  el.className = "echart-container";
 
-  // Hide tooltip when cursor leaves the canvas
-  if (!ctx._tooltipLeaveAttached) {
-    ctx.addEventListener("mouseleave", () => {
-      const el = document.getElementById("donut-tooltip");
-      if (el) el.hidden = true;
-    });
-    ctx._tooltipLeaveAttached = true;
-  }
+  const chart = initEChart(el);
+  const series = datasets.map(ds => ({
+    name: ds.label,
+    type: 'line',
+    data: ds.data,
+    symbol: 'none',
+    lineStyle: { color: ds.borderColor, width: 2 },
+    itemStyle: { color: ds.borderColor },
+    areaStyle: ds.fill ? { color: ds.backgroundColor, opacity: 0.3 } : undefined,
+    smooth: ds.tension ? true : false,
+  }));
 
-  const chart = new Chart(ctx, {
-    type: "doughnut",
-    data: {
-      labels,
-      datasets: [{
-        data: values,
-        backgroundColor: labels.map(l => typeColor(l)),
-        borderWidth: 2,
-        borderColor: "#fff",
-      }],
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: showLegend
-          ? { position: "right", labels: { font: { size: 12 }, padding: 12 } }
-          : { display: false },
-        tooltip: {
-          enabled: false,
-          external: makeDonutTooltip(typeRows),
-        },
+  chart.setOption({
+    tooltip: {
+      trigger: 'axis',
+      formatter: params => {
+        let html = `<div style="font-weight:600;margin-bottom:4px">${params[0]?.axisValue || ''}</div>`;
+        params.forEach(p => {
+          html += `<div>${p.marker} ${p.seriesName}: <strong>${fmt$(p.value)}</strong></div>`;
+        });
+        return html;
       },
     },
+    legend: {
+      data: datasets.map(d => d.label),
+      top: 0,
+      textStyle: { fontSize: IS_MOBILE ? 10 : 12 },
+    },
+    grid: {
+      left: IS_MOBILE ? 50 : 70,
+      right: 20,
+      top: 35,
+      bottom: IS_MOBILE ? 80 : 40,
+    },
+    xAxis: {
+      type: 'category',
+      data: labels,
+      axisLabel: {
+        fontSize: IS_MOBILE ? 9 : 11,
+        rotate: 45,
+      },
+    },
+    yAxis: {
+      type: 'value',
+      axisLabel: {
+        formatter: v => IS_MOBILE ? fmtCompact$(v) : fmt$(v),
+        fontSize: IS_MOBILE ? 9 : 12,
+      },
+    },
+    dataZoom: IS_MOBILE ? [
+      { type: 'slider', start: 70, end: 100, height: 25, bottom: 5 },
+      { type: 'inside' },
+    ] : [{ type: 'inside' }],
+    series,
   });
-  ctx._chart = chart;
-  return chart;
-}
 
-function makeLineChart(canvasId, labels, datasets) {
-  const ctx = document.getElementById(canvasId);
-  if (!ctx) return null;
-  if (ctx._chart) ctx._chart.destroy();
-  const chart = new Chart(ctx, {
-    type: "line",
-    data: { labels, datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      aspectRatio: IS_MOBILE ? 1 : 2,
-      interaction: { mode: "index", intersect: false },
-      plugins: {
-        tooltip: {
-          callbacks: { label: ctx => " " + ctx.dataset.label + ": " + fmt$(ctx.raw) },
-        },
-      },
-      scales: {
-        x: { ticks: { maxRotation: 45, font: { size: IS_MOBILE ? 10 : 11 }, autoSkip: true, maxTicksLimit: IS_MOBILE ? 10 : undefined }, grid: { color: "#e2e8f0" } },
-        y: { ticks: { callback: v => IS_MOBILE ? fmtCompact$(v) : fmt$(v), font: { size: IS_MOBILE ? 10 : undefined } }, grid: { color: "#e2e8f0" } },
-      },
-    },
-  });
-  ctx._chart = chart;
   return chart;
 }
 
@@ -1828,18 +1750,12 @@ function renderOverviewGlobal() {
   } else {
     byTypeRows = [];
   }
-  resetDonutBox();
+  resetChartBox();
   if (byTypeRows.length && byTypeDataGlobal && byTypeDataGlobal.by_month) {
     document.getElementById("overview-donut-title").textContent = "Who Funds Oregon Campaigns";
     makeStackedAreaChart("chart-contributor-type", byTypeDataGlobal.by_month, byTypeRows);
   } else if (byTypeRows.length) {
-    makeDonutChart(
-      "chart-contributor-type",
-      byTypeRows.map(r => r.type),
-      byTypeRows.map(r => r.total),
-      "Contributor Type",
-      byTypeRows,
-    );
+    makeSimplePieChart("chart-contributor-type", byTypeRows);
   }
 
   document.getElementById("filer-comparison-grid").hidden = true;
@@ -1984,18 +1900,12 @@ function renderOverviewSingleFiler(profile) {
     : hasDate
       ? mergeTypeByYear(profile.by_contributor_type_by_year || {}, yearsInRange())
       : (profile.by_contributor_type || []);
-  resetDonutBox();
+  resetChartBox();
   if (byTypeRows.length) {
     if (profile.by_contributor_type_by_month) {
       makeStackedAreaChart("chart-contributor-type", profile.by_contributor_type_by_month, byTypeRows);
     } else {
-      makeDonutChart(
-        "chart-contributor-type",
-        byTypeRows.map(r => r.type),
-        byTypeRows.map(r => r.total),
-        "Contributor Type",
-        byTypeRows,
-      );
+      makeSimplePieChart("chart-contributor-type", byTypeRows);
     }
   }
 
@@ -2022,11 +1932,9 @@ function renderOverviewMultiFiler(profiles) {
   const hasDate = state.dateStart || state.dateEnd;
 
   // Build one chart per filer, stacked vertically
-  buildMultiDonutBox(profiles);
+  buildMultiChartBox(profiles);
 
-  // Add stacked layout class for full-width charts
-  const multiRow = document.querySelector("#overview-donut-box .multi-donut-row");
-  if (multiRow) multiRow.classList.add("stacked-layout");
+  // Multi-chart-row is already full-width via CSS (flex-direction: column)
 
   // Collect per-filer type rows
   const perFilerRows = profiles.map(p => hasDate && p.by_contributor_type_by_month
@@ -2041,14 +1949,7 @@ function renderOverviewMultiFiler(profiles) {
       if (p.by_contributor_type_by_month) {
         makeStackedAreaChart(`chart-type-${i}`, p.by_contributor_type_by_month, byTypeRows);
       } else {
-        makeDonutChart(
-          `chart-type-${i}`,
-          byTypeRows.map(r => r.type),
-          byTypeRows.map(r => r.total),
-          p.name,
-          byTypeRows,
-          false,
-        );
+        makeSimplePieChart(`chart-type-${i}`, byTypeRows);
       }
     }
   });
@@ -2701,53 +2602,67 @@ async function loadPartyFundraising() {
     };
     const displayLabels = allTypes.map(t => shortNames[t] || t);
 
-    const ctx = document.getElementById("chart-party-fundraising");
-    if (!ctx) return;
-    if (ctx._chart) ctx._chart.destroy();
+    const el = document.getElementById("chart-party-fundraising");
+    if (!el) return;
+    el.className = "echart-container";
 
-    const chart = new Chart(ctx, {
-      type: "bar",
-      data: {
-        labels: displayLabels,
-        datasets: [
-          {
-            label: "Democrat",
-            data: allTypes.map(t => demByType[t] || 0),
-            backgroundColor: "rgba(37, 99, 235, 0.7)",
-            borderColor: "#2563eb",
-            borderWidth: 1,
-          },
-          {
-            label: "Republican",
-            data: allTypes.map(t => repByType[t] || 0),
-            backgroundColor: "rgba(220, 38, 38, 0.7)",
-            borderColor: "#dc2626",
-            borderWidth: 1,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: true,
-        aspectRatio: IS_MOBILE ? 1 : 2,
-        plugins: {
-          legend: { position: "top", labels: { font: { size: IS_MOBILE ? 9 : undefined } } },
-          tooltip: {
-            callbacks: {
-              label: ctx => ` ${ctx.dataset.label}: ${fmt$(ctx.raw)}`,
-            },
-          },
-        },
-        scales: {
-          x: {
-            grid: { display: false },
-            ticks: { maxRotation: 60, font: { size: IS_MOBILE ? 10 : 10 } },
-          },
-          y: { ticks: { callback: v => IS_MOBILE ? fmtCompact$(v) : fmt$(v), font: { size: IS_MOBILE ? 10 : undefined } }, grid: { color: "#e2e8f0" } },
+    // Dispose existing
+    const existing = echarts.getInstanceByDom(el);
+    if (existing) existing.dispose();
+
+    const chart = echarts.init(el, null, { renderer: 'svg' });
+    chart.setOption({
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'shadow' },
+        formatter: params => {
+          let html = `<div style="font-weight:600;margin-bottom:4px">${params[0]?.name || ''}</div>`;
+          params.forEach(p => {
+            html += `<div>${p.marker} ${p.seriesName}: <strong>${fmt$(p.value)}</strong></div>`;
+          });
+          return html;
         },
       },
+      legend: {
+        data: ['Democrat', 'Republican'],
+        top: 0,
+      },
+      grid: {
+        left: IS_MOBILE ? 50 : 70,
+        right: 20,
+        top: 35,
+        bottom: IS_MOBILE ? 80 : 50,
+      },
+      xAxis: {
+        type: 'category',
+        data: displayLabels,
+        axisLabel: {
+          rotate: 45,
+          fontSize: IS_MOBILE ? 9 : 11,
+        },
+      },
+      yAxis: {
+        type: 'value',
+        axisLabel: {
+          formatter: v => IS_MOBILE ? fmtCompact$(v) : fmt$(v),
+          fontSize: IS_MOBILE ? 9 : 12,
+        },
+      },
+      series: [
+        {
+          name: 'Democrat',
+          type: 'bar',
+          data: allTypes.map(t => demByType[t] || 0),
+          itemStyle: { color: 'rgba(37, 99, 235, 0.8)' },
+        },
+        {
+          name: 'Republican',
+          type: 'bar',
+          data: allTypes.map(t => repByType[t] || 0),
+          itemStyle: { color: 'rgba(220, 38, 38, 0.8)' },
+        },
+      ],
     });
-    ctx._chart = chart;
   } catch (e) { console.warn("Party fundraising load failed:", e); }
 }
 

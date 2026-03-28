@@ -966,6 +966,33 @@ main {
 .chart-box.full-width { width: 100%; }
 .chart-box canvas { max-height: 380px; }
 
+/* ── ECharts Containers ──────────────────────────────────────────────── */
+.echart-container {
+  width: 100%;
+  height: 450px;
+}
+.echart-container-tall {
+  width: 100%;
+  height: 550px;
+}
+
+/* ── Multi-Chart Layout (ECharts multi-filer) ────────────────────────── */
+.multi-chart-row {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.multi-chart-unit {
+  width: 100%;
+}
+.multi-chart-title {
+  text-align: center;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin-bottom: 8px;
+}
+
 /* ── Overview Charts Layout ───────────────────────────────────────────── */
 .overview-charts {
   display: grid;
@@ -1004,14 +1031,11 @@ main {
 
 @media (max-width: 768px) {
   .overview-charts { grid-template-columns: 1fr; overflow: visible; }
-  .chart-area {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+  .echart-container {
+    height: 320px;
   }
-  .chart-area canvas {
-    /* No min-width — let Chart.js render at container width with proper aspect ratio */
-    width: 100% !important;
-    height: auto !important;
+  .echart-container-tall {
+    height: 400px;
   }
 }
 
@@ -1398,79 +1422,7 @@ footer a:hover { color: var(--color-accent); }
 }
 
 
-/* ════════════════════════════════════════════════════════════════════════════
-   DONUT TOOLTIP
-   ════════════════════════════════════════════════════════════════════════ */
-
-.donut-tooltip {
-  position: fixed;
-  z-index: 9999;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  padding: 14px 16px;
-  min-width: 200px;
-  max-width: 260px;
-  pointer-events: none;
-  font-size: 0.85rem;
-}
-.dt-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-.dt-swatch { flex-shrink: 0; width: 10px; height: 10px; border-radius: 2px; }
-.dt-type { font-weight: 600; color: var(--color-text); word-break: break-word; }
-.dt-amount { font-size: 1.05rem; font-weight: 700; color: var(--color-text); margin-bottom: 2px; }
-.dt-pct { color: var(--color-text-muted); margin-bottom: 8px; font-size: 0.82rem; }
-.dt-donors-label {
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: .05em;
-  color: var(--color-text-muted);
-  margin-bottom: 4px;
-}
-.dt-donor { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
-.dt-donor-name { color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-.dt-donor-amt  { flex-shrink: 0; color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
-
-
-/* ════════════════════════════════════════════════════════════════════════════
-   MULTI-FILER DONUTS
-   ════════════════════════════════════════════════════════════════════════ */
-
-.multi-donut-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 24px;
-  padding: 8px 0;
-}
-.donut-unit {
-  flex: 1 1 260px;
-  min-width: 220px;
-  max-width: 420px;
-}
-.donut-unit-title {
-  text-align: center;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  margin-bottom: 8px;
-}
-.multi-donut-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 16px;
-  padding: 10px 0 4px;
-}
-.mdl-item { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; }
-.mdl-swatch { flex-shrink: 0; width: 10px; height: 10px; border-radius: 2px; }
-.mdl-label { color: var(--color-text); }
-.multi-donut-row.stacked-layout {
-  flex-direction: column;
-}
-.multi-donut-row.stacked-layout .donut-unit {
-  flex: none;
-  max-width: none;
-  width: 100%;
-}
+/* (Donut tooltip and multi-donut styles removed — ECharts handles tooltips natively) */
 
 
 /* ════════════════════════════════════════════════════════════════════════════

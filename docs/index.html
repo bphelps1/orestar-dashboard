@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Oregon Campaign Finance</title>
   <link rel="stylesheet" href="style.css" />
-  <!-- Chart.js -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <!-- ECharts -->
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
   <!-- Fuse.js for client-side fuzzy search -->
   <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
 </head>
@@ -133,7 +133,7 @@
     <div class="overview-charts">
       <div class="chart-area" id="overview-donut-box">
         <h2 id="overview-donut-title">Contributions by Donor Type</h2>
-        <canvas id="chart-contributor-type"></canvas>
+        <div id="chart-contributor-type" class="echart-container"></div>
       </div>
 
       <!-- ── Party Fundraising ──────────────────────────────────────────── -->
@@ -141,7 +141,7 @@
         <div class="chart-header">
           <h2>Who Funds Oregon's Parties</h2>
         </div>
-        <canvas id="chart-party-fundraising"></canvas>
+        <div id="chart-party-fundraising" class="echart-container"></div>
       </div>
 
       <div class="chart-area chart-area-wide" id="overview-timeline-box">
@@ -151,7 +151,7 @@
             <select id="timeline-year" aria-label="Filter year"><option value="all">All years</option></select>
           </div>
         </div>
-        <canvas id="chart-timeline"></canvas>
+        <div id="chart-timeline" class="echart-container"></div>
       </div>
     </div>
 
@@ -174,7 +174,7 @@
 
       <div class="table-wrapper integrated-module" id="donors-summary-table">
         <div class="module-chart" id="donors-chart-box">
-          <canvas id="chart-top-donors"></canvas>
+          <div id="chart-top-donors" class="echart-container-tall"></div>
         </div>
         <div class="table-header">
           <h2>All Donors</h2>
@@ -231,7 +231,7 @@
     <div class="table-wrapper integrated-module">
       <div class="module-chart">
         <h2 id="recipients-chart-title">Where the Money Goes</h2>
-        <canvas id="chart-top-recipients"></canvas>
+        <div id="chart-top-recipients" class="echart-container-tall"></div>
       </div>
       <div class="table-header">
         <h2 id="recipients-table-title">All Recipients</h2>
@@ -299,7 +299,6 @@
   </p>
 </footer>
 
-<div id="donut-tooltip" class="donut-tooltip" hidden></div>
 <script src="app.js"></script>
 </body>
 </html>
