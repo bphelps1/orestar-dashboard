@@ -1224,12 +1224,35 @@ def aggregate_filers(
             orestar_year = orestar_info["year"]
             orestar_ending = orestar_info.get("ending_cash_balance", 0.0)
             cash_on_hand_source = "orestar"
-            # Our calculated ending for the ORESTAR anchor year
             our_anchor_ending = round(
                 beginning_balances.get(str(orestar_year), 0.0)
                 + yearly_nets.get(str(orestar_year), 0.0), 2
             )
             orestar_discrepancy = round(our_anchor_ending - orestar_ending, 2)
+
+        # Per-year discrepancy tracking: compare our rolling calculation
+        # against ORESTAR's yearly ending balances to pinpoint where
+        # discrepancies originate.
+        orestar_yearly = _name_to_yearly.get(name, {})
+        yearly_discrepancies: dict[str, dict] = {}
+        if orestar_yearly:
+            for yr_s in sorted_years:
+                yr_orestar = orestar_yearly.get(yr_s, {})
+                orestar_end = yr_orestar.get("ending_cash_balance")
+                if orestar_end is None:
+                    continue
+                our_begin = beginning_balances.get(yr_s, 0.0)
+                our_net = yearly_nets.get(yr_s, 0.0)
+                our_end = round(our_begin + our_net, 2)
+                disc = round(our_end - orestar_end, 2)
+                if abs(disc) > 0.01:
+                    yearly_discrepancies[yr_s] = {
+                        "our_begin": our_begin,
+                        "our_net": round(our_net, 2),
+                        "our_end": our_end,
+                        "orestar_end": round(orestar_end, 2),
+                        "discrepancy": disc,
+                    }
 
         # Accumulate global beginning balances (sum across all filers per year)
         for yr_s, bal in beginning_balances.items():
@@ -1359,6 +1382,7 @@ def aggregate_filers(
             "orestar_year": orestar_year,
             "orestar_account_summary": _acct_summary,
             "orestar_yearly": _name_to_yearly.get(name, {}),
+            "yearly_discrepancies": yearly_discrepancies,
             "beginning_balances": beginning_balances,
             "timeline": timeline,
             "top_donors": top_donors_list,

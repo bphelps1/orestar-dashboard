@@ -1001,6 +1001,40 @@ function renderAcctSummaryTiles(profile, year) {
       <div class="acct-tile-grid">${tiles}</div>
     </div>`;
   }).join("");
+
+  // Per-year discrepancy warnings
+  const disc = profile.yearly_discrepancies;
+  if (disc && Object.keys(disc).length > 0) {
+    const discYears = Object.keys(disc).sort();
+    let discHTML = `<div class="acct-group">
+      <div class="acct-group-title">Yearly Discrepancies (Calculated vs. ORESTAR)</div>
+      <div class="disc-table">
+        <div class="disc-table-header">
+          <span class="disc-col-year">Year</span>
+          <span class="disc-col-num">Our Begin</span>
+          <span class="disc-col-num">Our Net</span>
+          <span class="disc-col-num">Our End</span>
+          <span class="disc-col-num">ORESTAR End</span>
+          <span class="disc-col-num disc-col-diff">Difference</span>
+        </div>`;
+    // If a specific year is selected, show only that year; otherwise show all
+    const showYears = year ? discYears.filter(y => y === year) : discYears;
+    for (const yr of showYears) {
+      const d = disc[yr];
+      const severity = Math.abs(d.discrepancy) >= 10000 ? "disc-severe"
+        : Math.abs(d.discrepancy) >= 1000 ? "disc-warn" : "disc-minor";
+      discHTML += `<div class="disc-row ${severity}">
+        <span class="disc-col-year">${yr}</span>
+        <span class="disc-col-num">${fmt$(d.our_begin)}</span>
+        <span class="disc-col-num">${fmt$(d.our_net)}</span>
+        <span class="disc-col-num">${fmt$(d.our_end)}</span>
+        <span class="disc-col-num">${fmt$(d.orestar_end)}</span>
+        <span class="disc-col-num disc-col-diff">${d.discrepancy > 0 ? "+" : ""}${fmt$(d.discrepancy)}</span>
+      </div>`;
+    }
+    discHTML += `</div></div>`;
+    grid.innerHTML += discHTML;
+  }
 }
 
 // ── Global state ─────────────────────────────────────────────────────────────

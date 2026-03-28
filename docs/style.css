@@ -906,6 +906,36 @@ main {
 }
 .acct-tile-tip strong { font-weight: 600; }
 
+/* ── Yearly Discrepancy Table ──────────────────────────────────────────── */
+.disc-table {
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+.disc-table-header {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 2px;
+}
+.disc-row {
+  display: flex;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 3px;
+}
+.disc-row:hover { background: var(--color-surface-alt); }
+.disc-col-year { width: 50px; font-weight: 600; }
+.disc-col-num { flex: 1; text-align: right; }
+.disc-col-diff { font-weight: 700; }
+.disc-severe .disc-col-diff { color: #dc2626; }
+.disc-warn .disc-col-diff { color: #d97706; }
+.disc-minor .disc-col-diff { color: var(--color-text-muted); }
 
 /* ════════════════════════════════════════════════════════════════════════════
    CHARTS — Open, unboxed treatment
