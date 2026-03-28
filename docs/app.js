@@ -253,12 +253,12 @@ function makeStackedAreaChart(canvasId, byMonthData, byTypeRows) {
   }
 
   // 8. Render custom legend
-  renderStackedAreaLegend(chart, baseTypes, baseTotals, grandTotal);
+  renderStackedAreaLegend(chart, baseTypes, baseTotals, grandTotal, byTypeRows);
 
   return chart;
 }
 
-function renderStackedAreaLegend(chart, baseTypes, baseTotals, grandTotal) {
+function renderStackedAreaLegend(chart, baseTypes, baseTotals, grandTotal, byTypeRows) {
   const canvas = chart.canvas;
   const box = canvas.closest("#overview-donut-box");
   if (!box) return;
@@ -290,7 +290,42 @@ function renderStackedAreaLegend(chart, baseTypes, baseTotals, grandTotal) {
       updateStackedAreaLegendStyles(legendDiv, baseTypes);
     });
 
+    item.addEventListener("mouseenter", () => {
+      // Find top donors for this base type from byTypeRows
+      const typeRow = (byTypeRows || []).find(r => {
+        const b = r.type.endsWith(" (out of state)") ? r.type.slice(0, -15) : r.type;
+        return b === base;
+      });
+      if (!typeRow || !typeRow.top_donors || !typeRow.top_donors.length) return;
+      const el = document.getElementById("donut-tooltip");
+      if (!el) return;
+      let html = `<div style="font-weight:600;margin-bottom:4px;font-size:0.82rem">Top ${base} Donors (All Time)</div>`;
+      typeRow.top_donors.slice(0, 5).forEach(d => {
+        html += `<div style="display:flex;justify-content:space-between;font-size:0.75rem;padding:1px 0">
+          <span>${esc(d.name)}</span><span style="font-weight:500;margin-left:12px">${fmt$(d.total)}</span>
+        </div>`;
+      });
+      el.innerHTML = html;
+      el.hidden = false;
+      const rect = item.getBoundingClientRect();
+      el.style.left = rect.left + "px";
+      el.style.top = (rect.bottom + 6) + "px";
+    });
+    item.addEventListener("mouseleave", () => {
+      const el = document.getElementById("donut-tooltip");
+      if (el) el.hidden = true;
+    });
+
     legendDiv.appendChild(item);
+  });
+
+  legendDiv.addEventListener("click", (e) => {
+    // If click was on the container background (not on an item)
+    if (e.target === legendDiv) {
+      selectedDonorTypeGroup = null;
+      updateStackedAreaStyles(chart, baseTypes);
+      updateStackedAreaLegendStyles(legendDiv, baseTypes);
+    }
   });
 
   box.appendChild(legendDiv);
@@ -327,9 +362,9 @@ function updateStackedAreaStyles(chart, baseTypes) {
       ds.borderColor = color;
       ds.borderWidth = 2;
     } else {
-      ds.backgroundColor = hexToRgba(color, 0.05);
-      ds.borderColor = hexToRgba(color, 0.05);
-      ds.borderWidth = 0;
+      ds.backgroundColor = "rgba(255, 255, 255, 0.92)";
+      ds.borderColor = hexToRgba(color, 0.12);
+      ds.borderWidth = 0.5;
     }
   });
   chart.update("none");
@@ -2587,15 +2622,22 @@ async function loadPartyFundraising() {
     if (!box) return;
     box.hidden = false;
 
-    const years = Object.keys(data.by_year).filter(y => y >= "2006").sort();
-    const demTotals = years.map(y => {
-      const types = data.by_year[y]?.Democrat || [];
-      return types.reduce((s, t) => s + t.total, 0);
-    });
-    const repTotals = years.map(y => {
-      const types = data.by_year[y]?.Republican || [];
-      return types.reduce((s, t) => s + t.total, 0);
-    });
+    // Aggregate all years by donor type
+    const demByType = {};
+    const repByType = {};
+    const years = Object.keys(data.by_year).filter(y => y >= "2006");
+    for (const y of years) {
+      for (const t of (data.by_year[y]?.Democrat || [])) {
+        demByType[t.type] = (demByType[t.type] || 0) + t.total;
+      }
+      for (const t of (data.by_year[y]?.Republican || [])) {
+        repByType[t.type] = (repByType[t.type] || 0) + t.total;
+      }
+    }
+
+    // Get all unique types, sorted by combined total
+    const allTypes = [...new Set([...Object.keys(demByType), ...Object.keys(repByType)])];
+    allTypes.sort((a, b) => ((demByType[b] || 0) + (repByType[b] || 0)) - ((demByType[a] || 0) + (repByType[a] || 0)));
 
     const ctx = document.getElementById("chart-party-fundraising");
     if (!ctx) return;
@@ -2604,18 +2646,18 @@ async function loadPartyFundraising() {
     const chart = new Chart(ctx, {
       type: "bar",
       data: {
-        labels: years,
+        labels: allTypes,
         datasets: [
           {
             label: "Democrat",
-            data: demTotals,
+            data: allTypes.map(t => demByType[t] || 0),
             backgroundColor: "rgba(37, 99, 235, 0.7)",
             borderColor: "#2563eb",
             borderWidth: 1,
           },
           {
             label: "Republican",
-            data: repTotals,
+            data: allTypes.map(t => repByType[t] || 0),
             backgroundColor: "rgba(220, 38, 38, 0.7)",
             borderColor: "#dc2626",
             borderWidth: 1,
@@ -2633,7 +2675,10 @@ async function loadPartyFundraising() {
           },
         },
         scales: {
-          x: { grid: { display: false } },
+          x: {
+            grid: { display: false },
+            ticks: { maxRotation: 45, font: { size: 11 } },
+          },
           y: { ticks: { callback: v => fmt$(v) }, grid: { color: "#e2e8f0" } },
         },
       },
@@ -2644,32 +2689,37 @@ async function loadPartyFundraising() {
 
 // ── Races to Watch ──────────────────────────────────────────────────────
 function renderRacesToWatch() {
-  if (!activitySnapshot || !activitySnapshot.races) return;
+  if (!activitySnapshot || !activitySnapshot.races || !activitySnapshot.races.length) return;
   const races = activitySnapshot.races;
-  if (!races.length) return;
-
   const el = document.getElementById("races-to-watch");
   const list = document.getElementById("races-list");
   if (!el || !list) return;
   el.hidden = false;
 
   let html = "";
-  for (const race of races.slice(0, 15)) {
+  for (const race of races) {
     html += `<div class="race-card">
       <div class="race-card-header">
         <span class="race-office">${esc(race.office)}</span>
-        <span class="race-total">${fmt$(race.total_raised)} total</span>
+        <span class="race-total">${fmt$(race.total_raised)}</span>
       </div>
-      <div class="race-candidates">`;
+      <div class="race-table">
+        <div class="race-table-header">
+          <span class="race-col-name">Candidate</span>
+          <span class="race-col-raised">Raised</span>
+          <span class="race-col-coh">Cash on Hand</span>
+        </div>`;
     for (const c of race.candidates) {
       const partyClass = c.party === "Democrat" ? "party-d" : c.party === "Republican" ? "party-r" : "party-other";
-      const partyBadge = c.party ? `<span class="pulse-entry-party ${partyClass}">${c.party.charAt(0)}</span>` : "";
-      html += `<div class="race-candidate" ${c.slug ? `onclick="selectFilerBySlug('${c.slug}')" style="cursor:pointer"` : ""}>
-        ${partyBadge}
-        <span class="race-candidate-name">${esc(c.candidate_name || c.name)}</span>
-        <span class="race-candidate-raised">${fmt$(c.raised_cycle)}</span>
-        <span class="race-candidate-coh">${fmt$(c.cash_on_hand)} COH</span>
-      </div>`;
+      const badge = c.party ? `<span class="pulse-entry-party ${partyClass}">${c.party.charAt(0)}</span>` : "";
+      html += `<div class="race-row" ${c.slug ? `onclick="selectFilerBySlug('${c.slug}')" style="cursor:pointer"` : ""}>
+          <span class="race-col-name">${badge} ${esc(c.candidate_name || c.name)}</span>
+          <span class="race-col-raised">${fmt$(c.raised_cycle)}</span>
+          <span class="race-col-coh">${fmt$(c.cash_on_hand)}</span>
+        </div>`;
+    }
+    if (race.more_candidates > 0) {
+      html += `<div class="race-show-more" data-office="${esc(race.office)}">Show ${race.more_candidates} more</div>`;
     }
     html += `</div></div>`;
   }
@@ -2712,6 +2762,15 @@ function renderPulsePeriod(periodKey) {
   renderPulseRaising(period);
   renderPulseMomentum(period);
   renderPulseDonors(period);
+
+  // Wire up click-to-expand on pulse entry names
+  document.querySelectorAll(".pulse-entry-name").forEach(el => {
+    el.style.cursor = "pointer";
+    el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      el.classList.toggle("expanded");
+    });
+  });
 }
 
 function pulseEntryHTML(entry, valueHTML, extra = "") {

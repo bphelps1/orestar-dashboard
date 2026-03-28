@@ -1437,7 +1437,21 @@ def aggregate_filers(
 
     for row in index_rows:
         _party = row.get("party", "")
-        if _party not in ("Democrat", "Republican"):
+        _pac_type = row.get("pac_type", "")
+
+        # Include candidate committees with party
+        if _party in ("Democrat", "Republican"):
+            pass  # use _party as-is
+        # Include caucus PACs - infer party from nature field
+        elif _pac_type == "Caucus":
+            _nature = (row.get("nature", "") or "").lower()
+            if "democrat" in _nature:
+                _party = "Democrat"
+            elif "republican" in _nature:
+                _party = "Republican"
+            else:
+                continue  # Can't determine party
+        else:
             continue
         _slug = row["slug"]
         _detail_path = filers_dir / f"{_slug}.json"

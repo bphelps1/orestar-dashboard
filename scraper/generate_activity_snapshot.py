@@ -113,10 +113,8 @@ def aggregate_top_donors_from_filers(
 
 def build_races(filer_metrics: list[dict], index: list[dict]) -> list[dict]:
     """Group candidates by office_district to find contested races."""
-    # Build lookup from filer_metrics
     metric_by_slug = {fm["slug"]: fm for fm in filer_metrics}
 
-    # Group candidates by office_district
     races = defaultdict(list)
     for row in index:
         if row.get("committee_type") != "Candidate Committee":
@@ -126,30 +124,39 @@ def build_races(filer_metrics: list[dict], index: list[dict]) -> list[dict]:
             continue
         slug = row.get("slug", "")
         fm = metric_by_slug.get(slug, {})
+        raised = fm.get("raised_cycle", 0)
+        if raised <= 0:
+            continue  # Skip candidates with no current-cycle fundraising
         races[od].append({
             "slug": slug,
             "name": row.get("name", ""),
             "party": row.get("party", ""),
             "candidate_name": row.get("candidate_name", ""),
-            "raised_cycle": fm.get("raised_cycle", 0),
+            "raised_cycle": round(raised, 2),
             "cash_on_hand": row.get("cash_on_hand", 0),
         })
 
-    # Filter to contested races (2+ candidates) and sort by total fundraising
     contested = []
     for office, candidates in races.items():
         if len(candidates) < 2:
             continue
-        total = sum(c["raised_cycle"] for c in candidates)
         candidates.sort(key=lambda c: -c["raised_cycle"])
+        total = sum(c["raised_cycle"] for c in candidates)
+        # Determine if statewide
+        base_office = office.split(",")[0].strip()
+        is_statewide = base_office in STATEWIDE_OFFICES
         contested.append({
             "office": office,
             "total_raised": round(total, 2),
-            "candidates": candidates,
+            "is_statewide": is_statewide,
+            "candidates": candidates[:5],
+            "more_candidates": max(0, len(candidates) - 5),
         })
 
-    contested.sort(key=lambda r: -r["total_raised"])
-    return contested[:20]  # Top 20 most expensive races
+    # Sort: statewide first (by total raised), then non-statewide (by total raised)
+    statewide = sorted([r for r in contested if r["is_statewide"]], key=lambda r: -r["total_raised"])
+    other = sorted([r for r in contested if not r["is_statewide"]], key=lambda r: -r["total_raised"])[:5]
+    return statewide + other
 
 
 def generate(agg_dir: Path = AGG_DIR, filers_dir: Path = FILERS_DIR) -> dict:

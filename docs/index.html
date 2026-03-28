@@ -130,6 +130,14 @@
       <div class="acct-summary-grid" id="acct-summary-grid"></div>
     </details>
 
+    <!-- ── Party Fundraising ──────────────────────────────────────────── -->
+    <div class="chart-area" id="party-fundraising-box" hidden>
+      <div class="chart-header">
+        <h2>Who Funds Oregon's Parties</h2>
+      </div>
+      <canvas id="chart-party-fundraising"></canvas>
+    </div>
+
     <div class="overview-charts">
       <div class="chart-area" id="overview-donut-box">
         <h2 id="overview-donut-title">Contributions by Donor Type</h2>
@@ -145,14 +153,6 @@
         </div>
         <canvas id="chart-timeline"></canvas>
       </div>
-    </div>
-
-    <!-- ── Party Fundraising ──────────────────────────────────────────── -->
-    <div class="chart-area" id="party-fundraising-box" hidden>
-      <div class="chart-header">
-        <h2>Party Fundraising (Candidate Committees)</h2>
-      </div>
-      <canvas id="chart-party-fundraising"></canvas>
     </div>
 
     <p class="last-updated">Data through <span id="last-updated">—</span></p>
