@@ -1915,7 +1915,17 @@ function renderOverviewGlobal() {
   document.getElementById("filer-comparison-grid").hidden = true;
   renderAcctSummary(null);  // No per-filer account summary in global view
   fitStatCards();
-  loadCampaignPulse();
+
+  // Fundraising Pulse and Races to Watch are fixed-period snapshots —
+  // hide them when a custom date filter is active
+  const pulseEl = document.getElementById("campaign-pulse");
+  const racesEl = document.getElementById("races-to-watch");
+  if (hasDate) {
+    if (pulseEl) pulseEl.hidden = true;
+    if (racesEl) racesEl.hidden = true;
+  } else {
+    loadCampaignPulse();
+  }
   loadPartyFundraising();
 }
 
