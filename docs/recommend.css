@@ -413,6 +413,19 @@
   box-shadow: 0 0 0 3px rgba(43,108,176,0.15);
 }
 
+/* ── Sticky table headers ──────────────────────────────────────────────── */
+.table-wrapper {
+  max-height: 75vh;
+  overflow-y: auto;
+}
+.table-wrapper thead th {
+  position: sticky;
+  top: 0;
+  background: var(--color-surface);
+  z-index: 2;
+  box-shadow: inset 0 -1px 0 var(--color-border);
+}
+
 /* ── Responsive ─────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .results-header { flex-direction: column; gap: 8px; align-items: flex-start; }
