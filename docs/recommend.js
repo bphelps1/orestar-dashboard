@@ -541,10 +541,14 @@ function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years
     }
   }
 
-  // Build set of candidate filer names for exclusion
+  // Build set of candidate committee names for exclusion (not PACs or other types)
   const candidateFilerNames = new Set();
   if (filerIndex) {
-    for (const f of filerIndex) candidateFilerNames.add(f.name.toLowerCase());
+    for (const f of filerIndex) {
+      if (f.committee_type === "Candidate Committee") {
+        candidateFilerNames.add(f.name.toLowerCase());
+      }
+    }
   }
 
   const results = [];
@@ -553,7 +557,7 @@ function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years
     // Skip aggregated/non-individual entries
     if (isDonorExcluded(donor.name)) continue;
 
-    // Skip candidate filers (e.g. "Kate Lieber for State Senate (20136)")
+    // Skip candidate committees (e.g. "Kate Lieber for State Senate (20136)")
     const nameNoId = donor.name.replace(/\s*\(\d+\)\s*$/, "").toLowerCase();
     if (candidateFilerNames.has(key) || candidateFilerNames.has(nameNoId)) continue;
 
@@ -699,11 +703,13 @@ function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
     for (const d of donors) allTargetDonors.add(d.name.toLowerCase());
   }
 
-  // Build set of candidate filer names for exclusion (lowercased)
+  // Build set of candidate committee names for exclusion (not PACs or other types)
   const candidateFilerNames = new Set();
   if (filerIndex) {
     for (const f of filerIndex) {
-      candidateFilerNames.add(f.name.toLowerCase());
+      if (f.committee_type === "Candidate Committee") {
+        candidateFilerNames.add(f.name.toLowerCase());
+      }
     }
   }
 
@@ -714,7 +720,7 @@ function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
     // Skip aggregated/non-individual entries
     if (isDonorExcluded(donor.name)) continue;
 
-    // Skip candidate filers (e.g. "Kate Lieber for State Senate (20136)")
+    // Skip candidate committees (e.g. "Kate Lieber for State Senate (20136)")
     const nameNoId = donor.name.replace(/\s*\(\d+\)\s*$/, "").toLowerCase();
     if (candidateFilerNames.has(key) || candidateFilerNames.has(nameNoId)) continue;
 
@@ -914,11 +920,18 @@ function displayResults(recommendations, repeatTargets, targetProfile, comparabl
   document.getElementById("results-title").textContent =
     `Fundraising Plan for ${targetProfile.name} (${cycle - 1}–${cycle} Cycle)`;
 
+  // Compute cycle contributions from timeline
+  const { start, end } = cycleDateRange(cycle);
+  const cycleContributions = (targetProfile.timeline || [])
+    .filter(t => t.month >= start && t.month <= end)
+    .reduce((s, t) => s + (t.contributions || 0), 0);
+
   // Summary cards
   const repeatRemaining = repeatTargets.reduce((s, r) => s + r.remaining, 0);
   const newRemaining = recommendations.reduce((s, r) => s + r.remaining_ask, 0);
   const summaryEl = document.getElementById("results-summary");
   summaryEl.innerHTML = `
+    <div class="summary-card"><span class="sc-label">Cycle Contributions</span><br><span class="sc-value">${fmt$(cycleContributions)}</span></div>
     <div class="summary-card"><span class="sc-label">Donor Targets</span><br><span class="sc-value">${fmtNum(repeatTargets.length)}</span></div>
     <div class="summary-card"><span class="sc-label">Donor Target Total</span><br><span class="sc-value">${fmt$(repeatRemaining)}</span></div>
     <div class="summary-card"><span class="sc-label">New Prospects</span><br><span class="sc-value">${fmtNum(recommendations.length)}</span></div>
