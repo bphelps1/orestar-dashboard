@@ -487,10 +487,10 @@ function _getAllYearGifts(donorName, compProfiles, comparables) {
   return years;
 }
 
-// ── Step 4a: Repeat Donor Targets ─────────────────────────────────────────
-// For donors who gave to THIS candidate across multiple election cycles,
-// compute a fundraising target: ~5% increase from their last-cycle giving,
-// adjusted upward if they gave more to comparable candidates.
+// ── Step 4a: Donor Targets ────────────────────────────────────────────────
+// For ANY donor who has ever given to THIS candidate, compute a fundraising
+// target: ~5% increase from their last giving, adjusted upward if they gave
+// more to comparable candidates.
 function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years, cycle) {
   const byYear = targetProfile.top_donors_by_year || {};
   const allYears = Object.keys(byYear).map(Number).sort((a, b) => a - b);
@@ -515,10 +515,12 @@ function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years
     }
   }
 
-  // Get comparable giving for upside adjustment
-  const compDonorTotals = new Map(); // lowered name → max cycle amount to any comparable
+  // Get comparable giving for upside adjustment — track per-filer details
+  // compDonorDetails: lowered name → [{ filer, maxCycleAmt }]
+  const compDonorDetails = new Map();
   for (let i = 0; i < compProfiles.length; i++) {
     const profile = compProfiles[i];
+    const comp = comparables[i];
     const compByYear = profile.top_donors_by_year || {};
     const compDonorCycles = new Map(); // donor → {cycle: amount}
     for (const [yrStr, donors] of Object.entries(compByYear)) {
@@ -531,10 +533,11 @@ function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years
         cyMap[cy] = (cyMap[cy] || 0) + d.total;
       }
     }
-    // Track max cycle amount per donor across all comparables
+    // Store per-filer max cycle amount for each donor
     for (const [key, cyMap] of compDonorCycles) {
       const maxCy = Math.max(...Object.values(cyMap));
-      compDonorTotals.set(key, Math.max(compDonorTotals.get(key) || 0, maxCy));
+      if (!compDonorDetails.has(key)) compDonorDetails.set(key, []);
+      compDonorDetails.get(key).push({ filer: comp.name, amount: maxCy });
     }
   }
 
@@ -546,26 +549,29 @@ function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years
 
     const cycleNums = Object.keys(donor.cycles).map(Number).sort((a, b) => a - b);
 
-    // Must have given in at least 2 distinct cycles
-    if (cycleNums.length < 2) continue;
-
-    // Must have given more than once total (not just 1 gift in each of 2 cycles)
-    if (donor.totalGifts < 2) continue;
-
     const currentCycleAmt = donor.cycles[cycle] || 0;
     const prevCycles = cycleNums.filter(c => c < cycle);
-    if (!prevCycles.length) continue;
 
-    const lastCycle = prevCycles[prevCycles.length - 1];
-    const lastCycleAmt = donor.cycles[lastCycle];
+    // Determine last giving amount for target calculation
+    let lastCycle, lastCycleAmt;
+    if (prevCycles.length) {
+      lastCycle = prevCycles[prevCycles.length - 1];
+      lastCycleAmt = donor.cycles[lastCycle];
+    } else {
+      // Only gave in current cycle — use current giving as base
+      lastCycle = cycle;
+      lastCycleAmt = currentCycleAmt;
+    }
 
-    // Base target: 5% increase from last cycle
+    // Base target: 5% increase from last cycle (or current if no prior)
     let target = Math.round(lastCycleAmt * 1.05 * 100) / 100;
 
     // Comparable upside adjustment: if they gave MORE to a comparable,
     // weight toward that amount (but never reduce below the 5% increase)
-    const compMax = compDonorTotals.get(key) || 0;
-    if (compMax > target) {
+    const compGifts = compDonorDetails.get(key) || [];
+    const compMax = compGifts.length ? Math.max(...compGifts.map(g => g.amount)) : 0;
+    const hasUplift = compMax > target;
+    if (hasUplift) {
       // Blend: 70% base target, 30% comparable max (upside only)
       target = Math.round((target * 0.7 + compMax * 0.3) * 100) / 100;
     }
@@ -580,20 +586,40 @@ function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years
 
     // Build cycle history summary
     const historyParts = prevCycles.map(c => `${c - 1}–${c}: ${fmt$(donor.cycles[c])}`);
-    const avgPrev = prevCycles.reduce((s, c) => s + donor.cycles[c], 0) / prevCycles.length;
+    const avgPrev = prevCycles.length
+      ? prevCycles.reduce((s, c) => s + donor.cycles[c], 0) / prevCycles.length
+      : currentCycleAmt;
 
     const factors = [];
-    factors.push(`${prevCycles.length} previous cycle${prevCycles.length > 1 ? "s" : ""}: ${historyParts.join(", ")}`);
-    factors.push(`Last cycle (${lastCycle - 1}–${lastCycle}): ${fmt$(lastCycleAmt)} → target: ${fmt$(target)} (+5%${compMax > lastCycleAmt * 1.05 ? " + comparable uplift" : ""})`);
-    if (compMax > 0) {
-      factors.push(`Highest cycle gift to comparable: ${fmt$(compMax)}`);
+    if (prevCycles.length) {
+      factors.push(`${prevCycles.length} previous cycle${prevCycles.length > 1 ? "s" : ""}: ${historyParts.join(", ")}`);
+      factors.push(`Last cycle (${lastCycle - 1}–${lastCycle}): ${fmt$(lastCycleAmt)} → target: ${fmt$(target)} (+5%${hasUplift ? " + comparable uplift" : ""})`);
+    } else {
+      factors.push(`Current cycle donor: ${fmt$(currentCycleAmt)} given so far`);
+      factors.push(`Base target: ${fmt$(target)} (+5%${hasUplift ? " + comparable uplift" : ""})`);
     }
-    if (currentCycleAmt > 0) {
+
+    // Show comparable uplift details
+    if (hasUplift) {
+      const upliftGifts = compGifts
+        .filter(g => g.amount > lastCycleAmt * 1.05)
+        .sort((a, b) => b.amount - a.amount);
+      factors.push(`Comparable uplift from:`);
+      upliftGifts.forEach(g => {
+        factors.push(`  • ${g.filer}: ${fmt$(g.amount)}`);
+      });
+    } else if (compGifts.length > 0) {
+      // Show top comparable gifts even without uplift for context
+      const topGifts = [...compGifts].sort((a, b) => b.amount - a.amount).slice(0, 3);
+      factors.push(`Top comparable gifts: ${topGifts.map(g => `${g.filer} (${fmt$(g.amount)})`).join(", ")}`);
+    }
+
+    if (currentCycleAmt > 0 && prevCycles.length > 0) {
       factors.push(`Already given this cycle: ${fmt$(currentCycleAmt)}`);
     }
 
     // Confidence based on consistency
-    const consistency = prevCycles.length >= 3 ? "high" : prevCycles.length === 2 ? "medium" : "low";
+    const consistency = prevCycles.length >= 3 ? "high" : prevCycles.length >= 1 ? "medium" : "low";
 
     results.push({
       donor: donor.name,
@@ -663,12 +689,21 @@ function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
   const targetDonors = mergeDonorsByYear(targetProfile.top_donors_by_year || {}, years);
   const targetDonorMap = new Map(targetDonors.map(d => [d.name.toLowerCase(), d.total]));
 
+  // Build set of ALL donors who have ever given to this filer (any year)
+  const allTargetDonors = new Set();
+  for (const donors of Object.values(targetProfile.top_donors_by_year || {})) {
+    for (const d of donors) allTargetDonors.add(d.name.toLowerCase());
+  }
+
   // Score each donor
   const results = [];
 
   for (const [key, donor] of donorMap) {
     // Skip aggregated/non-individual entries
     if (isDonorExcluded(donor.name)) continue;
+
+    // Skip donors who have ever given to this filer — they belong in Donor Targets
+    if (allTargetDonors.has(key)) continue;
 
     const alreadyGiven = targetDonorMap.get(key) || 0;
 
@@ -992,7 +1027,13 @@ function toggleRepeatDetail(idx, btn) {
   detailRow.innerHTML = `<td colspan="9"><div class="detail-content">
     <h4>Target Calculation</h4>
     <ul style="margin:0 0 0 16px;font-size:0.83rem;color:#4a5568">
-      ${r.factors.map(f => `<li>${esc(f)}</li>`).join("")}
+      ${r.factors.map(f => {
+        const text = esc(f);
+        if (text.startsWith("  •")) {
+          return `<li style="margin-left:16px;list-style:none">${text.trim()}</li>`;
+        }
+        return `<li>${text}</li>`;
+      }).join("")}
     </ul>
   </div></td>`;
 
