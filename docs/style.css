@@ -1009,9 +1009,9 @@ main {
     -webkit-overflow-scrolling: touch;
   }
   .chart-area canvas {
-    min-width: 500px;
-    width: 500px !important;
-    height: 350px !important;
+    /* No min-width — let Chart.js render at container width with proper aspect ratio */
+    width: 100% !important;
+    height: auto !important;
   }
 }
 

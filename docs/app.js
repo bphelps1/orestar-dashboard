@@ -198,8 +198,8 @@ function makeStackedAreaChart(canvasId, byMonthData, byTypeRows) {
     data: { labels, datasets },
     options: {
       responsive: true,
-      maintainAspectRatio: !IS_MOBILE,
-      aspectRatio: IS_MOBILE ? undefined : 2,
+      maintainAspectRatio: true,
+      aspectRatio: IS_MOBILE ? 1 : 2,
       interaction: { mode: "index", intersect: false },
       onClick: (evt) => {
         const elements = chart.getElementsAtEventForMode(evt, "nearest", { intersect: true }, false);
@@ -221,12 +221,12 @@ function makeStackedAreaChart(canvasId, byMonthData, byTypeRows) {
       },
       scales: {
         x: {
-          ticks: { maxRotation: 45, font: { size: IS_MOBILE ? 8 : 11 }, autoSkip: true, maxTicksLimit: IS_MOBILE ? 10 : 18 },
+          ticks: { maxRotation: 45, font: { size: IS_MOBILE ? 10 : 11 }, autoSkip: true, maxTicksLimit: IS_MOBILE ? 10 : 18 },
           grid: { color: "#e2e8f0" },
         },
         y: {
           stacked: true,
-          ticks: { callback: v => fmt$(v), font: { size: IS_MOBILE ? 8 : undefined } },
+          ticks: { callback: v => IS_MOBILE ? fmtCompact$(v) : fmt$(v), font: { size: IS_MOBILE ? 10 : undefined } },
           grid: { color: "#e2e8f0" },
         },
       },
@@ -1089,6 +1089,17 @@ function fmt$(n) {
   return "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
+/** Compact dollar format for chart axis ticks: $1.2B, $50M, $500K, $50 */
+function fmtCompact$(n) {
+  if (n === null || n === undefined || isNaN(n)) return "";
+  const abs = Math.abs(n);
+  const sign = n < 0 ? "-" : "";
+  if (abs >= 1e9) return sign + "$" + (abs / 1e9).toFixed(1).replace(/\.0$/, "") + "B";
+  if (abs >= 1e6) return sign + "$" + (abs / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
+  if (abs >= 1e3) return sign + "$" + (abs / 1e3).toFixed(0) + "K";
+  return sign + "$" + abs.toFixed(0);
+}
+
 function fmtNum(n) {
   return Number(n).toLocaleString("en-US");
 }
@@ -1185,7 +1196,7 @@ function makeBarChart(canvasId, labels, values, label, color = "#3182ce") {
       },
       scales: {
         x: {
-          ticks: { callback: v => fmt$(v) },
+          ticks: { callback: v => IS_MOBILE ? fmtCompact$(v) : fmt$(v) },
           grid: { color: "#e2e8f0" },
         },
         y: {
@@ -1250,7 +1261,8 @@ function makeLineChart(canvasId, labels, datasets) {
     data: { labels, datasets },
     options: {
       responsive: true,
-      maintainAspectRatio: !IS_MOBILE,
+      maintainAspectRatio: true,
+      aspectRatio: IS_MOBILE ? 1 : 2,
       interaction: { mode: "index", intersect: false },
       plugins: {
         tooltip: {
@@ -1258,8 +1270,8 @@ function makeLineChart(canvasId, labels, datasets) {
         },
       },
       scales: {
-        x: { ticks: { maxRotation: 45, font: { size: IS_MOBILE ? 8 : 11 }, autoSkip: true, maxTicksLimit: IS_MOBILE ? 10 : undefined }, grid: { color: "#e2e8f0" } },
-        y: { ticks: { callback: v => fmt$(v), font: { size: IS_MOBILE ? 8 : undefined } }, grid: { color: "#e2e8f0" } },
+        x: { ticks: { maxRotation: 45, font: { size: IS_MOBILE ? 10 : 11 }, autoSkip: true, maxTicksLimit: IS_MOBILE ? 10 : undefined }, grid: { color: "#e2e8f0" } },
+        y: { ticks: { callback: v => IS_MOBILE ? fmtCompact$(v) : fmt$(v), font: { size: IS_MOBILE ? 10 : undefined } }, grid: { color: "#e2e8f0" } },
       },
     },
   });
@@ -2716,7 +2728,8 @@ async function loadPartyFundraising() {
       },
       options: {
         responsive: true,
-        maintainAspectRatio: !IS_MOBILE,
+        maintainAspectRatio: true,
+        aspectRatio: IS_MOBILE ? 1 : 2,
         plugins: {
           legend: { position: "top", labels: { font: { size: IS_MOBILE ? 9 : undefined } } },
           tooltip: {
@@ -2728,9 +2741,9 @@ async function loadPartyFundraising() {
         scales: {
           x: {
             grid: { display: false },
-            ticks: { maxRotation: 60, font: { size: IS_MOBILE ? 8 : 10 } },
+            ticks: { maxRotation: 60, font: { size: IS_MOBILE ? 10 : 10 } },
           },
-          y: { ticks: { callback: v => fmt$(v), font: { size: IS_MOBILE ? 8 : undefined } }, grid: { color: "#e2e8f0" } },
+          y: { ticks: { callback: v => IS_MOBILE ? fmtCompact$(v) : fmt$(v), font: { size: IS_MOBILE ? 10 : undefined } }, grid: { color: "#e2e8f0" } },
         },
       },
     });
