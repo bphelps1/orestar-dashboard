@@ -201,6 +201,8 @@ function makeStackedAreaChart(containerId, byMonthData, byTypeRows) {
   const option = {
     tooltip: {
       trigger: 'axis',
+      triggerOn: IS_MOBILE ? 'click' : 'mousemove',
+      alwaysShowContent: false,
       axisPointer: { type: 'cross' },
       formatter: function(params) {
         if (!params || !params.length) return '';
@@ -270,7 +272,7 @@ function makeStackedAreaChart(containerId, byMonthData, byTypeRows) {
   };
   chart.setOption(option);
 
-  // 7. Click handler — same behavior as legend click: toggle selection
+  // 7. Click handler — toggle selection, then re-show tooltip with updated donors
   chart.on('click', function(params) {
     if (params.componentType === 'series') {
       const clicked = params.seriesName;
@@ -289,12 +291,17 @@ function makeStackedAreaChart(containerId, byMonthData, byTypeRows) {
       }));
       chart.setOption({ series: newSeries });
       updateStackedAreaLegendStyles(el.parentElement || el.closest('#overview-donut-box'), baseTypes);
+      // Re-show tooltip so formatter picks up new selectedDonorTypeGroup
+      setTimeout(() => {
+        chart.dispatchAction({ type: 'showTip', seriesIndex: params.seriesIndex, dataIndex: params.dataIndex });
+      }, 60);
     }
   });
 
-  // 8. Dismiss tooltip when tapping outside chart
+  // 8. Dismiss tooltip when tapping outside chart + legend area
+  const chartBox = el.closest("#overview-donut-box") || el.parentElement;
   document.addEventListener("click", function(e) {
-    if (!el.contains(e.target)) {
+    if (chartBox && !chartBox.contains(e.target)) {
       chart.dispatchAction({ type: "hideTip" });
     }
   });
