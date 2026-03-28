@@ -1168,7 +1168,12 @@ def aggregate_filers(
         #   "Account Payable" — outstanding payable; cash outflow is later
         # Other Receipts: all sub-types EXCEPT:
         #   "Account Payable Rescinded" — reverses a payable; no cash effect
-        _COH_EXCLUDE_C  = set()  # In-kind already separated into filer_inkind
+        # In-kind contributions don't involve cash changing hands — exclude from COH
+        _COH_EXCLUDE_C  = {
+            "In-Kind Contribution",
+            "In-Kind/Forgiven Personal Expenditures",
+            "In-Kind/Forgiven Account Payable",
+        }
         _COH_EXCLUDE_E  = {"Personal Expenditure for Reimbursement", "Account Payable"}
         _COH_EXCLUDE_OR = {"Account Payable Rescinded"}
         _c_for_coh      = filer_contrib[~filer_contrib["sub_type"].isin(_COH_EXCLUDE_C)] if not filer_contrib.empty else filer_contrib
