@@ -268,12 +268,20 @@ def main():
         filer_ids = get_all_filer_ids()
 
     # Filter out already-cached (unless --force)
-    # Treat "Not Found" entries as uncached — the scraper fix may now find them
+    # Re-scrape entries that are: Not Found, empty type, or candidate
+    # committees missing the 'election' field (added after initial scrape)
     if not args.force:
-        filer_ids = [
-            fid for fid in filer_ids
-            if fid not in cache or cache[fid].get("committee_type") in ("Not Found", "")
-        ]
+        def _needs_scrape(fid):
+            if fid not in cache:
+                return True
+            entry = cache[fid]
+            if entry.get("committee_type") in ("Not Found", ""):
+                return True
+            # Candidate committees need the election field
+            if entry.get("committee_type") == "Candidate Committee" and not entry.get("election"):
+                return True
+            return False
+        filer_ids = [fid for fid in filer_ids if _needs_scrape(fid)]
 
     all_remaining = len(filer_ids)
     log.info("Filers to scrape: %d (of which %d already cached)", all_remaining, len(cache))
