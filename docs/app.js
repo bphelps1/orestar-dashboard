@@ -1802,9 +1802,9 @@ function initFilerSelector() {
     state.selectedFilers = [];
     state.dateStart = "";
     state.dateEnd   = "";
-    // Restore default range display (populated once summaryData is available)
-    dateStartEl.value = (summaryData && summaryData.date_range_start) || "";
-    dateEndEl.value   = (summaryData && summaryData.date_range_end)   || "";
+    // Restore default range display
+    dateStartEl.value = "2006-01-01";
+    dateEndEl.value   = (summaryData && summaryData.date_range_end) || "";
     renderChips();
     updateClearBtn();
     onStateChange();
