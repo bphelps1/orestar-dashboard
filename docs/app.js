@@ -218,6 +218,7 @@ function makeStackedAreaChart(containerId, byMonthData, byTypeRows) {
       alwaysShowContent: false,
       confine: true,
       axisPointer: { type: 'cross' },
+      extraCssText: IS_MOBILE ? 'max-width:260px;max-height:280px;overflow-y:auto;font-size:11px;' : '',
       formatter: function(params) {
         if (!params || !params.length) return '';
         const idx = params[0].dataIndex;
@@ -225,35 +226,40 @@ function makeStackedAreaChart(containerId, byMonthData, byTypeRows) {
         const data = monthlyBaseData[month] || {};
         const total = params.reduce((s, p) => s + (p.value || 0), 0);
         const [y, mo] = month.split("-");
-        const monthLabel = new Date(+y, +mo - 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+        const monthLabel = new Date(+y, +mo - 1).toLocaleDateString("en-US", { month: "short", year: "numeric" });
 
-        // Sort by value descending
         const sorted = [...params].sort((a, b) => (b.value || 0) - (a.value || 0));
-        let html = `<div style="font-weight:600;margin-bottom:4px">${monthLabel}</div>`;
-        sorted.forEach(p => {
-          if (!p.value) return;
+        // On mobile, show only types with values (skip zeros)
+        const shown = sorted.filter(p => p.value > 0);
+        const fs = IS_MOBILE ? '11px' : '13px';
+        let html = `<div style="font-weight:600;margin-bottom:3px;font-size:${fs}">${monthLabel}</div>`;
+        shown.forEach(p => {
           const pct = total > 0 ? (p.value / total * 100).toFixed(1) : "0.0";
           const isSelected = selectedDonorTypeGroup === p.seriesName;
-          const bg = isSelected ? 'background:rgba(0,0,0,0.05);border-radius:3px;' : '';
-          html += `<div style="display:flex;align-items:center;gap:6px;padding:2px 4px;${bg}">
-            ${p.marker}<span style="flex:1">${p.seriesName}</span>
+          const bg = isSelected ? 'background:rgba(0,0,0,0.06);border-radius:3px;' : '';
+          const name = IS_MOBILE ? shortTypeName(p.seriesName) : p.seriesName;
+          html += `<div style="display:flex;align-items:center;gap:4px;padding:1px 3px;font-size:${fs};${bg}">
+            ${p.marker}<span style="flex:1">${name}</span>
             <span style="font-weight:500">${fmtCompact$(p.value)}</span>
-            <span style="color:#999">${pct}%</span>
+            <span style="color:#999;font-size:10px">${pct}%</span>
           </div>`;
         });
-        html += `<div style="border-top:1px solid #eee;margin-top:4px;padding-top:4px;font-weight:600;text-align:right">${fmtCompact$(total)}</div>`;
+        html += `<div style="border-top:1px solid #eee;margin-top:3px;padding-top:3px;font-weight:600;text-align:right;font-size:${fs}">${fmtCompact$(total)}</div>`;
 
         // Top donors for selected type
+        const maxDonors = IS_MOBILE ? 3 : 5;
         if (selectedDonorTypeGroup && data[selectedDonorTypeGroup]?.top_donors?.length) {
-          const donors = data[selectedDonorTypeGroup].top_donors.slice(0, 5);
-          html += `<div style="margin-top:4px;font-weight:600;font-size:11px">Top ${selectedDonorTypeGroup} Donors</div>`;
+          const donors = data[selectedDonorTypeGroup].top_donors.slice(0, maxDonors);
+          const label = IS_MOBILE ? shortTypeName(selectedDonorTypeGroup) : selectedDonorTypeGroup;
+          html += `<div style="margin-top:3px;font-weight:600;font-size:10px">Top ${label} Donors</div>`;
           donors.forEach(d => {
-            html += `<div style="display:flex;justify-content:space-between;font-size:11px;padding:1px 0">
-              <span>${d.name}</span><span style="font-weight:500;margin-left:8px">${fmtCompact$(d.total)}</span>
+            html += `<div style="display:flex;justify-content:space-between;font-size:10px;padding:1px 0">
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px">${d.name}</span>
+              <span style="font-weight:500;margin-left:6px;white-space:nowrap">${fmtCompact$(d.total)}</span>
             </div>`;
           });
         } else if (!selectedDonorTypeGroup) {
-          html += `<div style="margin-top:4px;font-size:10px;color:#999;font-style:italic">Click a colored area to see top donors</div>`;
+          html += `<div style="margin-top:3px;font-size:10px;color:#999;font-style:italic">Tap a colored area for top donors</div>`;
         }
         return html;
       },
