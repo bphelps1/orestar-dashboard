@@ -158,6 +158,7 @@ def _parse_detail_text(text: str, filer_id: str) -> dict | None:
     """
     result = {
         "committee_type": "",
+        "election": "",
         "office": "",
         "party": "",
         "pac_type": "",
@@ -190,7 +191,8 @@ def _parse_detail_text(text: str, filer_id: str) -> dict | None:
         # The first line is election, second line is office/district
         lines = [l.strip() for l in office_block.split("\n") if l.strip()]
         if len(lines) >= 2:
-            result["office"] = lines[1]  # "State Representative, 25th District"
+            result["election"] = lines[0]  # "2026 Primary Election"
+            result["office"] = lines[1]    # "State Representative, 25th District"
         elif lines:
             result["office"] = lines[0]
 

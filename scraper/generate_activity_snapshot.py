@@ -112,8 +112,18 @@ def aggregate_top_donors_from_filers(
 
 
 def build_races(filer_metrics: list[dict], index: list[dict]) -> list[dict]:
-    """Group candidates by office_district to find contested races."""
+    """Group candidates by office_district to find contested races.
+
+    Uses the 'election' field from ORESTAR metadata (scraped from the
+    Statement of Organization 'Election/Office' field) to filter to
+    current-cycle candidates. Falls back to raised_cycle > 0 when the
+    election field hasn't been scraped yet.
+    """
     metric_by_slug = {fm["slug"]: fm for fm in filer_metrics}
+
+    # Determine current election year for filtering
+    now = datetime.now()
+    current_cycle_year = now.year if now.year % 2 == 0 else now.year + 1
 
     races = defaultdict(list)
     for row in index:
@@ -122,6 +132,19 @@ def build_races(filer_metrics: list[dict], index: list[dict]) -> list[dict]:
         od = row.get("office_district", "")
         if not od:
             continue
+
+        # Filter to current cycle using ORESTAR election field when available
+        election = row.get("election", "")
+        if election:
+            # Election field looks like "2026 Primary Election" or "2026 General Election"
+            # Extract the year and check it matches current cycle
+            import re as _re
+            yr_match = _re.match(r"(\d{4})", election)
+            if yr_match:
+                election_year = int(yr_match.group(1))
+                if election_year < current_cycle_year - 1:
+                    continue  # Skip candidates from previous election cycles
+
         slug = row.get("slug", "")
         fm = metric_by_slug.get(slug, {})
         raised = fm.get("raised_cycle", 0)

@@ -1380,6 +1380,7 @@ def aggregate_filers(
         _pac_type = _meta.get("pac_type", "")
         _nature = _meta.get("nature", "")
         _candidate_name = _meta.get("candidate_name", "")
+        _election = _meta.get("election", "")
         # Normalize office to just the title (strip district number)
         # e.g. "State Representative, 25th District" → "State Representative"
         _office = _office_raw.split(",")[0].strip() if _office_raw else ""
@@ -1417,6 +1418,7 @@ def aggregate_filers(
             "pac_type": _pac_type,
             "nature": _nature,
             "candidate_name": _candidate_name,
+            "election": _election,
             "leadership_role": _leadership_role,
             "leadership_tier": _leadership_tier,
         })
@@ -1442,7 +1444,10 @@ def aggregate_filers(
         # Include candidate committees with party
         if _party in ("Democrat", "Republican"):
             pass  # use _party as-is
-        # Include caucus PACs - infer party from nature field
+        # Include caucus PACs — party determined from ORESTAR's "Nature of
+        # Committee" field (e.g., "Supporting House Democratic Candidates").
+        # ORESTAR PAC pages have no explicit party field; the nature text
+        # is the authoritative source scraped directly from the SOO page.
         elif _pac_type == "Caucus":
             _nature = (row.get("nature", "") or "").lower()
             if "democrat" in _nature:
