@@ -612,10 +612,10 @@ function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years
     }
 
     // Comparable upside adjustment: if they gave MORE to a comparable,
-    // weight toward that amount (but never reduce below the 5% increase).
-    // The blend weight scales with the gap: a comparable gift of 5x the base
-    // is strong evidence of donor capacity and should pull the target up more
-    // than a modest gap. Non-leadership benchmarks get an additional boost.
+    // blend toward that amount — but scale weight INVERSELY with the gap.
+    // A small gap (1.5x) means the comp amount is realistic for this donor;
+    // a huge gap (10x+) means the relationship isn't there and we should
+    // stay close to historical giving.
     // Discount single-filer outliers: if the max is >1.5x the second-highest,
     // it's an outlier — use the second-highest as the reference instead.
     const sortedAmts = compGifts.map(g => g.amount).sort((a, b) => b - a);
@@ -627,13 +627,18 @@ function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years
     const hasUplift = compRef > target;
     let compWeight = 0;
     if (hasUplift) {
-      // Scale blend weight by the gap ratio (capped at 60%)
+      // Scale blend weight INVERSELY with the gap ratio:
+      // Small gap (< 2x) → 35% weight (realistic uplift)
+      // Medium gap (2-4x) → 20% weight (stretch goal)
+      // Large gap (4-8x) → 10% weight (aspirational, stay close to history)
+      // Huge gap (8x+) → 5% weight (almost entirely history-based)
       const gapRatio = compRef / Math.max(target, 1);
-      if (gapRatio >= 4) compWeight = 0.55;
-      else if (gapRatio >= 2) compWeight = 0.45;
+      if (gapRatio >= 8) compWeight = 0.05;
+      else if (gapRatio >= 4) compWeight = 0.10;
+      else if (gapRatio >= 2) compWeight = 0.20;
       else compWeight = 0.35;
       // Non-leadership max gets +5% weight (stronger signal of donor capacity)
-      if (maxFromNonLeadership) compWeight = Math.min(compWeight + 0.05, 0.60);
+      if (maxFromNonLeadership) compWeight = Math.min(compWeight + 0.05, 0.40);
       target = Math.round((target * (1 - compWeight) + compRef * compWeight) * 100) / 100;
     }
 
@@ -993,11 +998,11 @@ function displayResults(recommendations, repeatTargets, targetProfile, comparabl
   const newRemaining = recommendations.reduce((s, r) => s + r.remaining_ask, 0);
   const summaryEl = document.getElementById("results-summary");
   summaryEl.innerHTML = `
-    <div class="summary-card"><span class="sc-label">Cycle Contributions</span><br><span class="sc-value">${fmt$(cycleContributions)}</span></div>
-    <div class="summary-card"><span class="sc-label">Donor Target Total</span><br><span class="sc-value">${fmt$(repeatRemaining)}</span></div>
-    <div class="summary-card"><span class="sc-label">New Prospect Target</span><br><span class="sc-value">${fmt$(newRemaining)}</span></div>
-    <div class="summary-card"><span class="sc-label">Comparable Filers</span><br><span class="sc-value">${fmtNum(comparables.length)}</span></div>
-    <div class="summary-card"><span class="sc-label">Total Fundraising Target</span><br><span class="sc-value">${fmt$(repeatRemaining + newRemaining)}</span></div>
+    <div class="summary-card sc-muted"><span class="sc-label">Cycle Contributions <span class="sc-help" title="Total cash contributions received by this committee during the selected election cycle.">?</span></span><br><span class="sc-value">${fmt$(cycleContributions)}</span></div>
+    <div class="summary-card"><span class="sc-label">Donor Target Total <span class="sc-help" title="Sum of recommended ask amounts for all existing donors who gave in the most recent previous cycle.">?</span></span><br><span class="sc-value">${fmt$(repeatRemaining)}</span></div>
+    <div class="summary-card"><span class="sc-label">New Prospect Target <span class="sc-help" title="Sum of recommended ask amounts for new donors identified from comparable filer giving patterns.">?</span></span><br><span class="sc-value">${fmt$(newRemaining)}</span></div>
+    <div class="summary-card"><span class="sc-label">Comparable Filers <span class="sc-help" title="Number of similar candidates used as benchmarks for donor targeting and prospect identification.">?</span></span><br><span class="sc-value">${fmtNum(comparables.length)}</span></div>
+    <div class="summary-card"><span class="sc-label">Total Fundraising Target <span class="sc-help" title="Combined target from existing donor asks plus new prospect asks. Represents the total recommended fundraising goal.">?</span></span><br><span class="sc-value">${fmt$(repeatRemaining + newRemaining)}</span></div>
   `;
 
   // Update tab badges with counts
@@ -1038,35 +1043,16 @@ function displayResults(recommendations, repeatTargets, targetProfile, comparabl
   recSearchEl.addEventListener("input", () => renderFilteredRec());
 
   // Render Not Recommended table
-  const notRecTbody = document.getElementById("not-rec-tbody");
-  if (notRecTbody) {
-    const notRecData = allNotRecommended || [];
-    if (notRecData.length === 0) {
-      notRecTbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#718096;padding:24px">No excluded donors.</td></tr>';
-    } else {
-      notRecTbody.innerHTML = notRecData
-        .sort((a, b) => b.amount - a.amount)
-        .map((r, i) => `<tr>
-          <td>${i + 1}</td>
-          <td>${esc(r.donor)}</td>
-          <td><span class="not-rec-type">${esc(r.type)}</span></td>
-          <td>${esc(r.lastGave)}</td>
-          <td class="num">${fmt$(r.amount)}</td>
-          <td class="not-rec-reason">${esc(r.whyNotIncluded)}</td>
-        </tr>`).join("");
-    }
-  }
+  window._notRecData = allNotRecommended || [];
+  window._notRecSortCol = "amount";
+  window._notRecSortDir = "desc";
+  renderFilteredNotRec();
 
   // Wire up search for Not Recommended
   const notRecSearch = document.getElementById("not-rec-search");
   if (notRecSearch) {
     notRecSearch.value = "";
-    notRecSearch.addEventListener("input", () => {
-      const q = notRecSearch.value.toLowerCase();
-      notRecTbody.querySelectorAll("tr").forEach(tr => {
-        tr.hidden = q && !tr.textContent.toLowerCase().includes(q);
-      });
-    });
+    notRecSearch.addEventListener("input", () => renderFilteredNotRec());
   }
 
   // Wire up sort headers for both tables (remove old listeners by re-cloning)
@@ -1089,6 +1075,7 @@ function displayResults(recommendations, repeatTargets, targetProfile, comparabl
 
   wireSortHeaders("repeat-table", "_repeatSortCol", "_repeatSortDir", renderFilteredRepeat);
   wireSortHeaders("rec-table", "_sortCol", "_sortDir", renderFilteredRec);
+  wireSortHeaders("not-rec-table", "_notRecSortCol", "_notRecSortDir", renderFilteredNotRec);
 
   // Wire up export (re-clone to avoid duplicate listeners)
   for (const id of ["export-csv", "export-xlsx", "export-repeat-csv", "export-repeat-xlsx", "export-full-csv", "export-full-xlsx"]) {
@@ -1224,6 +1211,31 @@ function renderFilteredRec() {
   rows = sortRows(rows, col, dir);
 
   renderRecTable(rows);
+}
+
+function renderFilteredNotRec() {
+  const q = (document.getElementById("not-rec-search")?.value || "").trim().toLowerCase();
+  let rows = window._notRecData || [];
+  if (q) rows = rows.filter(r => r.donor.toLowerCase().includes(q) || r.type.toLowerCase().includes(q));
+
+  const col = window._notRecSortCol || "amount";
+  const dir = window._notRecSortDir || "desc";
+  rows = sortRows(rows, col, dir);
+
+  const tbody = document.getElementById("not-rec-tbody");
+  if (!tbody) return;
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#718096;padding:24px">No excluded donors.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map((r, i) => `<tr>
+    <td>${i + 1}</td>
+    <td>${esc(r.donor)}</td>
+    <td><span class="not-rec-type">${esc(r.type)}</span></td>
+    <td>${esc(r.lastGave)}</td>
+    <td class="num">${fmt$(r.amount)}</td>
+    <td class="not-rec-reason">${esc(r.whyNotIncluded)}</td>
+  </tr>`).join("");
 }
 
 function renderRecTable(rows) {
