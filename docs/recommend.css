@@ -246,18 +246,6 @@
   color: var(--color-accent);
 }
 
-.results-filters {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-}
-.results-filters select {
-  padding: 6px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  font-size: 0.85rem;
-}
 
 /* ── Tier badges ────────────────────────────────────────────────────────── */
 .tier-badge {
@@ -406,6 +394,33 @@
 }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
+
+/* ── Column filter inputs ─────────────────────────────────────────────── */
+.filter-row th {
+  padding: 4px 6px !important;
+  background: var(--color-surface);
+}
+.col-filter {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 0.75rem;
+  background: #fff;
+  box-sizing: border-box;
+}
+.col-filter:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px rgba(43,108,176,0.15);
+}
+.col-filter.num {
+  min-width: 60px;
+}
+select.col-filter {
+  padding: 4px 4px;
+  cursor: pointer;
+}
 
 /* ── Responsive ─────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {

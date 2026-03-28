@@ -888,17 +888,8 @@ function displayResults(recommendations, repeatTargets, targetProfile, comparabl
   // Render new donor recommendations table
   renderRecTable(recommendations);
 
-  // Wire up filters
-  const searchEl = document.getElementById("results-search");
-  const tierEl = document.getElementById("tier-filter");
-  searchEl.value = "";
-  tierEl.value = "";
-
-  const filterHandler = () => renderFiltered();
-  searchEl.removeEventListener("input", filterHandler);
-  tierEl.removeEventListener("change", filterHandler);
-  searchEl.addEventListener("input", filterHandler);
-  tierEl.addEventListener("change", filterHandler);
+  // Wire up column filters for both tables
+  wireColumnFilters();
 
   // Wire up sort headers (remove old listeners by re-cloning)
   document.querySelectorAll("#rec-table th.sortable").forEach(th => {
@@ -912,7 +903,7 @@ function displayResults(recommendations, repeatTargets, targetProfile, comparabl
       clone.classList.add("sort-" + newDir);
       window._sortCol = col;
       window._sortDir = newDir;
-      renderFiltered();
+      renderFilteredRec();
     });
   });
 
@@ -932,13 +923,21 @@ function renderRepeatDonors(repeatTargets) {
   const container = document.getElementById("repeat-donors-section");
   if (!container) return;
 
-  if (!repeatTargets.length) {
+  // Show/hide container based on whether original data exists
+  const allRepeat = window._repeatTargets || [];
+  if (!allRepeat.length) {
     container.hidden = true;
     return;
   }
   container.hidden = false;
 
   const tbody = document.getElementById("repeat-tbody");
+
+  if (!repeatTargets.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#718096;padding:24px">No donors match the current filters.</td></tr>';
+    return;
+  }
+
   tbody.innerHTML = repeatTargets.map((r, i) => {
     const consistencyBadge = r.consistency === "high"
       ? '<span class="consistency-badge high">High</span>'
@@ -1000,13 +999,80 @@ function toggleRepeatDetail(idx, btn) {
   tr.after(detailRow);
 }
 
-function renderFiltered() {
-  const q = (document.getElementById("results-search").value || "").trim().toLowerCase();
-  const tier = document.getElementById("tier-filter").value;
-  let rows = window._recommendations || [];
+// ── Column filter system ──────────────────────────────────────────────────
+function getColumnFilters(tableName) {
+  const filters = {};
+  document.querySelectorAll(`.col-filter[data-table="${tableName}"]`).forEach(el => {
+    const val = (el.value || "").trim();
+    if (val) filters[el.dataset.key] = val;
+  });
+  return filters;
+}
 
-  if (q) rows = rows.filter(r => r.donor.toLowerCase().includes(q));
-  if (tier) rows = rows.filter(r => r.tier === tier);
+function matchesFilter(value, filter, key) {
+  if (!filter) return true;
+  const f = filter.toLowerCase();
+  const s = String(value ?? "").toLowerCase();
+
+  // Numeric comparison: support >, <, >=, <=, e.g. ">500"
+  const numMatch = filter.match(/^([><]=?)\s*\$?([\d,.]+)$/);
+  if (numMatch) {
+    const op = numMatch[1];
+    const threshold = parseFloat(numMatch[2].replace(/,/g, ""));
+    const num = typeof value === "number" ? value : parseFloat(String(value).replace(/[$,]/g, ""));
+    if (isNaN(num)) return false;
+    if (op === ">") return num > threshold;
+    if (op === ">=") return num >= threshold;
+    if (op === "<") return num < threshold;
+    if (op === "<=") return num <= threshold;
+  }
+
+  // Text match (substring)
+  return s.includes(f);
+}
+
+function applyColumnFilters(rows, filters) {
+  if (!Object.keys(filters).length) return rows;
+  return rows.filter(row => {
+    for (const [key, val] of Object.entries(filters)) {
+      if (!matchesFilter(row[key], val, key)) return false;
+    }
+    return true;
+  });
+}
+
+function wireColumnFilters() {
+  // Reset all filter values
+  document.querySelectorAll(".col-filter").forEach(el => { el.value = ""; });
+
+  // Wire repeat-table filters
+  document.querySelectorAll('.col-filter[data-table="repeat"]').forEach(el => {
+    const evName = el.tagName === "SELECT" ? "change" : "input";
+    const clone = el.cloneNode(true);
+    el.parentNode.replaceChild(clone, el);
+    clone.addEventListener(evName, () => renderFilteredRepeat());
+  });
+
+  // Wire rec-table filters
+  document.querySelectorAll('.col-filter[data-table="rec"]').forEach(el => {
+    const evName = el.tagName === "SELECT" ? "change" : "input";
+    const clone = el.cloneNode(true);
+    el.parentNode.replaceChild(clone, el);
+    clone.addEventListener(evName, () => renderFilteredRec());
+  });
+}
+
+function renderFilteredRepeat() {
+  const filters = getColumnFilters("repeat");
+  let rows = window._repeatTargets || [];
+  rows = applyColumnFilters(rows, filters);
+  renderRepeatDonors(rows);
+}
+
+function renderFilteredRec() {
+  const filters = getColumnFilters("rec");
+  let rows = window._recommendations || [];
+  rows = applyColumnFilters(rows, filters);
 
   const col = window._sortCol || "score";
   const dir = window._sortDir || "desc";
