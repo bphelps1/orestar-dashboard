@@ -2581,24 +2581,26 @@ async function loadPartyFundraising() {
     if (!box) return;
     box.hidden = false;
 
-    // Aggregate all years by donor type
+    // Aggregate all years by BASE donor type (merge in-state + out-of-state)
     const demByType = {};
     const repByType = {};
     const years = Object.keys(data.by_year).filter(y => y >= "2006");
     for (const y of years) {
       for (const t of (data.by_year[y]?.Democrat || [])) {
-        demByType[t.type] = (demByType[t.type] || 0) + t.total;
+        const base = t.type.endsWith(" (out of state)") ? t.type.slice(0, -15) : t.type;
+        demByType[base] = (demByType[base] || 0) + t.total;
       }
       for (const t of (data.by_year[y]?.Republican || [])) {
-        repByType[t.type] = (repByType[t.type] || 0) + t.total;
+        const base = t.type.endsWith(" (out of state)") ? t.type.slice(0, -15) : t.type;
+        repByType[base] = (repByType[base] || 0) + t.total;
       }
     }
 
-    // Get all unique types, sorted by combined total
+    // Get all unique base types, sorted by combined total
     const allTypes = [...new Set([...Object.keys(demByType), ...Object.keys(repByType)])];
     allTypes.sort((a, b) => ((demByType[b] || 0) + (repByType[b] || 0)) - ((demByType[a] || 0) + (repByType[a] || 0)));
 
-    // Shorten long type names for the chart
+    // Short labels for the chart
     const shortNames = {
       "Business Entity": "Business",
       "Political Committee": "Political Cmte",
@@ -2640,14 +2642,15 @@ async function loadPartyFundraising() {
         left: IS_MOBILE ? 50 : 70,
         right: 20,
         top: 35,
-        bottom: IS_MOBILE ? 80 : 50,
+        bottom: IS_MOBILE ? 80 : 80,
       },
       xAxis: {
         type: 'category',
         data: displayLabels,
         axisLabel: {
-          rotate: 45,
-          fontSize: IS_MOBILE ? 9 : 11,
+          rotate: 30,
+          fontSize: IS_MOBILE ? 9 : 12,
+          interval: 0,
         },
       },
       yAxis: {
