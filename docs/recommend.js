@@ -1003,6 +1003,9 @@ function renderRepeatDonors(repeatTargets) {
   }
   container.hidden = false;
 
+  // Store the currently-rendered rows so detail toggles reference the right data
+  window._renderedRepeat = repeatTargets;
+
   const tbody = document.getElementById("repeat-tbody");
 
   if (!repeatTargets.length) {
@@ -1052,7 +1055,7 @@ function toggleRepeatDetail(idx, btn) {
     return;
   }
 
-  const r = (window._repeatTargets || [])[idx];
+  const r = (window._renderedRepeat || window._repeatTargets || [])[idx];
   if (!r) return;
 
   btn.textContent = "Hide details ▾";
@@ -1113,6 +1116,9 @@ function renderFilteredRec() {
 }
 
 function renderRecTable(rows) {
+  // Store the currently-rendered rows so detail toggles reference the right data
+  window._renderedRecs = rows;
+
   const tbody = document.getElementById("rec-tbody");
   if (!rows.length) {
     tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#718096;padding:24px">No recommendations found.</td></tr>';
@@ -1158,7 +1164,7 @@ function toggleDetail(idx, btn) {
     return;
   }
 
-  const r = (window._recommendations || [])[idx];
+  const r = (window._renderedRecs || window._recommendations || [])[idx];
   if (!r) return;
 
   btn.textContent = "Hide details ▾";
