@@ -278,7 +278,7 @@ def generate(agg_dir: Path = AGG_DIR, filers_dir: Path = FILERS_DIR) -> dict:
         # Sort each tier by raised amount, take top 5
         for tier in by_tier:
             by_tier[tier].sort(key=lambda x: -x["raised"])
-            by_tier[tier] = by_tier[tier][:5]
+            by_tier[tier] = by_tier[tier][:3]
 
         # Top growth: existing growers first (by %), then new entrants (by $)
         existing = [c for c in growth_candidates if not c.get("is_new")]

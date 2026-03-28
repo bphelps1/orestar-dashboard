@@ -2252,7 +2252,7 @@ function renderSearchResults(rows) {
 // ── Campaign Pulse ──────────────────────────────────────────────────────
 let activitySnapshot = null;
 let pulseCurrentPeriod = "90d";
-const PULSE_ROWS = 5;
+const PULSE_ROWS = 3;
 
 async function loadCampaignPulse() {
   try {
