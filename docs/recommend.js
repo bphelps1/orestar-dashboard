@@ -303,8 +303,8 @@ function isOfficeComparable(targetOffice, fOffice) {
 // Tier 3: Chairs, Pro Tems, Whips, other leadership positions
 // Tier 0: Not in leadership
 //
-// Ask multiplier: leadership members can command higher donations.
-const LEADERSHIP_ASK_MULTIPLIER = { 1: 2.5, 2: 2.0, 3: 1.5, 0: 1.0 };
+// Leadership tiers influence comparable-filer matching (affinity scoring),
+// NOT individual donor ask amounts — comparable uplift handles that naturally.
 
 // ── Step 2: Find comparable fundraisers ────────────────────────────────────
 async function findComparables(targetProfile, targetFiler, cycle) {
@@ -579,12 +579,6 @@ function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years
       target = Math.round((target * 0.7 + compMax * 0.3) * 100) / 100;
     }
 
-    // Leadership multiplier
-    const targetTier = targetProfile.leadership_tier ||
-      (filerIndex.find(f => f.slug === targetProfile.slug) || {}).leadership_tier || 0;
-    const askMultiplier = LEADERSHIP_ASK_MULTIPLIER[targetTier] || 1.0;
-    target = Math.round(target * askMultiplier * 100) / 100;
-
     const remaining = Math.max(0, Math.round((target - currentCycleAmt) * 100) / 100);
 
     // Build cycle history summary
@@ -649,9 +643,6 @@ function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years
 
 // ── Step 4b: Score new donors ─────────────────────────────────────────────
 function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
-  const targetTier = targetProfile.leadership_tier ||
-    (filerIndex.find(f => f.slug === targetProfile.slug) || {}).leadership_tier || 0;
-
   // Build a set of leadership filer slugs for quick lookup
   const leadershipSlugs = new Set(
     comparables.filter(c => c.leadership_tier > 0).map(c => c.slug)
@@ -727,10 +718,6 @@ function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
     // Target = upper-median (between median and 75th) capped by donor's own max
     const maxGift = Math.max(...compAmounts);
     let targetAsk = Math.min(Math.round(((median + p75) / 2) * 100) / 100, maxGift);
-
-    // Scale target ask by leadership tier multiplier
-    const askMultiplier = LEADERSHIP_ASK_MULTIPLIER[targetTier] || 1.0;
-    targetAsk = Math.round(targetAsk * askMultiplier * 100) / 100;
 
     const remainingAsk = Math.max(0, targetAsk - alreadyGiven);
 
