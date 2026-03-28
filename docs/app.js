@@ -57,6 +57,8 @@ function resetDonutBox() {
   if (multiRow) multiRow.remove();
   const legend = box.querySelector(".multi-donut-legend");
   if (legend) legend.remove();
+  const areaLegend = box.querySelector(".stacked-area-legend");
+  if (areaLegend) areaLegend.remove();
   if (!document.getElementById("chart-contributor-type")) {
     const canvas = document.createElement("canvas");
     canvas.id = "chart-contributor-type";
@@ -99,6 +101,278 @@ function renderMultiDonutLegend(types) {
       <span class="mdl-swatch" style="background:${typeColor(t)}"></span>
       <span class="mdl-label">${esc(t)}</span>
     </span>`).join("");
+}
+
+// ── Stacked Area Chart (Who Funds Oregon Campaigns) ─────────────────────────
+
+function makeStackedAreaChart(canvasId, byMonthData, byTypeRows) {
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return null;
+  if (ctx._chart) ctx._chart.destroy();
+
+  // 1. Compute base types by stripping " (out of state)" suffix
+  const baseTypeMap = {};   // baseType → { total across all months }
+  const months = Object.keys(byMonthData).sort();
+  for (const month of months) {
+    for (const entry of byMonthData[month]) {
+      const base = entry.type.endsWith(" (out of state)") ? entry.type.slice(0, -15) : entry.type;
+      if (!baseTypeMap[base]) baseTypeMap[base] = 0;
+      baseTypeMap[base] += entry.total;
+    }
+  }
+
+  // Order base types by all_time totals (descending) if available, else by accumulated total
+  let baseTypes;
+  if (byTypeRows && byTypeRows.length) {
+    const seen = new Set();
+    baseTypes = [];
+    for (const r of byTypeRows) {
+      const base = r.type.endsWith(" (out of state)") ? r.type.slice(0, -15) : r.type;
+      if (!seen.has(base) && baseTypeMap[base]) {
+        seen.add(base);
+        baseTypes.push(base);
+      }
+    }
+    // Add any base types found in by_month but not in all_time
+    for (const bt of Object.keys(baseTypeMap)) {
+      if (!seen.has(bt)) baseTypes.push(bt);
+    }
+  } else {
+    baseTypes = Object.keys(baseTypeMap).sort((a, b) => baseTypeMap[b] - baseTypeMap[a]);
+  }
+
+  // 2. Build per-month totals for each base type, plus a merged top_donors lookup
+  const monthlyBaseData = {};  // month → baseType → { total, top_donors }
+  for (const month of months) {
+    monthlyBaseData[month] = {};
+    for (const entry of byMonthData[month]) {
+      const base = entry.type.endsWith(" (out of state)") ? entry.type.slice(0, -15) : entry.type;
+      if (!monthlyBaseData[month][base]) {
+        monthlyBaseData[month][base] = { total: 0, top_donors: [] };
+      }
+      monthlyBaseData[month][base].total += entry.total;
+      if (entry.top_donors) {
+        monthlyBaseData[month][base].top_donors.push(...entry.top_donors);
+      }
+    }
+    // Sort & dedupe top donors per base type per month
+    for (const base of Object.keys(monthlyBaseData[month])) {
+      const donors = monthlyBaseData[month][base].top_donors;
+      const merged = {};
+      for (const d of donors) {
+        merged[d.name] = (merged[d.name] || 0) + d.total;
+      }
+      monthlyBaseData[month][base].top_donors = Object.entries(merged)
+        .map(([name, total]) => ({ name, total }))
+        .sort((a, b) => b.total - a.total);
+    }
+  }
+
+  // 3. Build Chart.js datasets
+  const datasets = baseTypes.map(base => {
+    const color = TYPE_COLOR_MAP[base] ?? PALETTE[Object.keys(TYPE_COLOR_MAP).length % PALETTE.length];
+    return {
+      label: base,
+      data: months.map(m => (monthlyBaseData[m][base] ? monthlyBaseData[m][base].total : 0)),
+      backgroundColor: hexToRgba(color, 0.55),
+      borderColor: color,
+      borderWidth: 1.5,
+      fill: true,
+      pointRadius: 0,
+      pointHitRadius: 8,
+      tension: 0.3,
+    };
+  });
+
+  // 4. Format month labels for display
+  const labels = months.map(m => {
+    const [y, mo] = m.split("-");
+    const d = new Date(+y, +mo - 1);
+    return d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+  });
+
+  // 5. Create the chart
+  const chart = new Chart(ctx, {
+    type: "line",
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          enabled: false,
+          external: makeStackedAreaTooltip(months, monthlyBaseData, baseTypes),
+        },
+      },
+      scales: {
+        x: {
+          ticks: { maxRotation: 45, font: { size: 11 }, autoSkip: true, maxTicksLimit: 18 },
+          grid: { color: "#e2e8f0" },
+        },
+        y: {
+          stacked: true,
+          ticks: { callback: v => fmt$(v) },
+          grid: { color: "#e2e8f0" },
+        },
+      },
+    },
+  });
+  ctx._chart = chart;
+
+  // 6. Mouseleave to hide tooltip
+  if (!ctx._areaTooltipLeaveAttached) {
+    ctx.addEventListener("mouseleave", () => {
+      const el = document.getElementById("donut-tooltip");
+      if (el) el.hidden = true;
+    });
+    ctx._areaTooltipLeaveAttached = true;
+  }
+
+  // 7. Render custom legend
+  renderStackedAreaLegend(chart, baseTypes);
+
+  return chart;
+}
+
+function renderStackedAreaLegend(chart, baseTypes) {
+  const canvas = chart.canvas;
+  const box = canvas.closest("#overview-donut-box");
+  if (!box) return;
+  // Remove existing legend if present
+  const existing = box.querySelector(".stacked-area-legend");
+  if (existing) existing.remove();
+
+  const legendDiv = document.createElement("div");
+  legendDiv.className = "stacked-area-legend";
+
+  baseTypes.forEach((base, i) => {
+    const color = TYPE_COLOR_MAP[base] ?? PALETTE[Object.keys(TYPE_COLOR_MAP).length % PALETTE.length];
+    const item = document.createElement("span");
+    item.className = "stacked-area-legend-item";
+    item.innerHTML = `<span class="swatch" style="background:${color}"></span>${esc(base)}`;
+
+    item.addEventListener("click", () => {
+      if (selectedDonorTypeGroup === base) {
+        selectedDonorTypeGroup = null;
+      } else {
+        selectedDonorTypeGroup = base;
+      }
+      updateStackedAreaStyles(chart, baseTypes);
+      updateStackedAreaLegendStyles(legendDiv, baseTypes);
+    });
+
+    legendDiv.appendChild(item);
+  });
+
+  box.appendChild(legendDiv);
+  updateStackedAreaLegendStyles(legendDiv, baseTypes);
+}
+
+function updateStackedAreaLegendStyles(legendDiv, baseTypes) {
+  const items = legendDiv.querySelectorAll(".stacked-area-legend-item");
+  items.forEach((item, i) => {
+    const base = baseTypes[i];
+    if (selectedDonorTypeGroup === null) {
+      item.classList.remove("selected", "dimmed");
+    } else if (selectedDonorTypeGroup === base) {
+      item.classList.add("selected");
+      item.classList.remove("dimmed");
+    } else {
+      item.classList.remove("selected");
+      item.classList.add("dimmed");
+    }
+  });
+}
+
+function updateStackedAreaStyles(chart, baseTypes) {
+  chart.data.datasets.forEach((ds, i) => {
+    const base = baseTypes[i];
+    const color = TYPE_COLOR_MAP[base] ?? PALETTE[Object.keys(TYPE_COLOR_MAP).length % PALETTE.length];
+    if (selectedDonorTypeGroup === null) {
+      ds.backgroundColor = hexToRgba(color, 0.55);
+      ds.borderColor = color;
+      ds.borderWidth = 1.5;
+    } else if (selectedDonorTypeGroup === base) {
+      ds.backgroundColor = hexToRgba(color, 0.85);
+      ds.borderColor = color;
+      ds.borderWidth = 2;
+    } else {
+      ds.backgroundColor = hexToRgba(color, 0.15);
+      ds.borderColor = hexToRgba(color, 0.15);
+      ds.borderWidth = 0;
+    }
+  });
+  chart.update("none");
+}
+
+function makeStackedAreaTooltip(months, monthlyBaseData, baseTypes) {
+  return function({ chart, tooltip }) {
+    const el = document.getElementById("donut-tooltip");
+    if (!el) return;
+    if (tooltip.opacity === 0 || !tooltip.dataPoints || !tooltip.dataPoints.length) {
+      el.hidden = true;
+      return;
+    }
+
+    const idx = tooltip.dataPoints[0].dataIndex;
+    const month = months[idx];
+    if (!month) { el.hidden = true; return; }
+
+    const data = monthlyBaseData[month] || {};
+    const grandTotal = baseTypes.reduce((s, bt) => s + (data[bt] ? data[bt].total : 0), 0);
+
+    // Format month header
+    const [y, mo] = month.split("-");
+    const monthLabel = new Date(+y, +mo - 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+    let html = `<div style="font-weight:600;margin-bottom:6px;font-size:0.85rem">${esc(monthLabel)}</div>`;
+
+    // Category rows
+    baseTypes.forEach(bt => {
+      const val = data[bt] ? data[bt].total : 0;
+      if (val === 0 && selectedDonorTypeGroup !== bt) return;
+      const pct = grandTotal > 0 ? (val / grandTotal * 100).toFixed(1) : "0.0";
+      const color = TYPE_COLOR_MAP[bt] ?? PALETTE[Object.keys(TYPE_COLOR_MAP).length % PALETTE.length];
+      const isSelected = selectedDonorTypeGroup === bt;
+      const bgStyle = isSelected ? `background:${hexToRgba(color, 0.15)};border-radius:3px;` : "";
+      html += `<div style="display:flex;align-items:center;gap:6px;padding:2px 4px;${bgStyle}">
+        <span style="width:8px;height:8px;border-radius:2px;background:${color};flex-shrink:0"></span>
+        <span style="flex:1;font-size:0.78rem">${esc(bt)}</span>
+        <span style="font-size:0.78rem;font-weight:500">${fmt$(val)}</span>
+        <span style="font-size:0.72rem;color:#718096">${pct}%</span>
+      </div>`;
+    });
+
+    // Grand total
+    html += `<div style="border-top:1px solid #e2e8f0;margin-top:4px;padding-top:4px;font-size:0.78rem;font-weight:600;text-align:right">${fmt$(grandTotal)}</div>`;
+
+    // Top donors section if a category is selected
+    if (selectedDonorTypeGroup && data[selectedDonorTypeGroup] && data[selectedDonorTypeGroup].top_donors.length) {
+      const donors = data[selectedDonorTypeGroup].top_donors.slice(0, 5);
+      html += `<div style="margin-top:6px;font-size:0.72rem;font-weight:600;color:#4a5568">Top 5 ${esc(selectedDonorTypeGroup)} Donors</div>`;
+      donors.forEach(d => {
+        html += `<div style="display:flex;justify-content:space-between;font-size:0.72rem;padding:1px 0">
+          <span>${esc(d.name)}</span>
+          <span style="font-weight:500">${fmt$(d.total)}</span>
+        </div>`;
+      });
+    } else if (!selectedDonorTypeGroup) {
+      html += `<div style="margin-top:6px;font-size:0.68rem;color:#a0aec0;font-style:italic">Click a category above to see top donors</div>`;
+    }
+
+    el.innerHTML = html;
+    el.hidden = false;
+
+    const rect = chart.canvas.getBoundingClientRect();
+    let left = rect.left + tooltip.caretX + 16;
+    let top  = rect.top  + tooltip.caretY - 20;
+    if (left + 280 > window.innerWidth) left = rect.left + tooltip.caretX - 296;
+    top = Math.max(top, 8);
+    if (top + el.offsetHeight > window.innerHeight - 8) top = window.innerHeight - el.offsetHeight - 8;
+    el.style.left = left + "px";
+    el.style.top  = top + "px";
+  };
 }
 
 // ── Donut tooltip ─────────────────────────────────────────────────────────────
@@ -675,6 +949,8 @@ let fuseIndex        = null;
 let allRecent        = [];
 
 let donorFilerMap    = null; // donor_name_lower → {slug, name, confidence} | {candidates, confidence:"ambiguous"}
+
+let selectedDonorTypeGroup = null;
 
 // ── Active tab ───────────────────────────────────────────────────────────────
 let activeTab = "overview";
@@ -1435,7 +1711,10 @@ function renderOverviewGlobal() {
     byTypeRows = [];
   }
   resetDonutBox();
-  if (byTypeRows.length) {
+  if (byTypeRows.length && byTypeDataGlobal && byTypeDataGlobal.by_month) {
+    document.getElementById("overview-donut-title").textContent = "Who Funds Oregon Campaigns";
+    makeStackedAreaChart("chart-contributor-type", byTypeDataGlobal.by_month, byTypeRows);
+  } else if (byTypeRows.length) {
     makeDonutChart(
       "chart-contributor-type",
       byTypeRows.map(r => r.type),

@@ -415,10 +415,10 @@ main {
 
 /* ── Card Help Tooltip ──────────────────────────────────────────────────── */
 .card-help {
-  position: absolute;
-  top: 0;
-  right: 0;
+  position: relative;
   display: inline-flex;
+  vertical-align: middle;
+  margin-left: 4px;
   align-items: center;
   justify-content: center;
   width: 16px;
@@ -441,8 +441,8 @@ main {
 }
 .card-help:hover .card-help-tip,
 .card-help:focus .card-help-tip { display: block; }
-.card:has(.card-help:hover),
-.card:has(.card-help:focus) { z-index: 100; }
+.card-label:has(.card-help:hover),
+.card-label:has(.card-help:focus) { z-index: 100; position: relative; }
 
 .card-help-tip {
   display: none;
@@ -1773,4 +1773,40 @@ footer a:hover { color: var(--color-accent); }
   }
   .date-sep { display: none; }
   .filter-apply-btn { width: 100%; }
+}
+
+/* ── Stacked Area Legend ─────────────────────────────────────────────── */
+.stacked-area-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 12px 0 0;
+  justify-content: center;
+}
+.stacked-area-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  transition: opacity 0.15s, background 0.15s;
+  user-select: none;
+}
+.stacked-area-legend-item:hover {
+  background: var(--color-surface-alt);
+}
+.stacked-area-legend-item .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.stacked-area-legend-item.selected {
+  font-weight: 700;
+  text-decoration: underline;
+}
+.stacked-area-legend-item.dimmed {
+  opacity: 0.45;
 }
