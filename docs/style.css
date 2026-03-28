@@ -694,6 +694,31 @@ main {
   color: var(--color-accent);
 }
 
+/* Donor entry layout — name+amount on top row, committee count below */
+.pulse-donor-entry {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+}
+.pulse-donor-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.pulse-donor-cmtes {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  padding-left: 0;
+  margin-top: 1px;
+}
+.pulse-donor-cmtes.pulse-donor-expand {
+  cursor: pointer;
+  color: var(--color-accent);
+}
+.pulse-donor-cmtes.pulse-donor-expand:hover {
+  text-decoration: underline;
+}
+
 @media (max-width: 768px) {
   .campaign-pulse { padding: 16px; }
   .pulse-header { flex-direction: column; align-items: flex-start; }

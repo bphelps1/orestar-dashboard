@@ -2752,9 +2752,9 @@ function renderRacesToWatch() {
   });
 }
 
-// ── Campaign Pulse ──────────────────────────────────────────────────────
+// ── Fundraising Pulse ────────────────────────────────────────────────────
 let activitySnapshot = null;
-let pulseCurrentPeriod = "90d";
+let pulseCurrentPeriod = "30d";
 const PULSE_ROWS = 3;
 
 async function loadCampaignPulse() {
@@ -2862,12 +2862,14 @@ function renderPulseDonors(data) {
       : `<span class="pulse-entry-name" title="${esc(e.name)}">${esc(e.name)}</span>`;
 
     const metaHTML = hasDetails
-      ? `<span class="pulse-entry-meta pulse-donor-expand" data-donor="${esc(e.name)}">${e.committees} cmtes ▾</span>`
-      : (e.committees > 1 ? `<span class="pulse-entry-meta">${e.committees} cmtes</span>` : "");
+      ? `<div class="pulse-donor-cmtes pulse-donor-expand" data-donor="${esc(e.name)}">${e.committees} committees ▾</div>`
+      : (e.committees > 1 ? `<div class="pulse-donor-cmtes">${e.committees} committees</div>` : "");
 
     html += `<div class="pulse-entry pulse-donor-entry">
-      ${nameHTML}
-      <span class="pulse-entry-value">$${Number(e.total).toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
+      <div class="pulse-donor-top">
+        ${nameHTML}
+        <span class="pulse-entry-value">$${Number(e.total).toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
+      </div>
       ${metaHTML}
     </div>`;
 
