@@ -2408,17 +2408,7 @@ async function loadTimeline() {
   const hasDate = state.dateStart || state.dateEnd;
 
   if (n === 0) {
-    // Hide year filter when date range is active
-    document.getElementById("timeline-year-group").hidden = !!hasDate;
-
-    const sel = document.getElementById("timeline-year");
-    if (!sel._listenerAttached) {
-      const allYears = [...new Set(timelineData.map(r => r.month.slice(0, 4)))].filter(y => y >= "2006").sort();
-      allYears.forEach(yr => sel.insertAdjacentHTML("beforeend", `<option value="${yr}">${yr}</option>`));
-      sel.addEventListener("change", () => renderTimeline(sel.value));
-      sel._listenerAttached = true;
-    }
-    renderTimeline(sel.value || "all");
+    renderTimeline("all");
 
   } else {
     const profiles = await Promise.all(state.selectedFilers.map(f => loadFilerProfile(f.slug)));
@@ -2444,8 +2434,8 @@ function renderTimeline(year) {
       {
         label: "Contributions",
         data: rows.map(r => r.contributions || 0),
-        borderColor: "#3182ce",
-        backgroundColor: "rgba(49,130,206,0.08)",
+        borderColor: "#16a34a",
+        backgroundColor: "rgba(22,163,74,0.08)",
         fill: true,
         tension: 0.3,
         pointRadius: rows.length > 60 ? 0 : 3,
@@ -2453,8 +2443,8 @@ function renderTimeline(year) {
       {
         label: "Expenditures",
         data: rows.map(r => r.expenditures || 0),
-        borderColor: "#e53e3e",
-        backgroundColor: "rgba(229,62,62,0.08)",
+        borderColor: "#d97706",
+        backgroundColor: "rgba(217,119,6,0.08)",
         fill: true,
         tension: 0.3,
         pointRadius: rows.length > 60 ? 0 : 3,
