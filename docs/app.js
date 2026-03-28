@@ -112,7 +112,7 @@ function makeStackedAreaChart(canvasId, byMonthData, byTypeRows) {
 
   // 1. Compute base types by stripping " (out of state)" suffix
   const baseTypeMap = {};   // baseType → { total across all months }
-  const months = Object.keys(byMonthData).sort();
+  const months = Object.keys(byMonthData).filter(m => m >= "2006-01").sort();
   for (const month of months) {
     for (const entry of byMonthData[month]) {
       const base = entry.type.endsWith(" (out of state)") ? entry.type.slice(0, -15) : entry.type;
@@ -1663,7 +1663,7 @@ async function loadOverview() {
   // Pre-fill date inputs with the dataset's full range (only if still blank)
   const dsEl = document.getElementById("date-start");
   const deEl = document.getElementById("date-end");
-  if (!dsEl.value && summaryData.date_range_start) dsEl.value = summaryData.date_range_start;
+  if (!dsEl.value) dsEl.value = "2006-01-01";
   if (!deEl.value && summaryData.date_range_end)   deEl.value = summaryData.date_range_end;
 
   const n = state.selectedFilers.length;
@@ -2382,7 +2382,7 @@ async function loadTimeline() {
 
     const sel = document.getElementById("timeline-year");
     if (!sel._listenerAttached) {
-      const allYears = [...new Set(timelineData.map(r => r.month.slice(0, 4)))].sort();
+      const allYears = [...new Set(timelineData.map(r => r.month.slice(0, 4)))].filter(y => y >= "2006").sort();
       allYears.forEach(yr => sel.insertAdjacentHTML("beforeend", `<option value="${yr}">${yr}</option>`));
       sel.addEventListener("change", () => renderTimeline(sel.value));
       sel._listenerAttached = true;
@@ -2402,7 +2402,7 @@ function renderTimeline(year) {
     rows = filterMonthRows(timelineData);
   } else {
     rows = year === "all"
-      ? timelineData
+      ? timelineData.filter(r => r.month >= "2006-01")
       : timelineData.filter(r => r.month.startsWith(year));
   }
 
