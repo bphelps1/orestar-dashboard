@@ -1009,9 +1009,9 @@ main {
     -webkit-overflow-scrolling: touch;
   }
   .chart-area canvas {
-    min-width: 600px;
-    width: 600px !important;
-    height: auto !important;
+    min-width: 500px;
+    width: 500px !important;
+    height: 350px !important;
   }
 }
 

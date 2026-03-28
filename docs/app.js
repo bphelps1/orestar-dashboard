@@ -17,8 +17,9 @@
 const DATA = "data/aggregated";
 
 // ── Chart.js default theme ───────────────────────────────────────────────────
+const IS_MOBILE = window.innerWidth <= 768;
 Chart.defaults.font.family = "system-ui, -apple-system, 'Segoe UI', sans-serif";
-Chart.defaults.font.size   = 13;
+Chart.defaults.font.size   = IS_MOBILE ? 10 : 13;
 Chart.defaults.color       = "#4a5568";
 
 const PALETTE = [
@@ -197,9 +198,10 @@ function makeStackedAreaChart(canvasId, byMonthData, byTypeRows) {
     data: { labels, datasets },
     options: {
       responsive: true,
+      maintainAspectRatio: !IS_MOBILE,
+      aspectRatio: IS_MOBILE ? undefined : 2,
       interaction: { mode: "index", intersect: false },
       onClick: (evt) => {
-        // Use "nearest" with intersect to find which specific stack was clicked
         const elements = chart.getElementsAtEventForMode(evt, "nearest", { intersect: true }, false);
         if (elements.length > 0) {
           const dsIndex = elements[0].datasetIndex;
@@ -219,12 +221,12 @@ function makeStackedAreaChart(canvasId, byMonthData, byTypeRows) {
       },
       scales: {
         x: {
-          ticks: { maxRotation: 45, font: { size: 11 }, autoSkip: true, maxTicksLimit: 18 },
+          ticks: { maxRotation: 45, font: { size: IS_MOBILE ? 8 : 11 }, autoSkip: true, maxTicksLimit: IS_MOBILE ? 10 : 18 },
           grid: { color: "#e2e8f0" },
         },
         y: {
           stacked: true,
-          ticks: { callback: v => fmt$(v) },
+          ticks: { callback: v => fmt$(v), font: { size: IS_MOBILE ? 8 : undefined } },
           grid: { color: "#e2e8f0" },
         },
       },
@@ -1248,6 +1250,7 @@ function makeLineChart(canvasId, labels, datasets) {
     data: { labels, datasets },
     options: {
       responsive: true,
+      maintainAspectRatio: !IS_MOBILE,
       interaction: { mode: "index", intersect: false },
       plugins: {
         tooltip: {
@@ -1255,8 +1258,8 @@ function makeLineChart(canvasId, labels, datasets) {
         },
       },
       scales: {
-        x: { ticks: { maxRotation: 45, font: { size: 11 } }, grid: { color: "#e2e8f0" } },
-        y: { ticks: { callback: v => fmt$(v) }, grid: { color: "#e2e8f0" } },
+        x: { ticks: { maxRotation: 45, font: { size: IS_MOBILE ? 8 : 11 }, autoSkip: true, maxTicksLimit: IS_MOBILE ? 10 : undefined }, grid: { color: "#e2e8f0" } },
+        y: { ticks: { callback: v => fmt$(v), font: { size: IS_MOBILE ? 8 : undefined } }, grid: { color: "#e2e8f0" } },
       },
     },
   });
@@ -2713,8 +2716,9 @@ async function loadPartyFundraising() {
       },
       options: {
         responsive: true,
+        maintainAspectRatio: !IS_MOBILE,
         plugins: {
-          legend: { position: "top" },
+          legend: { position: "top", labels: { font: { size: IS_MOBILE ? 9 : undefined } } },
           tooltip: {
             callbacks: {
               label: ctx => ` ${ctx.dataset.label}: ${fmt$(ctx.raw)}`,
@@ -2724,9 +2728,9 @@ async function loadPartyFundraising() {
         scales: {
           x: {
             grid: { display: false },
-            ticks: { maxRotation: 60, font: { size: 10 } },
+            ticks: { maxRotation: 60, font: { size: IS_MOBILE ? 8 : 10 } },
           },
-          y: { ticks: { callback: v => fmt$(v) }, grid: { color: "#e2e8f0" } },
+          y: { ticks: { callback: v => fmt$(v), font: { size: IS_MOBILE ? 8 : undefined } }, grid: { color: "#e2e8f0" } },
         },
       },
     });
