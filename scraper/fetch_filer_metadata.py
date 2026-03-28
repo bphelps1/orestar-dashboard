@@ -91,10 +91,10 @@ def _scrape_filer_metadata(page, filer_id: str, first_load: bool) -> dict | None
     id_field.fill(filer_id)
     page.wait_for_timeout(200)
 
-    # Check "Include Discontinued Committees" to find all filers
+    # First try WITHOUT "Include Discontinued Committees" checkbox
     disc_checkbox = page.locator('input[name="discontinuedSOO"][type="checkbox"]')
-    if disc_checkbox.count() > 0 and not disc_checkbox.first.is_checked():
-        disc_checkbox.first.check()
+    if disc_checkbox.count() > 0 and disc_checkbox.first.is_checked():
+        disc_checkbox.first.uncheck()
         page.wait_for_timeout(200)
 
     submit_btn = page.locator('input[type="submit"][value="Submit"]')
@@ -110,8 +110,28 @@ def _scrape_filer_metadata(page, filer_id: str, first_load: bool) -> dict | None
         return None
     time.sleep(NAV_WAIT)
 
-    # Parse the detail page text
     text = page.inner_text("body")
+
+    # If 0 results found, retry with discontinued checkbox checked
+    if "0 found for the above search criteria" in text:
+        log.debug("No active result for %s, retrying with discontinued", filer_id)
+        page.goto(SEARCH_URL, timeout=60_000)
+        time.sleep(NAV_WAIT)
+        id_field = page.locator('input[name="committeeId"]')
+        id_field.fill(filer_id)
+        page.wait_for_timeout(200)
+        disc_checkbox = page.locator('input[name="discontinuedSOO"][type="checkbox"]')
+        if disc_checkbox.count() > 0 and not disc_checkbox.first.is_checked():
+            disc_checkbox.first.check()
+            page.wait_for_timeout(200)
+        page.locator('input[type="submit"][value="Submit"]').first.click()
+        try:
+            page.wait_for_load_state("networkidle", timeout=30_000)
+        except Exception:
+            pass
+        time.sleep(NAV_WAIT)
+        text = page.inner_text("body")
+
     return _parse_detail_text(text, filer_id)
 
 
