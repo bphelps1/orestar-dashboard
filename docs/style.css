@@ -1038,6 +1038,17 @@ main {
   font-weight: 500;
   color: var(--color-text);
 }
+/* Freeze first column */
+.radar-table th:first-child,
+.radar-table td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--color-surface);
+  z-index: 1;
+}
+.radar-table-total td:first-child {
+  background: var(--color-surface);
+}
 .radar-table-total td {
   font-weight: 700;
   border-top: 2px solid var(--color-border);
