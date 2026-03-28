@@ -1739,10 +1739,12 @@ async function loadDonors() {
       makeBarChart("chart-top-donors",
         top20.map(r => r.name), top20.map(r => r.total),
         "Total Contributions", "#3182ce");
+      const searchEl = document.getElementById("donors-summary-search");
+      if (searchEl) searchEl.value = "";
       buildSortableTable("table-donors", allTimeDonors, [
         { key: "name",  label: "Donor", linkDonor: true },
         { key: "total", label: "Total ($)", fmt: fmt$, cls: "num" },
-      ]);
+      ], searchEl);
     }
 
     // Untapped: global top donors (date-filtered) not in this filer's donor list
