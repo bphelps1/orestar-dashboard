@@ -1947,6 +1947,12 @@ function renderDonorsByYear(byYear, allTime) {
   }
 
   renderByYearTable();
+
+  // Scroll to the right so the most recent years are visible first
+  const scrollBox = document.querySelector('.by-year-scroll');
+  if (scrollBox) {
+    setTimeout(() => { scrollBox.scrollLeft = scrollBox.scrollWidth; }, 0);
+  }
 }
 
 function renderDonors(year) {
