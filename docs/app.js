@@ -2581,24 +2581,30 @@ async function loadPartyFundraising() {
     if (!box) return;
     box.hidden = false;
 
-    // Aggregate all years by BASE donor type (merge in-state + out-of-state)
-    const demByType = {};
-    const repByType = {};
+    // Aggregate all years by BASE donor type, tracking in-state vs out-of-state separately
+    const demIn = {}, demOut = {}, repIn = {}, repOut = {};
     const years = Object.keys(data.by_year).filter(y => y >= "2006");
     for (const y of years) {
       for (const t of (data.by_year[y]?.Democrat || [])) {
-        const base = t.type.endsWith(" (out of state)") ? t.type.slice(0, -15) : t.type;
-        demByType[base] = (demByType[base] || 0) + t.total;
+        const isOOS = t.type.endsWith(" (out of state)");
+        const base = isOOS ? t.type.slice(0, -15) : t.type;
+        if (isOOS) { demOut[base] = (demOut[base] || 0) + t.total; }
+        else       { demIn[base]  = (demIn[base] || 0)  + t.total; }
       }
       for (const t of (data.by_year[y]?.Republican || [])) {
-        const base = t.type.endsWith(" (out of state)") ? t.type.slice(0, -15) : t.type;
-        repByType[base] = (repByType[base] || 0) + t.total;
+        const isOOS = t.type.endsWith(" (out of state)");
+        const base = isOOS ? t.type.slice(0, -15) : t.type;
+        if (isOOS) { repOut[base] = (repOut[base] || 0) + t.total; }
+        else       { repIn[base]  = (repIn[base] || 0)  + t.total; }
       }
     }
 
     // Get all unique base types, sorted by combined total
-    const allTypes = [...new Set([...Object.keys(demByType), ...Object.keys(repByType)])];
-    allTypes.sort((a, b) => ((demByType[b] || 0) + (repByType[b] || 0)) - ((demByType[a] || 0) + (repByType[a] || 0)));
+    const allTotals = {};
+    for (const obj of [demIn, demOut, repIn, repOut]) {
+      for (const [k, v] of Object.entries(obj)) allTotals[k] = (allTotals[k] || 0) + v;
+    }
+    const allTypes = Object.keys(allTotals).sort((a, b) => allTotals[b] - allTotals[a]);
 
     // Short labels for the chart
     const shortNames = {
@@ -2627,16 +2633,28 @@ async function loadPartyFundraising() {
         trigger: 'axis',
         axisPointer: { type: 'shadow' },
         formatter: params => {
+          if (!params || !params.length) return '';
           let html = `<div style="font-weight:600;margin-bottom:4px">${params[0]?.name || ''}</div>`;
+          // Group by party, sum in-state + out-of-state
+          let demTotal = 0, repTotal = 0;
           params.forEach(p => {
-            html += `<div>${p.marker} ${p.seriesName}: <strong>${fmt$(p.value)}</strong></div>`;
+            if (p.seriesName.startsWith('Dem')) demTotal += p.value || 0;
+            if (p.seriesName.startsWith('Rep')) repTotal += p.value || 0;
           });
+          params.forEach(p => {
+            if (p.value) html += `<div>${p.marker} ${p.seriesName}: <strong>${fmt$(p.value)}</strong></div>`;
+          });
+          if (demTotal && repTotal) {
+            html += `<div style="border-top:1px solid #eee;margin-top:3px;padding-top:3px;font-size:11px;color:#666">
+              Dem total: ${fmt$(demTotal)} · Rep total: ${fmt$(repTotal)}</div>`;
+          }
           return html;
         },
       },
       legend: {
-        data: ['Democrat', 'Republican'],
+        data: ['Dem (in-state)', 'Dem (out of state)', 'Rep (in-state)', 'Rep (out of state)'],
         top: 0,
+        textStyle: { fontSize: IS_MOBILE ? 9 : 12 },
       },
       grid: {
         left: IS_MOBILE ? 50 : 70,
@@ -2662,16 +2680,32 @@ async function loadPartyFundraising() {
       },
       series: [
         {
-          name: 'Democrat',
+          name: 'Dem (in-state)',
           type: 'bar',
-          data: allTypes.map(t => demByType[t] || 0),
-          itemStyle: { color: 'rgba(37, 99, 235, 0.8)' },
+          stack: 'dem',
+          data: allTypes.map(t => demIn[t] || 0),
+          itemStyle: { color: '#2563eb' },
         },
         {
-          name: 'Republican',
+          name: 'Dem (out of state)',
           type: 'bar',
-          data: allTypes.map(t => repByType[t] || 0),
-          itemStyle: { color: 'rgba(220, 38, 38, 0.8)' },
+          stack: 'dem',
+          data: allTypes.map(t => demOut[t] || 0),
+          itemStyle: { color: '#93bbfd' },
+        },
+        {
+          name: 'Rep (in-state)',
+          type: 'bar',
+          stack: 'rep',
+          data: allTypes.map(t => repIn[t] || 0),
+          itemStyle: { color: '#dc2626' },
+        },
+        {
+          name: 'Rep (out of state)',
+          type: 'bar',
+          stack: 'rep',
+          data: allTypes.map(t => repOut[t] || 0),
+          itemStyle: { color: '#fca5a5' },
         },
       ],
     });
