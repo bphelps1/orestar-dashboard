@@ -1801,6 +1801,40 @@ footer a:hover { color: var(--color-accent); }
     font-size: 1.3rem;
   }
 
+  /* Multi-filer: compact cards */
+  .filer-comparison-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .filer-card {
+    padding: 12px 14px;
+  }
+  .filer-card-name {
+    font-size: 0.82rem;
+    margin-bottom: 6px;
+  }
+  .filer-card-stat-label {
+    font-size: 0.65rem;
+  }
+  .filer-card-stat-value {
+    font-size: 0.8rem;
+  }
+
+  /* Radar comparison table: scroll horizontally */
+  .radar-compare-table {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .radar-table th, .radar-table td {
+    font-size: 0.72rem;
+    padding: 4px 6px;
+    white-space: nowrap;
+  }
+  .radar-pct {
+    font-size: 0.62rem;
+  }
+
   /* Charts */
   .chart-box {
     margin-bottom: 36px;

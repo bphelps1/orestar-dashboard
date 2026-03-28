@@ -2351,6 +2351,7 @@ function renderOverviewMultiFiler(profiles) {
       });
     }
 
+    box.appendChild(tableDiv);
     renderRadarTable();
   }
 
