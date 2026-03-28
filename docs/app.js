@@ -2127,16 +2127,36 @@ function renderOverviewMultiFiler(profiles) {
     });
     const baseTypes = [...baseTypeSet].sort((a, b) => (baseTotals[b] || 0) - (baseTotals[a] || 0));
 
-    // Build percentage data per filer
-    const series = profiles.map((p, i) => {
+    // Build percentage data + dollar amounts per filer
+    const filerData = profiles.map((p, i) => {
       const rows = perFilerRows[i];
       const byBase = {};
+      const topDonorsByBase = {};
       let total = 0;
       rows.forEach(r => {
         const base = r.type.endsWith(" (out of state)") ? r.type.slice(0, -15) : r.type;
         byBase[base] = (byBase[base] || 0) + r.total;
         total += r.total;
+        // Merge top donors across in-state/out-of-state
+        if (r.top_donors) {
+          if (!topDonorsByBase[base]) topDonorsByBase[base] = {};
+          r.top_donors.forEach(d => {
+            topDonorsByBase[base][d.name] = (topDonorsByBase[base][d.name] || 0) + d.total;
+          });
+        }
       });
+      // Sort and take top 5 per type
+      for (const bt of Object.keys(topDonorsByBase)) {
+        topDonorsByBase[bt] = Object.entries(topDonorsByBase[bt])
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .map(([name, amt]) => ({ name, total: amt }));
+      }
+      return { byBase, topDonorsByBase, total };
+    });
+
+    const series = profiles.map((p, i) => {
+      const { byBase, total } = filerData[i];
       const color = PALETTE[i % PALETTE.length];
       return {
         name: p.name,
@@ -2202,6 +2222,48 @@ function renderOverviewMultiFiler(profiles) {
       },
       series,
     });
+
+    // Build comparison table below the radar chart
+    const box = el.closest("#overview-donut-box") || el.parentElement;
+    let existingTable = box.querySelector(".radar-compare-table");
+    if (existingTable) existingTable.remove();
+
+    const tableDiv = document.createElement("div");
+    tableDiv.className = "radar-compare-table";
+
+    // Header row: Donor Type | Filer1 | Filer2 | ...
+    let thtml = `<table class="data-table radar-table"><thead><tr>
+      <th>Donor Type</th>`;
+    profiles.forEach((p, i) => {
+      const color = PALETTE[i % PALETTE.length];
+      thtml += `<th style="color:${color}">${esc(p.name)}</th>`;
+    });
+    thtml += `</tr></thead><tbody>`;
+
+    // One row per base type
+    baseTypes.forEach(bt => {
+      thtml += `<tr><td class="radar-table-type">${esc(shortTypeName(bt))}</td>`;
+      profiles.forEach((p, i) => {
+        const amt = filerData[i].byBase[bt] || 0;
+        const donors = filerData[i].topDonorsByBase[bt] || [];
+        const donorTip = donors.length
+          ? donors.map(d => `${d.name}: ${fmtCompact$(d.total)}`).join('\n')
+          : '';
+        const tipAttr = donorTip ? ` title="${esc(donorTip)}" style="cursor:help"` : '';
+        thtml += `<td class="num"${tipAttr}>${fmtCompact$(amt)}</td>`;
+      });
+      thtml += `</tr>`;
+    });
+
+    // Total row
+    thtml += `<tr class="radar-table-total"><td>Total</td>`;
+    profiles.forEach((p, i) => {
+      thtml += `<td class="num">${fmtCompact$(filerData[i].total)}</td>`;
+    });
+    thtml += `</tr></tbody></table>`;
+
+    tableDiv.innerHTML = thtml;
+    box.appendChild(tableDiv);
   }
 
   document.getElementById("filer-comparison-grid").innerHTML = profiles.map(p => {
