@@ -348,6 +348,47 @@ function makeStackedAreaChart(containerId, byMonthData, byTypeRows) {
   // 9. Render custom legend (keep existing pattern)
   renderStackedAreaLegend(chart, baseTypes, baseTotals, grandTotal, byTypeRows);
 
+  // 10. Update legend totals when dataZoom changes (pan/zoom/slider)
+  function updateLegendForVisibleRange() {
+    const opt = chart.getOption();
+    const zoom = opt.dataZoom || [];
+    let startPct = 0, endPct = 100;
+    for (const dz of zoom) {
+      if (dz.start != null) startPct = dz.start;
+      if (dz.end != null) endPct = dz.end;
+    }
+    const startIdx = Math.floor(startPct / 100 * months.length);
+    const endIdx = Math.ceil(endPct / 100 * months.length);
+    const visibleMonths = months.slice(startIdx, endIdx);
+
+    const visTotals = {};
+    let visGrand = 0;
+    for (const m of visibleMonths) {
+      for (const base of baseTypes) {
+        const val = monthlyBaseData[m]?.[base]?.total || 0;
+        visTotals[base] = (visTotals[base] || 0) + val;
+        visGrand += val;
+      }
+    }
+
+    // Update legend item text
+    const box = el.closest("#overview-donut-box") || el.parentElement;
+    if (!box) return;
+    const items = box.querySelectorAll(".stacked-area-legend-item");
+    items.forEach((item, i) => {
+      const base = baseTypes[i];
+      if (!base) return;
+      const total = visTotals[base] || 0;
+      const pct = visGrand > 0 ? (total / visGrand * 100).toFixed(1) : "0.0";
+      const amtEl = item.querySelector(".legend-type-amount");
+      const pctEl = item.querySelector(".legend-type-pct");
+      if (amtEl) amtEl.textContent = fmt$(total);
+      if (pctEl) pctEl.textContent = `(${pct}%)`;
+    });
+  }
+
+  chart.on('dataZoom', updateLegendForVisibleRange);
+
   return chart;
 }
 
