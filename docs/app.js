@@ -19,6 +19,14 @@ const DATA = "data/aggregated";
 // ── ECharts — no global defaults needed (configured per-instance) ────────────
 const IS_MOBILE = window.innerWidth <= 768;
 
+/** Tooltip position: constrain horizontally within chart, free vertically */
+function tooltipPosition(point, params, dom, rect, size) {
+  let x = point[0] + 10;
+  if (x + size.contentSize[0] > size.viewSize[0]) x = point[0] - size.contentSize[0] - 10;
+  if (x < 0) x = 0;
+  return [x, point[1] - size.contentSize[1] / 2];
+}
+
 /** Initialize or re-initialize an ECharts instance on a DOM element */
 function initEChart(el) {
   let instance = echarts.getInstanceByDom(el);
@@ -216,9 +224,10 @@ function makeStackedAreaChart(containerId, byMonthData, byTypeRows) {
       trigger: 'axis',
       triggerOn: IS_MOBILE ? 'click' : 'mousemove',
       alwaysShowContent: false,
-      confine: true,
+      confine: false,
       axisPointer: { type: 'cross' },
-      extraCssText: IS_MOBILE ? 'max-width:260px;max-height:280px;overflow-y:auto;font-size:11px;' : '',
+      extraCssText: IS_MOBILE ? 'max-width:260px;font-size:11px;' : '',
+      position: tooltipPosition,
       formatter: function(params) {
         if (!params || !params.length) return '';
         const idx = params[0].dataIndex;
@@ -531,7 +540,7 @@ function makeSimplePieChart(containerId, typeRows) {
   chart.setOption({
     tooltip: {
       trigger: 'item',
-      confine: true,
+      position: tooltipPosition,
       formatter: '{b}: {c} ({d}%)',
     },
     series: [{
@@ -1229,7 +1238,7 @@ function makeBarChart(containerId, labels, values, label, color = "#3182ce") {
   chart.setOption({
     tooltip: {
       trigger: 'axis',
-      confine: true,
+      position: tooltipPosition,
       axisPointer: { type: 'shadow' },
       formatter: params => params[0] ? `${params[0].name}<br/>${fmt$(params[0].value)}` : '',
     },
@@ -1290,7 +1299,7 @@ function makeLineChart(containerId, labels, datasets) {
   chart.setOption({
     tooltip: {
       trigger: 'axis',
-      confine: true,
+      position: tooltipPosition,
       formatter: params => {
         let html = `<div style="font-weight:600;margin-bottom:4px">${params[0]?.axisValue || ''}</div>`;
         params.forEach(p => {
@@ -2736,7 +2745,7 @@ async function loadPartyFundraising() {
     chart.setOption({
       tooltip: {
         trigger: 'axis',
-        confine: true,
+        position: tooltipPosition,
         axisPointer: { type: 'shadow' },
         formatter: params => {
           if (!params || !params.length) return '';
