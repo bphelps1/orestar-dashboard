@@ -258,11 +258,11 @@ function makeStackedAreaChart(containerId, byMonthData, byTypeRows) {
       },
     },
     grid: {
-      left: IS_MOBILE ? 50 : 70,
-      right: 20,
+      left: IS_MOBILE ? 10 : 20,
+      right: IS_MOBILE ? 10 : 20,
       top: 10,
       bottom: IS_MOBILE ? 80 : 40,
-      containLabel: false,
+      containLabel: true,
     },
     xAxis: {
       type: 'category',
@@ -1295,10 +1295,11 @@ function makeLineChart(containerId, labels, datasets) {
       textStyle: { fontSize: IS_MOBILE ? 10 : 12 },
     },
     grid: {
-      left: IS_MOBILE ? 50 : 70,
-      right: 20,
+      left: IS_MOBILE ? 10 : 20,
+      right: IS_MOBILE ? 10 : 20,
       top: 35,
       bottom: IS_MOBILE ? 80 : 40,
+      containLabel: true,
     },
     xAxis: {
       type: 'category',
@@ -2748,13 +2749,16 @@ async function loadPartyFundraising() {
       legend: {
         data: ['Dem (in-state)', 'Dem (out of state)', 'Rep (in-state)', 'Rep (out of state)'],
         top: 0,
-        textStyle: { fontSize: IS_MOBILE ? 9 : 12 },
+        itemGap: IS_MOBILE ? 10 : 20,
+        padding: [0, 0, 8, 0],
+        textStyle: { fontSize: IS_MOBILE ? 9 : 11 },
       },
       grid: {
-        left: IS_MOBILE ? 50 : 70,
-        right: 20,
-        top: 35,
-        bottom: IS_MOBILE ? 80 : 80,
+        left: IS_MOBILE ? 10 : 20,
+        right: IS_MOBILE ? 10 : 20,
+        top: 55,
+        bottom: 10,
+        containLabel: true,
       },
       xAxis: {
         type: 'category',
