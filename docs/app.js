@@ -1448,6 +1448,7 @@ function renderOverviewGlobal() {
   document.getElementById("filer-comparison-grid").hidden = true;
   renderAcctSummary(null);  // No per-filer account summary in global view
   fitStatCards();
+  loadCampaignPulse();
 }
 
 // ── Discrepancy severity thresholds (absolute dollar difference) ──────────
@@ -1547,6 +1548,8 @@ function cohIndicatorHTML(profile) {
 }
 
 function renderOverviewSingleFiler(profile) {
+  const pulseEl = document.getElementById("campaign-pulse");
+  if (pulseEl) pulseEl.hidden = true;
   const hasDate = state.dateStart || state.dateEnd;
   if (hasDate) {
     const { totalIn, totalInKind, totalOut, cashOnHand, count } =
@@ -1596,6 +1599,8 @@ function renderOverviewSingleFiler(profile) {
 }
 
 function renderOverviewMultiFiler(profiles) {
+  const pulseEl = document.getElementById("campaign-pulse");
+  if (pulseEl) pulseEl.hidden = true;
   document.getElementById("stat-cards").hidden             = true;
   document.getElementById("filer-comparison-grid").hidden  = false;
   document.getElementById("overview-donut-box").hidden     = false;
@@ -2242,6 +2247,118 @@ function renderSearchResults(rows) {
       <td>${esc(r.purpose || "")}</td>
     </tr>`;
   }).join("");
+}
+
+// ── Campaign Pulse ──────────────────────────────────────────────────────
+let activitySnapshot = null;
+let pulseCurrentPeriod = "90d";
+const PULSE_ROWS = 5;
+
+async function loadCampaignPulse() {
+  try {
+    const resp = await fetch(`${DATA}/activity_snapshot.json`);
+    if (!resp.ok) return;
+    activitySnapshot = await resp.json();
+    const el = document.getElementById("campaign-pulse");
+    if (el) { el.hidden = false; renderPulsePeriod(pulseCurrentPeriod); }
+    // Wire up period toggle
+    const toggle = document.getElementById("pulse-period-toggle");
+    if (toggle) {
+      toggle.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-period]");
+        if (!btn) return;
+        toggle.querySelectorAll(".toggle-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        pulseCurrentPeriod = btn.dataset.period;
+        renderPulsePeriod(pulseCurrentPeriod);
+      });
+    }
+  } catch (e) { console.warn("Campaign Pulse load failed:", e); }
+}
+
+function renderPulsePeriod(periodKey) {
+  if (!activitySnapshot) return;
+  const period = activitySnapshot.periods[periodKey];
+  if (!period) return;
+  renderPulseRaising(period);
+  renderPulseMomentum(period);
+  renderPulseDonors(period);
+}
+
+function pulseEntryHTML(entry, valueHTML, extra = "") {
+  const partyClass = entry.party === "Democrat" ? "party-d" : entry.party === "Republican" ? "party-r" : "party-other";
+  const partyBadge = entry.party ? `<span class="pulse-entry-party ${partyClass}">${entry.party.charAt(0)}</span>` : "";
+  const slug = entry.slug || "";
+  return `<div class="pulse-entry" ${slug ? `data-slug="${slug}" onclick="selectFilerBySlug('${slug}')"` : ""}>
+    ${partyBadge}
+    <span class="pulse-entry-name" title="${entry.name || ''}">${entry.name || ''}</span>
+    <span class="pulse-entry-value">${valueHTML}</span>
+    ${extra}
+  </div>`;
+}
+
+function renderPulseRaising(data) {
+  const body = document.getElementById("pulse-raising-body");
+  if (!body) return;
+  let html = "";
+  const tiers = [
+    { key: "statewide", label: "Statewide" },
+    { key: "legislative", label: "Legislative" },
+    { key: "local", label: "Local" },
+  ];
+  for (const tier of tiers) {
+    const entries = (data.by_office_tier[tier.key] || []).slice(0, PULSE_ROWS);
+    if (!entries.length) continue;
+    html += `<div class="pulse-tier-label">${tier.label}</div>`;
+    for (const e of entries) {
+      html += pulseEntryHTML(e, "$" + Number(e.raised).toLocaleString("en-US", { maximumFractionDigits: 0 }));
+    }
+  }
+  body.innerHTML = html || '<div class="pulse-entry-meta">No data</div>';
+}
+
+function renderPulseMomentum(data) {
+  const body = document.getElementById("pulse-momentum-body");
+  if (!body) return;
+  let html = "";
+  const entries = (data.top_growth || []).slice(0, PULSE_ROWS * 2);
+  for (const e of entries) {
+    const growthText = e.is_new
+      ? `<span class="pulse-new-badge">New</span>`
+      : `<span class="pulse-growth-pct">+${e.growth_pct}%</span>`;
+    html += pulseEntryHTML(e,
+      "$" + Number(e.raised).toLocaleString("en-US", { maximumFractionDigits: 0 }),
+      growthText
+    );
+  }
+  body.innerHTML = html || '<div class="pulse-entry-meta">No data</div>';
+}
+
+function renderPulseDonors(data) {
+  const body = document.getElementById("pulse-donors-body");
+  if (!body) return;
+  let html = "";
+  const entries = (data.top_donors || []).slice(0, PULSE_ROWS * 2);
+  for (const e of entries) {
+    const meta = e.committees > 1 ? `<span class="pulse-entry-meta">${e.committees} cmtes</span>` : "";
+    html += `<div class="pulse-entry">
+      <span class="pulse-entry-name" title="${e.name}">${e.name}</span>
+      <span class="pulse-entry-value">$${Number(e.total).toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
+      ${meta}
+    </div>`;
+  }
+  body.innerHTML = html || '<div class="pulse-entry-meta">No data</div>';
+}
+
+function selectFilerBySlug(slug) {
+  // Navigate to the filer's page via the existing filer selector
+  if (!filerIndex) return;
+  const filer = filerIndex.find(f => f.slug === slug);
+  if (!filer) return;
+  // Clear existing selections and select this filer
+  state.selectedFilers = [filer];
+  // Trigger re-render
+  navigateToFiler(slug);
 }
 
 // ── Tab loaders map ───────────────────────────────────────────────────────────
