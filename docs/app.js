@@ -289,6 +289,8 @@ function makeStackedAreaChart(containerId, byMonthData, byTypeRows) {
         },
       }));
       chart.setOption({ series: newSeries });
+      // Re-trigger tooltip so it re-renders with the new selectedDonorTypeGroup
+      chart.dispatchAction({ type: 'showTip', seriesIndex: params.seriesIndex, dataIndex: params.dataIndex });
       // Update legend styles
       updateStackedAreaLegendStyles(el.parentElement || el.closest('#overview-donut-box'), baseTypes);
     }
