@@ -271,8 +271,12 @@ function makeStackedAreaChart(containerId, byMonthData, byTypeRows) {
   chart.setOption(option);
 
   // 7. Click handler for selecting a type
+  let _skipOutsideClick = false;
   chart.on('click', function(params) {
     if (params.componentType === 'series') {
+      _skipOutsideClick = true;
+      setTimeout(() => { _skipOutsideClick = false; }, 100);
+
       const clicked = params.seriesName;
       selectedDonorTypeGroup = selectedDonorTypeGroup === clicked ? null : clicked;
       // Update opacity
@@ -289,8 +293,14 @@ function makeStackedAreaChart(containerId, byMonthData, byTypeRows) {
         },
       }));
       chart.setOption({ series: newSeries });
-      // Re-trigger tooltip so it re-renders with the new selectedDonorTypeGroup
-      chart.dispatchAction({ type: 'showTip', seriesIndex: params.seriesIndex, dataIndex: params.dataIndex });
+      // Re-trigger tooltip after a tick so the formatter sees the new selection
+      setTimeout(() => {
+        chart.dispatchAction({
+          type: 'showTip',
+          seriesIndex: params.seriesIndex,
+          dataIndex: params.dataIndex,
+        });
+      }, 50);
       // Update legend styles
       updateStackedAreaLegendStyles(el.parentElement || el.closest('#overview-donut-box'), baseTypes);
     }
@@ -298,6 +308,7 @@ function makeStackedAreaChart(containerId, byMonthData, byTypeRows) {
 
   // 8. Dismiss tooltip when tapping outside chart
   document.addEventListener("click", function(e) {
+    if (_skipOutsideClick) return;
     if (!el.contains(e.target)) {
       chart.dispatchAction({ type: "hideTip" });
     }
