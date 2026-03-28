@@ -806,6 +806,9 @@ function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
       factors.push(`Single-cycle donor — all giving in one election cycle`);
     }
 
+    // Note how many cycles the donor has given in
+    factors.push(`Gave across ${giftCycles.size} election cycle${giftCycles.size !== 1 ? "s" : ""}`);
+
     // Normalize to 0-100
     score = Math.max(0, Math.min(Math.round(score), 100));
 
