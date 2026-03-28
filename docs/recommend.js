@@ -587,17 +587,23 @@ function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years
 
     // Comparable upside adjustment: if they gave MORE to a comparable,
     // weight toward that amount (but never reduce below the 5% increase).
-    // If the max gift is to a non-leadership filer, use a stronger blend:
-    // a non-leadership filer getting larger donations is a stronger signal
-    // of donor capacity (it's not about the title).
+    // The blend weight scales with the gap: a comparable gift of 5x the base
+    // is strong evidence of donor capacity and should pull the target up more
+    // than a modest gap. Non-leadership benchmarks get an additional boost.
     const compGifts = compDonorDetails.get(key) || [];
     const compMax = compGifts.length ? Math.max(...compGifts.map(g => g.amount)) : 0;
     const maxGift = compGifts.find(g => g.amount === compMax);
     const maxFromNonLeadership = maxGift && !maxGift.isLeadership;
     const hasUplift = compMax > target;
+    let compWeight = 0;
     if (hasUplift) {
-      // Stronger blend when max is from non-leadership (40%) vs leadership (30%)
-      const compWeight = maxFromNonLeadership ? 0.4 : 0.3;
+      // Scale blend weight by the gap ratio (capped at 60%)
+      const gapRatio = compMax / Math.max(target, 1);
+      if (gapRatio >= 4) compWeight = 0.55;
+      else if (gapRatio >= 2) compWeight = 0.45;
+      else compWeight = 0.35;
+      // Non-leadership max gets +5% weight (stronger signal of donor capacity)
+      if (maxFromNonLeadership) compWeight = Math.min(compWeight + 0.05, 0.60);
       target = Math.round((target * (1 - compWeight) + compMax * compWeight) * 100) / 100;
     }
 
@@ -623,8 +629,9 @@ function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years
       const upliftGifts = compGifts
         .filter(g => g.amount > lastCycleAmt * 1.05)
         .sort((a, b) => b.amount - a.amount);
-      const blendLabel = maxFromNonLeadership ? "40% weight — non-leadership benchmark" : "30% weight";
-      factors.push(`Comparable uplift (${blendLabel}):`);
+      const pct = Math.round(compWeight * 100);
+      const nlTag = maxFromNonLeadership ? " — non-leadership benchmark" : "";
+      factors.push(`Comparable uplift (${pct}% weight${nlTag}):`);
       upliftGifts.forEach(g => {
         const tag = g.isLeadership ? "" : " ★";
         factors.push(`  • ${g.filer}: ${fmt$(g.amount)}${tag}`);
