@@ -921,21 +921,26 @@ function displayResults(recommendations, repeatTargets, targetProfile, comparabl
   repeatSearchEl.addEventListener("input", () => renderFilteredRepeat());
   recSearchEl.addEventListener("input", () => renderFilteredRec());
 
-  // Wire up sort headers (remove old listeners by re-cloning)
-  document.querySelectorAll("#rec-table th.sortable").forEach(th => {
-    const clone = th.cloneNode(true);
-    th.parentNode.replaceChild(clone, th);
-    clone.addEventListener("click", () => {
-      const col = clone.dataset.col;
-      const curDir = clone.classList.contains("sort-asc") ? "asc" : clone.classList.contains("sort-desc") ? "desc" : null;
-      document.querySelectorAll("#rec-table th.sortable").forEach(t => t.classList.remove("sort-asc", "sort-desc"));
-      const newDir = curDir === "desc" ? "asc" : "desc";
-      clone.classList.add("sort-" + newDir);
-      window._sortCol = col;
-      window._sortDir = newDir;
-      renderFilteredRec();
+  // Wire up sort headers for both tables (remove old listeners by re-cloning)
+  function wireSortHeaders(tableId, sortColKey, sortDirKey, renderFn) {
+    document.querySelectorAll(`#${tableId} th.sortable`).forEach(th => {
+      const clone = th.cloneNode(true);
+      th.parentNode.replaceChild(clone, th);
+      clone.addEventListener("click", () => {
+        const col = clone.dataset.col;
+        const curDir = clone.classList.contains("sort-asc") ? "asc" : clone.classList.contains("sort-desc") ? "desc" : null;
+        document.querySelectorAll(`#${tableId} th.sortable`).forEach(t => t.classList.remove("sort-asc", "sort-desc"));
+        const newDir = curDir === "desc" ? "asc" : "desc";
+        clone.classList.add("sort-" + newDir);
+        window[sortColKey] = col;
+        window[sortDirKey] = newDir;
+        renderFn();
+      });
     });
-  });
+  }
+
+  wireSortHeaders("repeat-table", "_repeatSortCol", "_repeatSortDir", renderFilteredRepeat);
+  wireSortHeaders("rec-table", "_sortCol", "_sortDir", renderFilteredRec);
 
   // Wire up export (re-clone to avoid duplicate listeners)
   for (const id of ["export-csv", "export-xlsx", "export-repeat-csv", "export-repeat-xlsx", "export-full-csv", "export-full-xlsx"]) {
@@ -1036,10 +1041,25 @@ function toggleRepeatDetail(idx, btn) {
 }
 
 // ── Search filtering ──────────────────────────────────────────────────────
+function sortRows(rows, col, dir) {
+  return [...rows].sort((a, b) => {
+    let va = a[col], vb = b[col];
+    if (typeof va === "string") { va = va.toLowerCase(); vb = (vb || "").toLowerCase(); }
+    if (va < vb) return dir === "asc" ? -1 : 1;
+    if (va > vb) return dir === "asc" ? 1 : -1;
+    return 0;
+  });
+}
+
 function renderFilteredRepeat() {
   const q = (document.getElementById("repeat-search").value || "").trim().toLowerCase();
   let rows = window._repeatTargets || [];
   if (q) rows = rows.filter(r => r.donor.toLowerCase().includes(q));
+
+  const col = window._repeatSortCol || "target";
+  const dir = window._repeatSortDir || "desc";
+  rows = sortRows(rows, col, dir);
+
   renderRepeatDonors(rows);
 }
 
@@ -1050,13 +1070,7 @@ function renderFilteredRec() {
 
   const col = window._sortCol || "score";
   const dir = window._sortDir || "desc";
-  rows = [...rows].sort((a, b) => {
-    let va = a[col], vb = b[col];
-    if (typeof va === "string") { va = va.toLowerCase(); vb = (vb || "").toLowerCase(); }
-    if (va < vb) return dir === "asc" ? -1 : 1;
-    if (va > vb) return dir === "asc" ? 1 : -1;
-    return 0;
-  });
+  rows = sortRows(rows, col, dir);
 
   renderRecTable(rows);
 }
