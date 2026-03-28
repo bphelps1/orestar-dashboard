@@ -2228,41 +2228,85 @@ function renderOverviewMultiFiler(profiles) {
     const tableDiv = document.createElement("div");
     tableDiv.className = "radar-compare-table";
 
-    // Header row: Donor Type | Filer1 | Filer2 | ...
-    let thtml = `<table class="data-table radar-table"><thead><tr>
-      <th>Donor Type</th>`;
-    profiles.forEach((p, i) => {
-      const color = PALETTE[i % PALETTE.length];
-      thtml += `<th style="color:${color}">${esc(p.name)}</th>`;
-    });
-    thtml += `</tr></thead><tbody>`;
-
-    // One row per base type — store donor data for hover tooltips
-    const cellDonorData = []; // [{bt, filerIdx, donors}]
-    baseTypes.forEach(bt => {
-      thtml += `<tr><td class="radar-table-type">${esc(shortTypeName(bt))}</td>`;
+    // Build row data for sortable table
+    const tableRows = baseTypes.map(bt => {
+      const row = { type: bt, amounts: [], donors: [] };
       profiles.forEach((p, i) => {
-        const amt = filerData[i].byBase[bt] || 0;
-        const donors = filerData[i].topDonorsByBase[bt] || [];
-        const cellId = `radar-cell-${baseTypes.indexOf(bt)}-${i}`;
-        const hasdonors = donors.length > 0;
-        thtml += `<td class="num${hasdonors ? ' radar-cell-hover' : ''}" ${hasdonors ? `id="${cellId}" data-cell-idx="${cellDonorData.length}"` : ''}>${fmtCompact$(amt)}</td>`;
-        if (hasdonors) cellDonorData.push({ bt, filerName: p.name, donors });
+        row.amounts.push(filerData[i].byBase[bt] || 0);
+        row.donors.push(filerData[i].topDonorsByBase[bt] || []);
       });
-      thtml += `</tr>`;
+      return row;
     });
 
-    // Total row
-    thtml += `<tr class="radar-table-total"><td>Total</td>`;
-    profiles.forEach((p, i) => {
-      thtml += `<td class="num">${fmtCompact$(filerData[i].total)}</td>`;
-    });
-    thtml += `</tr></tbody></table>`;
+    let sortCol = -1; // -1 = type name, 0+ = filer index
+    let sortDir = "desc";
 
-    tableDiv.innerHTML = thtml;
-    box.appendChild(tableDiv);
+    function renderRadarTable() {
+      const sorted = [...tableRows].sort((a, b) => {
+        if (sortCol === -1) {
+          return sortDir === "asc"
+            ? a.type.localeCompare(b.type)
+            : b.type.localeCompare(a.type);
+        }
+        return sortDir === "asc"
+          ? a.amounts[sortCol] - b.amounts[sortCol]
+          : b.amounts[sortCol] - a.amounts[sortCol];
+      });
 
-    // Create a shared tooltip div for table hovers
+      let thtml = `<table class="data-table radar-table"><thead><tr>
+        <th class="sortable radar-sort" data-col="-1">Donor Type</th>`;
+      profiles.forEach((p, i) => {
+        const color = PALETTE[i % PALETTE.length];
+        thtml += `<th class="sortable radar-sort num" data-col="${i}" style="color:${color}">${esc(p.name)}</th>`;
+      });
+      thtml += `</tr></thead><tbody>`;
+
+      sorted.forEach(row => {
+        thtml += `<tr><td class="radar-table-type">${esc(shortTypeName(row.type))}</td>`;
+        profiles.forEach((p, i) => {
+          const amt = row.amounts[i];
+          const donors = row.donors[i];
+          const hasDonors = donors.length > 0;
+          thtml += `<td class="num${hasDonors ? ' radar-cell-hover' : ''}"${hasDonors ? ` data-bt="${esc(row.type)}" data-fi="${i}"` : ''}>${fmtCompact$(amt)}</td>`;
+        });
+        thtml += `</tr>`;
+      });
+
+      thtml += `<tr class="radar-table-total"><td>Total</td>`;
+      profiles.forEach((p, i) => {
+        thtml += `<td class="num">${fmtCompact$(filerData[i].total)}</td>`;
+      });
+      thtml += `</tr></tbody></table>`;
+
+      tableDiv.innerHTML = thtml;
+
+      // Mark current sort column
+      tableDiv.querySelectorAll(".radar-sort").forEach(th => {
+        const col = parseInt(th.dataset.col);
+        th.classList.remove("sort-asc", "sort-desc");
+        if (col === sortCol) th.classList.add("sort-" + sortDir);
+      });
+
+      // Wire sort clicks
+      tableDiv.querySelectorAll(".radar-sort").forEach(th => {
+        th.style.cursor = "pointer";
+        th.addEventListener("click", () => {
+          const col = parseInt(th.dataset.col);
+          if (col === sortCol) {
+            sortDir = sortDir === "desc" ? "asc" : "desc";
+          } else {
+            sortCol = col;
+            sortDir = col === -1 ? "asc" : "desc";
+          }
+          renderRadarTable();
+        });
+      });
+
+      // Wire hover tooltips
+      wireRadarTooltips();
+    }
+
+    // Create a shared tooltip div
     let radarTip = document.getElementById("radar-table-tip");
     if (!radarTip) {
       radarTip = document.createElement("div");
@@ -2271,37 +2315,42 @@ function renderOverviewMultiFiler(profiles) {
       document.body.appendChild(radarTip);
     }
 
-    // Wire hover tooltips on cells with donor data
-    tableDiv.querySelectorAll(".radar-cell-hover").forEach(cell => {
-      const idx = parseInt(cell.dataset.cellIdx);
-      const info = cellDonorData[idx];
-      if (!info) return;
+    function wireRadarTooltips() {
+      tableDiv.querySelectorAll(".radar-cell-hover").forEach(cell => {
+        const bt = cell.dataset.bt;
+        const fi = parseInt(cell.dataset.fi);
+        const row = tableRows.find(r => r.type === bt);
+        if (!row) return;
+        const donors = row.donors[fi] || [];
+        if (!donors.length) return;
 
-      cell.addEventListener("mouseenter", (e) => {
-        let html = `<div style="font-weight:600;margin-bottom:4px">Top ${shortTypeName(info.bt)} Donors</div>`;
-        html += `<div style="font-size:11px;color:#6b7280;margin-bottom:4px">${esc(info.filerName)}</div>`;
-        info.donors.forEach(d => {
-          html += `<div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;padding:1px 0">
-            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.name)}</span>
-            <span style="font-weight:500;white-space:nowrap">${fmtCompact$(d.total)}</span>
-          </div>`;
+        cell.addEventListener("mouseenter", () => {
+          let html = `<div style="font-weight:600;margin-bottom:4px">Top ${shortTypeName(bt)} Donors</div>`;
+          html += `<div style="font-size:11px;color:#6b7280;margin-bottom:4px">${esc(profiles[fi].name)}</div>`;
+          donors.forEach(d => {
+            html += `<div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;padding:1px 0">
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.name)}</span>
+              <span style="font-weight:500;white-space:nowrap">${fmtCompact$(d.total)}</span>
+            </div>`;
+          });
+          radarTip.innerHTML = html;
+          radarTip.hidden = false;
+          const rect = cell.getBoundingClientRect();
+          let left = rect.left;
+          let top = rect.bottom + 6;
+          if (left + 260 > window.innerWidth) left = window.innerWidth - 265;
+          if (left < 5) left = 5;
+          radarTip.style.left = left + "px";
+          radarTip.style.top = (top + window.scrollY) + "px";
         });
-        radarTip.innerHTML = html;
-        radarTip.hidden = false;
-        const rect = cell.getBoundingClientRect();
-        let left = rect.left;
-        let top = rect.bottom + 6;
-        // Keep within viewport horizontally
-        if (left + 260 > window.innerWidth) left = window.innerWidth - 265;
-        if (left < 5) left = 5;
-        radarTip.style.left = left + "px";
-        radarTip.style.top = (top + window.scrollY) + "px";
-      });
 
-      cell.addEventListener("mouseleave", () => {
-        radarTip.hidden = true;
+        cell.addEventListener("mouseleave", () => {
+          radarTip.hidden = true;
+        });
       });
-    });
+    }
+
+    renderRadarTable();
   }
 
   document.getElementById("filer-comparison-grid").innerHTML = profiles.map(p => {
