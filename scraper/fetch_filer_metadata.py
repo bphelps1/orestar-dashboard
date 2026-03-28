@@ -266,8 +266,12 @@ def main():
         filer_ids = get_all_filer_ids()
 
     # Filter out already-cached (unless --force)
+    # Treat "Not Found" entries as uncached — the scraper fix may now find them
     if not args.force:
-        filer_ids = [fid for fid in filer_ids if fid not in cache]
+        filer_ids = [
+            fid for fid in filer_ids
+            if fid not in cache or cache[fid].get("committee_type") in ("Not Found", "")
+        ]
 
     all_remaining = len(filer_ids)
     log.info("Filers to scrape: %d (of which %d already cached)", all_remaining, len(cache))
