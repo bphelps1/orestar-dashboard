@@ -2639,6 +2639,19 @@ async function loadPartyFundraising() {
     const allTypes = [...new Set([...Object.keys(demByType), ...Object.keys(repByType)])];
     allTypes.sort((a, b) => ((demByType[b] || 0) + (repByType[b] || 0)) - ((demByType[a] || 0) + (repByType[a] || 0)));
 
+    // Shorten long type names for the chart
+    const shortNames = {
+      "Business Entity": "Business",
+      "Political Committee": "Political Cmte",
+      "Individual": "Individual",
+      "Other": "Other",
+      "Labor Organization": "Labor",
+      "Candidate & Immediate Family": "Candidate/Family",
+      "Unregistered Committee": "Unreg. Cmte",
+      "Political Party Committee": "Party Cmte",
+    };
+    const displayLabels = allTypes.map(t => shortNames[t] || t);
+
     const ctx = document.getElementById("chart-party-fundraising");
     if (!ctx) return;
     if (ctx._chart) ctx._chart.destroy();
@@ -2646,7 +2659,7 @@ async function loadPartyFundraising() {
     const chart = new Chart(ctx, {
       type: "bar",
       data: {
-        labels: allTypes,
+        labels: displayLabels,
         datasets: [
           {
             label: "Democrat",
@@ -2677,7 +2690,7 @@ async function loadPartyFundraising() {
         scales: {
           x: {
             grid: { display: false },
-            ticks: { maxRotation: 45, font: { size: 11 } },
+            ticks: { maxRotation: 60, font: { size: 10 } },
           },
           y: { ticks: { callback: v => fmt$(v) }, grid: { color: "#e2e8f0" } },
         },
