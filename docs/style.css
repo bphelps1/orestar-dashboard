@@ -969,11 +969,15 @@ main {
 /* ── ECharts Containers ──────────────────────────────────────────────── */
 .echart-container {
   width: 100%;
-  height: 450px;
+  height: 400px;
 }
 .echart-container-tall {
   width: 100%;
-  height: 550px;
+  height: 500px;
+}
+.echart-container-compact {
+  width: 100%;
+  height: 350px;
 }
 
 /* ── Multi-Chart Layout (ECharts multi-filer) ────────────────────────── */
@@ -1032,10 +1036,13 @@ main {
 @media (max-width: 768px) {
   .overview-charts { grid-template-columns: 1fr; overflow: visible; }
   .echart-container {
-    height: 320px;
+    height: 300px;
   }
   .echart-container-tall {
-    height: 400px;
+    height: 380px;
+  }
+  .echart-container-compact {
+    height: 280px;
   }
 }
 

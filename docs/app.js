@@ -2716,7 +2716,7 @@ async function loadPartyFundraising() {
 
     const el = document.getElementById("chart-party-fundraising");
     if (!el) return;
-    el.className = "echart-container";
+    el.className = "echart-container-compact";
 
     // Dispose existing
     const existing = echarts.getInstanceByDom(el);
