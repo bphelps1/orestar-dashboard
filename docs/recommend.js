@@ -610,9 +610,12 @@ function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years
     });
   }
 
+  // Filter out donors with target below $500
+  const filtered = results.filter(r => r.target >= 500);
+
   // Sort by target descending
-  results.sort((a, b) => b.target - a.target);
-  return results;
+  filtered.sort((a, b) => b.target - a.target);
+  return filtered;
 }
 
 // ── Step 4b: Score new donors ─────────────────────────────────────────────
@@ -854,13 +857,23 @@ function displayResults(recommendations, repeatTargets, targetProfile, comparabl
   const tierACnt = recommendations.filter(r => r.tier === "A").length;
   const summaryEl = document.getElementById("results-summary");
   summaryEl.innerHTML = `
-    <div class="summary-card"><span class="sc-label">Repeat Donors</span><br><span class="sc-value">${fmtNum(repeatTargets.length)}</span></div>
-    <div class="summary-card"><span class="sc-label">Repeat Donor Target</span><br><span class="sc-value">${fmt$(repeatRemaining)}</span></div>
+    <div class="summary-card"><span class="sc-label">Donor Targets</span><br><span class="sc-value">${fmtNum(repeatTargets.length)}</span></div>
+    <div class="summary-card"><span class="sc-label">Donor Target Total</span><br><span class="sc-value">${fmt$(repeatRemaining)}</span></div>
     <div class="summary-card"><span class="sc-label">New Prospects</span><br><span class="sc-value">${fmtNum(recommendations.length)}</span></div>
     <div class="summary-card"><span class="sc-label">New Prospect Target</span><br><span class="sc-value">${fmt$(newRemaining)}</span></div>
     <div class="summary-card"><span class="sc-label">Comparable Filers</span><br><span class="sc-value">${fmtNum(comparables.length)}</span></div>
     <div class="summary-card"><span class="sc-label">Total Fundraising Target</span><br><span class="sc-value">${fmt$(repeatRemaining + newRemaining)}</span></div>
   `;
+
+  // Wire up tabs
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+      btn.classList.add("active");
+      document.getElementById(btn.dataset.tab).classList.add("active");
+    });
+  });
 
   // Store for filtering/sorting/export
   window._recommendations = recommendations;
@@ -1095,7 +1108,7 @@ function exportData(format, scope = "new") {
   const cycleLabel = cycle ? `${cycle - 1}-${cycle}` : "";
 
   const repeatRows = repeats.map(r => ({
-    "Type": "Repeat Donor",
+    "Type": "Donor Target",
     "Donor Name": r.donor,
     "Filer": target ? target.name : "",
     "Cycle": cycleLabel,
@@ -1132,7 +1145,7 @@ function exportData(format, scope = "new") {
   let fileLabel;
   if (scope === "repeat") {
     exportRows = repeatRows;
-    fileLabel = "repeat_donors";
+    fileLabel = "donor_targets";
   } else if (scope === "new") {
     exportRows = newRows;
     fileLabel = "new_prospects";
@@ -1173,7 +1186,7 @@ function exportData(format, scope = "new") {
       // Separate sheets for repeat and new
       if (repeatRows.length) {
         const ws1 = XLSX.utils.json_to_sheet(repeatRows);
-        XLSX.utils.book_append_sheet(wb, ws1, "Repeat Donors");
+        XLSX.utils.book_append_sheet(wb, ws1, "Donor Targets");
       }
       if (newRows.length) {
         const ws2 = XLSX.utils.json_to_sheet(newRows);
@@ -1181,7 +1194,7 @@ function exportData(format, scope = "new") {
       }
     } else {
       const ws = XLSX.utils.json_to_sheet(exportRows);
-      XLSX.utils.book_append_sheet(wb, ws, scope === "repeat" ? "Repeat Donors" : "New Prospects");
+      XLSX.utils.book_append_sheet(wb, ws, scope === "repeat" ? "Donor Targets" : "New Prospects");
     }
     XLSX.writeFile(wb, `${fileLabel}_${target.slug}_${cycle}.xlsx`);
   }
