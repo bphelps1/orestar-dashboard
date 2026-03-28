@@ -395,31 +395,22 @@
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
 
-/* ── Column filter inputs ─────────────────────────────────────────────── */
-.filter-row th {
-  padding: 4px 6px !important;
-  background: var(--color-surface);
+/* ── Table search bar ─────────────────────────────────────────────────── */
+.table-search-bar {
+  margin-bottom: 12px;
 }
-.col-filter {
+.table-search {
   width: 100%;
-  padding: 4px 6px;
+  max-width: 360px;
+  padding: 8px 12px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
-  font-size: 0.75rem;
-  background: #fff;
-  box-sizing: border-box;
+  font-size: 0.9rem;
 }
-.col-filter:focus {
+.table-search:focus {
   outline: none;
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px rgba(43,108,176,0.15);
-}
-.col-filter.num {
-  min-width: 60px;
-}
-select.col-filter {
-  padding: 4px 4px;
-  cursor: pointer;
+  box-shadow: 0 0 0 3px rgba(43,108,176,0.15);
 }
 
 /* ── Responsive ─────────────────────────────────────────────────────────── */

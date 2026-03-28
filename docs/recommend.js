@@ -549,6 +549,9 @@ function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years
 
     const cycleNums = Object.keys(donor.cycles).map(Number).sort((a, b) => a - b);
 
+    // Single-cycle donors must also have given to comparable candidates
+    if (cycleNums.length < 2 && !compDonorDetails.has(key)) continue;
+
     const currentCycleAmt = donor.cycles[cycle] || 0;
     const prevCycles = cycleNums.filter(c => c < cycle);
 
@@ -923,8 +926,13 @@ function displayResults(recommendations, repeatTargets, targetProfile, comparabl
   // Render new donor recommendations table
   renderRecTable(recommendations);
 
-  // Wire up column filters for both tables
-  wireColumnFilters();
+  // Wire up search bars
+  const repeatSearchEl = document.getElementById("repeat-search");
+  const recSearchEl = document.getElementById("rec-search");
+  repeatSearchEl.value = "";
+  recSearchEl.value = "";
+  repeatSearchEl.addEventListener("input", () => renderFilteredRepeat());
+  recSearchEl.addEventListener("input", () => renderFilteredRec());
 
   // Wire up sort headers (remove old listeners by re-cloning)
   document.querySelectorAll("#rec-table th.sortable").forEach(th => {
@@ -1040,80 +1048,18 @@ function toggleRepeatDetail(idx, btn) {
   tr.after(detailRow);
 }
 
-// ── Column filter system ──────────────────────────────────────────────────
-function getColumnFilters(tableName) {
-  const filters = {};
-  document.querySelectorAll(`.col-filter[data-table="${tableName}"]`).forEach(el => {
-    const val = (el.value || "").trim();
-    if (val) filters[el.dataset.key] = val;
-  });
-  return filters;
-}
-
-function matchesFilter(value, filter, key) {
-  if (!filter) return true;
-  const f = filter.toLowerCase();
-  const s = String(value ?? "").toLowerCase();
-
-  // Numeric comparison: support >, <, >=, <=, e.g. ">500"
-  const numMatch = filter.match(/^([><]=?)\s*\$?([\d,.]+)$/);
-  if (numMatch) {
-    const op = numMatch[1];
-    const threshold = parseFloat(numMatch[2].replace(/,/g, ""));
-    const num = typeof value === "number" ? value : parseFloat(String(value).replace(/[$,]/g, ""));
-    if (isNaN(num)) return false;
-    if (op === ">") return num > threshold;
-    if (op === ">=") return num >= threshold;
-    if (op === "<") return num < threshold;
-    if (op === "<=") return num <= threshold;
-  }
-
-  // Text match (substring)
-  return s.includes(f);
-}
-
-function applyColumnFilters(rows, filters) {
-  if (!Object.keys(filters).length) return rows;
-  return rows.filter(row => {
-    for (const [key, val] of Object.entries(filters)) {
-      if (!matchesFilter(row[key], val, key)) return false;
-    }
-    return true;
-  });
-}
-
-function wireColumnFilters() {
-  // Reset all filter values
-  document.querySelectorAll(".col-filter").forEach(el => { el.value = ""; });
-
-  // Wire repeat-table filters
-  document.querySelectorAll('.col-filter[data-table="repeat"]').forEach(el => {
-    const evName = el.tagName === "SELECT" ? "change" : "input";
-    const clone = el.cloneNode(true);
-    el.parentNode.replaceChild(clone, el);
-    clone.addEventListener(evName, () => renderFilteredRepeat());
-  });
-
-  // Wire rec-table filters
-  document.querySelectorAll('.col-filter[data-table="rec"]').forEach(el => {
-    const evName = el.tagName === "SELECT" ? "change" : "input";
-    const clone = el.cloneNode(true);
-    el.parentNode.replaceChild(clone, el);
-    clone.addEventListener(evName, () => renderFilteredRec());
-  });
-}
-
+// ── Search filtering ──────────────────────────────────────────────────────
 function renderFilteredRepeat() {
-  const filters = getColumnFilters("repeat");
+  const q = (document.getElementById("repeat-search").value || "").trim().toLowerCase();
   let rows = window._repeatTargets || [];
-  rows = applyColumnFilters(rows, filters);
+  if (q) rows = rows.filter(r => r.donor.toLowerCase().includes(q));
   renderRepeatDonors(rows);
 }
 
 function renderFilteredRec() {
-  const filters = getColumnFilters("rec");
+  const q = (document.getElementById("rec-search").value || "").trim().toLowerCase();
   let rows = window._recommendations || [];
-  rows = applyColumnFilters(rows, filters);
+  if (q) rows = rows.filter(r => r.donor.toLowerCase().includes(q));
 
   const col = window._sortCol || "score";
   const dir = window._sortDir || "desc";

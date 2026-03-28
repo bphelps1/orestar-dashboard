@@ -101,8 +101,11 @@
             <button class="btn-small" id="export-repeat-xlsx">Excel</button>
           </div>
         </div>
+        <div class="table-search-bar">
+          <input type="search" id="repeat-search" class="table-search" placeholder="Search donors…" />
+        </div>
         <div class="table-wrapper">
-          <table id="repeat-table" class="data-table filterable-table">
+          <table id="repeat-table" class="data-table">
             <thead>
               <tr>
                 <th>#</th>
@@ -114,24 +117,6 @@
                 <th class="num">Remaining</th>
                 <th>Consistency</th>
                 <th>History</th>
-              </tr>
-              <tr class="filter-row">
-                <th></th>
-                <th><input type="search" class="col-filter" data-table="repeat" data-key="donor" placeholder="Filter…" /></th>
-                <th><input type="search" class="col-filter num" data-table="repeat" data-key="prev_cycles" placeholder="Filter…" /></th>
-                <th><input type="search" class="col-filter num" data-table="repeat" data-key="last_cycle_amt" placeholder="Filter…" /></th>
-                <th><input type="search" class="col-filter num" data-table="repeat" data-key="target" placeholder="Filter…" /></th>
-                <th><input type="search" class="col-filter num" data-table="repeat" data-key="current_cycle_amt" placeholder="Filter…" /></th>
-                <th><input type="search" class="col-filter num" data-table="repeat" data-key="remaining" placeholder="Filter…" /></th>
-                <th>
-                  <select class="col-filter" data-table="repeat" data-key="consistency">
-                    <option value="">All</option>
-                    <option value="high">High</option>
-                    <option value="medium">Med</option>
-                    <option value="low">Low</option>
-                  </select>
-                </th>
-                <th></th>
               </tr>
             </thead>
             <tbody id="repeat-tbody"></tbody>
@@ -151,8 +136,11 @@
         </div>
       </div>
 
+      <div class="table-search-bar">
+        <input type="search" id="rec-search" class="table-search" placeholder="Search donors…" />
+      </div>
       <div class="table-wrapper">
-        <table id="rec-table" class="data-table filterable-table">
+        <table id="rec-table" class="data-table">
           <thead>
             <tr>
               <th>#</th>
@@ -164,24 +152,6 @@
               <th class="sortable num" data-col="remaining_ask">Remaining Ask</th>
               <th class="sortable num" data-col="comp_range">Comparable Range</th>
               <th>Why Recommended</th>
-            </tr>
-            <tr class="filter-row">
-              <th></th>
-              <th><input type="search" class="col-filter" data-table="rec" data-key="donor" placeholder="Filter…" /></th>
-              <th><input type="search" class="col-filter num" data-table="rec" data-key="score" placeholder="Filter…" /></th>
-              <th>
-                <select class="col-filter" data-table="rec" data-key="tier">
-                  <option value="">All</option>
-                  <option value="A">A</option>
-                  <option value="B">B</option>
-                  <option value="C">C</option>
-                </select>
-              </th>
-              <th><input type="search" class="col-filter num" data-table="rec" data-key="already_given" placeholder="Filter…" /></th>
-              <th><input type="search" class="col-filter num" data-table="rec" data-key="target_ask" placeholder="Filter…" /></th>
-              <th><input type="search" class="col-filter num" data-table="rec" data-key="remaining_ask" placeholder="Filter…" /></th>
-              <th><input type="search" class="col-filter num" data-table="rec" data-key="comp_range" placeholder="Filter…" /></th>
-              <th></th>
             </tr>
           </thead>
           <tbody id="rec-tbody"></tbody>
