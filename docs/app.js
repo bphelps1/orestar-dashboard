@@ -2091,32 +2091,110 @@ function renderOverviewMultiFiler(profiles) {
   document.getElementById("overview-timeline-box").hidden  = false;
 
   document.getElementById("overview-donut-title").textContent =
-    "Contributions by Donor Type";
+    "Funding Mix Comparison";
 
   const hasDate = state.dateStart || state.dateEnd;
 
-  // Build one chart per filer, stacked vertically
-  buildMultiChartBox(profiles);
+  // Build radar chart comparing donor type percentages across filers
+  resetChartBox();
+  const el = document.getElementById("chart-contributor-type");
+  if (el) {
+    el.className = "echart-container";
+    const chart = initEChart(el);
 
-  // Multi-chart-row is already full-width via CSS (flex-direction: column)
+    // Collect per-filer type data, merge to base types
+    const perFilerRows = profiles.map(p => hasDate && p.by_contributor_type_by_month
+      ? mergeTypeByMonth(p.by_contributor_type_by_month)
+      : hasDate
+        ? mergeTypeByYear(p.by_contributor_type_by_year || {}, yearsInRange())
+        : (p.by_contributor_type || []));
 
-  // Collect per-filer type rows
-  const perFilerRows = profiles.map(p => hasDate && p.by_contributor_type_by_month
-    ? mergeTypeByMonth(p.by_contributor_type_by_month)
-    : hasDate
-      ? mergeTypeByYear(p.by_contributor_type_by_year || {}, yearsInRange())
-      : (p.by_contributor_type || []));
+    // Get all base types across all filers
+    const baseTypeSet = new Set();
+    perFilerRows.forEach(rows => {
+      rows.forEach(r => {
+        const base = r.type.endsWith(" (out of state)") ? r.type.slice(0, -15) : r.type;
+        baseTypeSet.add(base);
+      });
+    });
+    // Sort by total across all filers
+    const baseTotals = {};
+    perFilerRows.forEach(rows => {
+      rows.forEach(r => {
+        const base = r.type.endsWith(" (out of state)") ? r.type.slice(0, -15) : r.type;
+        baseTotals[base] = (baseTotals[base] || 0) + r.total;
+      });
+    });
+    const baseTypes = [...baseTypeSet].sort((a, b) => (baseTotals[b] || 0) - (baseTotals[a] || 0));
 
-  profiles.forEach((p, i) => {
-    const byTypeRows = perFilerRows[i];
-    if (byTypeRows.length) {
-      if (p.by_contributor_type_by_month) {
-        makeStackedAreaChart(`chart-type-${i}`, p.by_contributor_type_by_month, byTypeRows);
-      } else {
-        makeSimplePieChart(`chart-type-${i}`, byTypeRows);
-      }
-    }
-  });
+    // Build percentage data per filer
+    const series = profiles.map((p, i) => {
+      const rows = perFilerRows[i];
+      const byBase = {};
+      let total = 0;
+      rows.forEach(r => {
+        const base = r.type.endsWith(" (out of state)") ? r.type.slice(0, -15) : r.type;
+        byBase[base] = (byBase[base] || 0) + r.total;
+        total += r.total;
+      });
+      const color = PALETTE[i % PALETTE.length];
+      return {
+        name: p.name,
+        type: 'radar',
+        symbol: 'circle',
+        symbolSize: 6,
+        lineStyle: { width: 2, color },
+        itemStyle: { color },
+        areaStyle: { color, opacity: 0.15 },
+        data: [{
+          value: baseTypes.map(bt => total > 0 ? Math.round(byBase[bt] || 0) / total * 100 : 0),
+          name: p.name,
+        }],
+      };
+    });
+
+    chart.setOption({
+      tooltip: {
+        trigger: 'item',
+        position: tooltipPosition,
+        formatter: function(params) {
+          const name = params.name;
+          const values = params.value;
+          let html = `<div style="font-weight:600;margin-bottom:4px">${name}</div>`;
+          baseTypes.forEach((bt, i) => {
+            if (values[i] > 0) {
+              html += `<div style="display:flex;justify-content:space-between;gap:12px;font-size:12px">
+                <span>${shortTypeName(bt)}</span><span style="font-weight:500">${values[i].toFixed(1)}%</span>
+              </div>`;
+            }
+          });
+          return html;
+        },
+      },
+      legend: {
+        data: profiles.map(p => p.name),
+        bottom: 0,
+        textStyle: { fontSize: IS_MOBILE ? 9 : 12 },
+      },
+      radar: {
+        indicator: baseTypes.map(bt => ({
+          name: shortTypeName(bt),
+          max: 100,
+        })),
+        shape: 'polygon',
+        radius: IS_MOBILE ? '55%' : '65%',
+        center: ['50%', '45%'],
+        axisName: {
+          fontSize: IS_MOBILE ? 9 : 11,
+          color: '#6b7280',
+        },
+        splitArea: { areaStyle: { color: ['#fff', '#f9fafb'] } },
+        splitLine: { lineStyle: { color: '#e5e7eb' } },
+        axisLine: { lineStyle: { color: '#e5e7eb' } },
+      },
+      series,
+    });
+  }
 
   document.getElementById("filer-comparison-grid").innerHTML = profiles.map(p => {
     const hasDate = state.dateStart || state.dateEnd;
