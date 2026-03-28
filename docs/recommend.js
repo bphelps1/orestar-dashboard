@@ -541,11 +541,21 @@ function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years
     }
   }
 
+  // Build set of candidate filer names for exclusion
+  const candidateFilerNames = new Set();
+  if (filerIndex) {
+    for (const f of filerIndex) candidateFilerNames.add(f.name.toLowerCase());
+  }
+
   const results = [];
 
   for (const [key, donor] of donorHistory) {
     // Skip aggregated/non-individual entries
     if (isDonorExcluded(donor.name)) continue;
+
+    // Skip candidate filers (e.g. "Kate Lieber for State Senate (20136)")
+    const nameNoId = donor.name.replace(/\s*\(\d+\)\s*$/, "").toLowerCase();
+    if (candidateFilerNames.has(key) || candidateFilerNames.has(nameNoId)) continue;
 
     const cycleNums = Object.keys(donor.cycles).map(Number).sort((a, b) => a - b);
 
@@ -799,15 +809,22 @@ function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
       factors.push(`One-time donor (1 candidate, 1 year)`);
     }
 
-    // Heavy penalty: single-cycle donors (all giving in one 2-year cycle)
+    // Compute distinct election cycles (2-year periods) from year-level data
     const giftCycles = new Set(allYearGifts.map(yr => yr % 2 === 0 ? yr : yr + 1));
-    if (giftCycles.size <= 1) {
+    const numCycles = giftCycles.size;
+
+    // Heavy penalty: single-cycle donors (all giving in one 2-year cycle)
+    if (numCycles <= 1) {
       score -= 25;
-      factors.push(`Single-cycle donor — all giving in one election cycle`);
+      factors.push(`Single-cycle donor — all comparable giving in one election cycle`);
     }
 
     // Note how many cycles the donor has given in
-    factors.push(`Gave across ${giftCycles.size} election cycle${giftCycles.size !== 1 ? "s" : ""}`);
+    if (numCycles > 0) {
+      const sortedCycles = [...giftCycles].sort((a, b) => a - b);
+      const cycleLabels = sortedCycles.map(c => `${c - 1}–${c}`).join(", ");
+      factors.push(`Active in ${numCycles} election cycle${numCycles !== 1 ? "s" : ""}: ${cycleLabels}`);
+    }
 
     // Normalize to 0-100
     score = Math.max(0, Math.min(Math.round(score), 100));

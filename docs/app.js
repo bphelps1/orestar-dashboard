@@ -1690,7 +1690,6 @@ async function loadDonors() {
   if (n === 0) {
     document.getElementById("donors-global-view").hidden      = false;
     document.getElementById("donors-multi-view").hidden       = true;
-    document.getElementById("untapped-donors-section").hidden = true;
     document.getElementById("donors-view-toggle").hidden      = false;
 
     // Hide year selector when date range is active (date range takes precedence)
@@ -1713,7 +1712,6 @@ async function loadDonors() {
     const profile = await loadFilerProfile(state.selectedFilers[0].slug);
     document.getElementById("donors-global-view").hidden      = false;
     document.getElementById("donors-multi-view").hidden       = true;
-    document.getElementById("untapped-donors-section").hidden = false;
     document.getElementById("donors-view-toggle").hidden      = false;
     document.getElementById("donor-year-group").hidden        = true;
 
@@ -1747,24 +1745,12 @@ async function loadDonors() {
       ], searchEl);
     }
 
-    // Untapped: global top donors (date-filtered) not in this filer's donor list
-    const globalDonors = years
-      ? mergeByYear(donorsData.by_year || {}, years)
-      : (donorsData.all_time || []);
-    const filerDonorNames = new Set(allTimeDonors.map(r => r.name.toLowerCase()));
-    const untapped = globalDonors.filter(r => !filerDonorNames.has(r.name.toLowerCase()));
-    buildSortableTable("table-untapped", untapped, [
-      { key: "name",  label: "Donor", linkDonor: true },
-      { key: "total", label: "Global Total ($)", fmt: fmt$, cls: "num" },
-    ]);
-
   } else {
     // Multi-filer: pivot table
     donorsViewMode = "summary";
     document.getElementById("donors-view-toggle").hidden      = true;
     document.getElementById("donors-global-view").hidden      = true;
     document.getElementById("donors-multi-view").hidden       = false;
-    document.getElementById("untapped-donors-section").hidden = true;
 
     const profiles = await Promise.all(state.selectedFilers.map(f => loadFilerProfile(f.slug)));
     const filerNames = profiles.map(p => p.name);
