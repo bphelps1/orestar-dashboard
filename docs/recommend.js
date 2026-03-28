@@ -360,8 +360,9 @@ async function findComparables(targetProfile, targetFiler, cycle) {
       if (fTier === targetTier) similarity += 10;
       else if (Math.abs(fTier - targetTier) === 1) similarity += 5;
     } else if (isTargetLeadership && fTier === 0) {
-      // Target is leadership but comparable is not — mild penalty
-      similarity -= 5;
+      // Target is leadership, comparable is not — no penalty.
+      // Non-leadership filers with bigger donations are a strong signal
+      // of donor capacity and should be included in comparables.
     } else if (!isTargetLeadership && fTier > 0) {
       // Target is NOT leadership but comparable IS — bigger penalty
       similarity -= 15;
@@ -534,10 +535,11 @@ function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years
       }
     }
     // Store per-filer max cycle amount for each donor
+    const compIsLeadership = (comp.leadership_tier || 0) > 0;
     for (const [key, cyMap] of compDonorCycles) {
       const maxCy = Math.max(...Object.values(cyMap));
       if (!compDonorDetails.has(key)) compDonorDetails.set(key, []);
-      compDonorDetails.get(key).push({ filer: comp.name, amount: maxCy });
+      compDonorDetails.get(key).push({ filer: comp.name, amount: maxCy, isLeadership: compIsLeadership });
     }
   }
 
@@ -584,13 +586,19 @@ function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years
     let target = Math.round(lastCycleAmt * 1.05 * 100) / 100;
 
     // Comparable upside adjustment: if they gave MORE to a comparable,
-    // weight toward that amount (but never reduce below the 5% increase)
+    // weight toward that amount (but never reduce below the 5% increase).
+    // If the max gift is to a non-leadership filer, use a stronger blend:
+    // a non-leadership filer getting larger donations is a stronger signal
+    // of donor capacity (it's not about the title).
     const compGifts = compDonorDetails.get(key) || [];
     const compMax = compGifts.length ? Math.max(...compGifts.map(g => g.amount)) : 0;
+    const maxGift = compGifts.find(g => g.amount === compMax);
+    const maxFromNonLeadership = maxGift && !maxGift.isLeadership;
     const hasUplift = compMax > target;
     if (hasUplift) {
-      // Blend: 70% base target, 30% comparable max (upside only)
-      target = Math.round((target * 0.7 + compMax * 0.3) * 100) / 100;
+      // Stronger blend when max is from non-leadership (40%) vs leadership (30%)
+      const compWeight = maxFromNonLeadership ? 0.4 : 0.3;
+      target = Math.round((target * (1 - compWeight) + compMax * compWeight) * 100) / 100;
     }
 
     const remaining = Math.max(0, Math.round((target - currentCycleAmt) * 100) / 100);
@@ -615,9 +623,11 @@ function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years
       const upliftGifts = compGifts
         .filter(g => g.amount > lastCycleAmt * 1.05)
         .sort((a, b) => b.amount - a.amount);
-      factors.push(`Comparable uplift from:`);
+      const blendLabel = maxFromNonLeadership ? "40% weight — non-leadership benchmark" : "30% weight";
+      factors.push(`Comparable uplift (${blendLabel}):`);
       upliftGifts.forEach(g => {
-        factors.push(`  • ${g.filer}: ${fmt$(g.amount)}`);
+        const tag = g.isLeadership ? "" : " ★";
+        factors.push(`  • ${g.filer}: ${fmt$(g.amount)}${tag}`);
       });
     } else if (compGifts.length > 0) {
       // Show top comparable gifts even without uplift for context
