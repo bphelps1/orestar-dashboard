@@ -1043,6 +1043,12 @@ main {
   border-top: 2px solid var(--color-border);
   border-bottom: none;
 }
+.radar-pct {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  font-weight: 400;
+  margin-left: 2px;
+}
 .radar-cell-hover {
   cursor: help;
   text-decoration: underline dotted var(--color-text-light);

@@ -2265,9 +2265,10 @@ function renderOverviewMultiFiler(profiles) {
         thtml += `<tr><td class="radar-table-type">${esc(shortTypeName(row.type))}</td>`;
         profiles.forEach((p, i) => {
           const amt = row.amounts[i];
+          const pct = filerData[i].total > 0 ? (amt / filerData[i].total * 100).toFixed(1) : "0.0";
           const donors = row.donors[i];
           const hasDonors = donors.length > 0;
-          thtml += `<td class="num${hasDonors ? ' radar-cell-hover' : ''}"${hasDonors ? ` data-bt="${esc(row.type)}" data-fi="${i}"` : ''}>${fmtCompact$(amt)}</td>`;
+          thtml += `<td class="num${hasDonors ? ' radar-cell-hover' : ''}"${hasDonors ? ` data-bt="${esc(row.type)}" data-fi="${i}"` : ''}>${fmtCompact$(amt)} <span class="radar-pct">${pct}%</span></td>`;
         });
         thtml += `</tr>`;
       });
