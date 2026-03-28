@@ -1863,13 +1863,17 @@ function renderOverviewSingleFiler(profile) {
       : (profile.by_contributor_type || []);
   resetDonutBox();
   if (byTypeRows.length) {
-    makeDonutChart(
-      "chart-contributor-type",
-      byTypeRows.map(r => r.type),
-      byTypeRows.map(r => r.total),
-      "Contributor Type",
-      byTypeRows,
-    );
+    if (profile.by_contributor_type_by_month) {
+      makeStackedAreaChart("chart-contributor-type", profile.by_contributor_type_by_month, byTypeRows);
+    } else {
+      makeDonutChart(
+        "chart-contributor-type",
+        byTypeRows.map(r => r.type),
+        byTypeRows.map(r => r.total),
+        "Contributor Type",
+        byTypeRows,
+      );
+    }
   }
 
   document.getElementById("filer-comparison-grid").hidden = true;
@@ -1890,32 +1894,35 @@ function renderOverviewMultiFiler(profiles) {
 
   const hasDate = state.dateStart || state.dateEnd;
 
-  // Build one donut per filer, side by side, with a single shared legend
+  // Build one chart per filer, stacked vertically
   buildMultiDonutBox(profiles);
 
-  // Collect all unique types across filers (preserving order by first appearance)
-  const legendTypes = [];
+  // Add stacked layout class for full-width charts
+  const multiRow = document.querySelector("#overview-donut-box .multi-donut-row");
+  if (multiRow) multiRow.classList.add("stacked-layout");
+
+  // Collect per-filer type rows
   const perFilerRows = profiles.map(p => hasDate && p.by_contributor_type_by_month
     ? mergeTypeByMonth(p.by_contributor_type_by_month)
     : hasDate
       ? mergeTypeByYear(p.by_contributor_type_by_year || {}, yearsInRange())
       : (p.by_contributor_type || []));
-  perFilerRows.forEach(rows => {
-    rows.forEach(r => { if (!legendTypes.includes(r.type)) legendTypes.push(r.type); });
-  });
-  renderMultiDonutLegend(legendTypes);
 
   profiles.forEach((p, i) => {
     const byTypeRows = perFilerRows[i];
     if (byTypeRows.length) {
-      makeDonutChart(
-        `chart-type-${i}`,
-        byTypeRows.map(r => r.type),
-        byTypeRows.map(r => r.total),
-        p.name,
-        byTypeRows,
-        false, // legend shown separately via renderMultiDonutLegend
-      );
+      if (p.by_contributor_type_by_month) {
+        makeStackedAreaChart(`chart-type-${i}`, p.by_contributor_type_by_month, byTypeRows);
+      } else {
+        makeDonutChart(
+          `chart-type-${i}`,
+          byTypeRows.map(r => r.type),
+          byTypeRows.map(r => r.total),
+          p.name,
+          byTypeRows,
+          false,
+        );
+      }
     }
   });
 
