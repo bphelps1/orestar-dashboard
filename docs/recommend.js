@@ -256,14 +256,16 @@ async function runRecommendations() {
 
     // 4. Build repeat donor targets (existing donors to THIS filer)
     showStatus("Analyzing repeat donors…", "loading");
-    const repeatTargets = buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years, cycle);
+    targetProfile._leadershipTier = filer.leadership_tier || 0;
+    const { targets: repeatTargets, notRecommended: repeatNotRec } = buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years, cycle);
 
     // 5. Build new donor scoring
     showStatus("Scoring new donors…", "loading");
-    const recommendations = scoreDonors(targetProfile, comparables, compProfiles, years, cycle);
+    const { prospects: recommendations, notRecommended: prospectNotRec } = scoreDonors(targetProfile, comparables, compProfiles, years, cycle);
+    const allNotRecommended = [...repeatNotRec, ...prospectNotRec];
 
     // 6. Display results
-    displayResults(recommendations, repeatTargets, targetProfile, comparables, cycle);
+    displayResults(recommendations, repeatTargets, targetProfile, comparables, cycle, allNotRecommended);
 
   } catch (err) {
     showStatus(`Error: ${err.message}`, "error");
@@ -536,10 +538,11 @@ function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years
     }
     // Store per-filer max cycle amount for each donor
     const compIsLeadership = (comp.leadership_tier || 0) > 0;
+    const compTier = comp.leadership_tier || 0;
     for (const [key, cyMap] of compDonorCycles) {
       const maxCy = Math.max(...Object.values(cyMap));
       if (!compDonorDetails.has(key)) compDonorDetails.set(key, []);
-      compDonorDetails.get(key).push({ filer: comp.name, amount: maxCy, isLeadership: compIsLeadership });
+      compDonorDetails.get(key).push({ filer: comp.name, amount: maxCy, isLeadership: compIsLeadership, leadershipTier: compTier });
     }
   }
 
@@ -554,6 +557,7 @@ function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years
   }
 
   const results = [];
+  const notRecommended = [];
 
   for (const [key, donor] of donorHistory) {
     // Skip aggregated/non-individual entries
@@ -571,6 +575,9 @@ function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years
     const currentCycleAmt = donor.cycles[cycle] || 0;
     const prevCycles = cycleNums.filter(c => c < cycle);
 
+    const prevCycle = cycle - 2; // Most recent previous cycle
+    const gaveInPrevCycle = donor.cycles[prevCycle] != null && donor.cycles[prevCycle] > 0;
+
     // Determine last giving amount for target calculation
     let lastCycle, lastCycleAmt;
     if (prevCycles.length) {
@@ -585,12 +592,30 @@ function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years
     // Base target: 5% increase from last cycle (or current if no prior)
     let target = Math.round(lastCycleAmt * 1.05 * 100) / 100;
 
+    // Same-tier leadership floor: if a same-tier leader received more from this
+    // donor, use that as the starting point (not just a blend).
+    const compGifts = compDonorDetails.get(key) || [];
+    const targetTier = targetProfile._leadershipTier || 0;
+    if (targetTier > 0) {
+      const sameTierGifts = compGifts
+        .filter(g => g.leadershipTier === targetTier)
+        .sort((a, b) => b.amount - a.amount);
+      if (sameTierGifts.length > 0) {
+        // Outlier check within same-tier
+        const stRef = (sameTierGifts.length >= 2 && sameTierGifts[0].amount > sameTierGifts[1].amount * 1.5)
+          ? sameTierGifts[1].amount
+          : sameTierGifts[0].amount;
+        if (stRef > target) {
+          target = Math.round(stRef * 100) / 100;
+        }
+      }
+    }
+
     // Comparable upside adjustment: if they gave MORE to a comparable,
     // weight toward that amount (but never reduce below the 5% increase).
     // The blend weight scales with the gap: a comparable gift of 5x the base
     // is strong evidence of donor capacity and should pull the target up more
     // than a modest gap. Non-leadership benchmarks get an additional boost.
-    const compGifts = compDonorDetails.get(key) || [];
     // Discount single-filer outliers: if the max is >1.5x the second-highest,
     // it's an outlier — use the second-highest as the reference instead.
     const sortedAmts = compGifts.map(g => g.amount).sort((a, b) => b - a);
@@ -613,6 +638,18 @@ function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years
     }
 
     const remaining = Math.max(0, Math.round((target - currentCycleAmt) * 100) / 100);
+
+    if (!gaveInPrevCycle && prevCycles.length > 0) {
+      // Lapsed donor — didn't give in most recent previous cycle
+      notRecommended.push({
+        donor: donor.name,
+        type: "Previous Donor",
+        lastGave: `${prevCycles[prevCycles.length - 1] - 1}–${prevCycles[prevCycles.length - 1]}`,
+        amount: lastCycleAmt,
+        whyNotIncluded: `Did not give in most recent previous cycle (${prevCycle - 1}–${prevCycle})`,
+      });
+      continue; // Skip adding to results
+    }
 
     // Build cycle history summary
     const historyParts = prevCycles.map(c => `${c - 1}–${c}: ${fmt$(donor.cycles[c])}`);
@@ -671,11 +708,8 @@ function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years
   }
 
   // Filter out donors with target below $500
-  const filtered = results.filter(r => r.target >= 500);
-
-  // Sort by target descending
-  filtered.sort((a, b) => b.target - a.target);
-  return filtered;
+  const filtered = results.filter(r => r.target >= 500).sort((a, b) => b.target - a.target);
+  return { targets: filtered, notRecommended };
 }
 
 // ── Step 4b: Score new donors ─────────────────────────────────────────────
@@ -738,6 +772,7 @@ function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
 
   // Score each donor
   const results = [];
+  const notRecommended = [];
 
   for (const [key, donor] of donorMap) {
     // Skip aggregated/non-individual entries
@@ -757,8 +792,15 @@ function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
     const distinctYears = new Set(allYearGifts).size;
     const totalDonationInstances = allYearGifts.length; // times across all years × filers
 
-    if (donor.distinctComps <= 1 && totalDonationInstances <= 2) {
-      continue; // Exclude: gave to only 1 person and only 1-2 donation instances
+    if (donor.distinctComps <= 1) {
+      notRecommended.push({
+        donor: donor.name,
+        type: "Donor Prospect",
+        lastGave: "",  // Could compute but not critical
+        amount: donor.totalToComps,
+        whyNotIncluded: "Gave only to one comparable filer across all cycles",
+      });
+      continue;
     }
 
     // Compute target ask from comparable gifts
@@ -883,11 +925,8 @@ function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
   }
 
   // Filter out prospects with target ask below $1,000
-  const filtered = results.filter(r => r.target_ask >= 1000);
-
-  // Sort by score descending
-  filtered.sort((a, b) => b.score - a.score);
-  return filtered;
+  const filtered = results.filter(r => r.target_ask >= 1000).sort((a, b) => b.score - a.score);
+  return { prospects: filtered, notRecommended };
 }
 
 function mergeDonorsByYear(byYear, years) {
@@ -934,7 +973,7 @@ function buildWhySummary(donor, alreadyGiven, targetAsk, topComps) {
 }
 
 // ── Step 6: Display results ───────────────────────────────────────────────
-function displayResults(recommendations, repeatTargets, targetProfile, comparables, cycle) {
+function displayResults(recommendations, repeatTargets, targetProfile, comparables, cycle, allNotRecommended) {
   hideStatus();
 
   const section = document.getElementById("results-section");
@@ -964,6 +1003,7 @@ function displayResults(recommendations, repeatTargets, targetProfile, comparabl
   // Update tab badges with counts
   document.querySelectorAll(".tab-btn[data-tab='tab-repeat'] .tab-badge").forEach(el => el.textContent = repeatTargets.length);
   document.querySelectorAll(".tab-btn[data-tab='tab-prospects'] .tab-badge").forEach(el => el.textContent = recommendations.length);
+  document.querySelectorAll(".tab-btn[data-tab='tab-not-recommended'] .tab-badge").forEach(el => el.textContent = (allNotRecommended || []).length);
 
   // Wire up tabs
   document.querySelectorAll(".tab-btn").forEach(btn => {
@@ -981,6 +1021,7 @@ function displayResults(recommendations, repeatTargets, targetProfile, comparabl
   window._targetProfile = targetProfile;
   window._comparables = comparables;
   window._cycle = cycle;
+  window._allNotRecommended = allNotRecommended || [];
 
   // Render repeat donors section
   renderRepeatDonors(repeatTargets);
@@ -995,6 +1036,38 @@ function displayResults(recommendations, repeatTargets, targetProfile, comparabl
   recSearchEl.value = "";
   repeatSearchEl.addEventListener("input", () => renderFilteredRepeat());
   recSearchEl.addEventListener("input", () => renderFilteredRec());
+
+  // Render Not Recommended table
+  const notRecTbody = document.getElementById("not-rec-tbody");
+  if (notRecTbody) {
+    const notRecData = allNotRecommended || [];
+    if (notRecData.length === 0) {
+      notRecTbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#718096;padding:24px">No excluded donors.</td></tr>';
+    } else {
+      notRecTbody.innerHTML = notRecData
+        .sort((a, b) => b.amount - a.amount)
+        .map((r, i) => `<tr>
+          <td>${i + 1}</td>
+          <td>${esc(r.donor)}</td>
+          <td><span class="not-rec-type">${esc(r.type)}</span></td>
+          <td>${esc(r.lastGave)}</td>
+          <td class="num">${fmt$(r.amount)}</td>
+          <td class="not-rec-reason">${esc(r.whyNotIncluded)}</td>
+        </tr>`).join("");
+    }
+  }
+
+  // Wire up search for Not Recommended
+  const notRecSearch = document.getElementById("not-rec-search");
+  if (notRecSearch) {
+    notRecSearch.value = "";
+    notRecSearch.addEventListener("input", () => {
+      const q = notRecSearch.value.toLowerCase();
+      notRecTbody.querySelectorAll("tr").forEach(tr => {
+        tr.hidden = q && !tr.textContent.toLowerCase().includes(q);
+      });
+    });
+  }
 
   // Wire up sort headers for both tables (remove old listeners by re-cloning)
   function wireSortHeaders(tableId, sortColKey, sortDirKey, renderFn) {

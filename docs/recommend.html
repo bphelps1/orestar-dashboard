@@ -87,6 +87,7 @@
     <div class="results-tabs">
       <button class="tab-btn active" data-tab="tab-repeat">Donor Targets <span class="tab-badge">0</span></button>
       <button class="tab-btn" data-tab="tab-prospects">New Donor Prospects <span class="tab-badge">0</span></button>
+      <button class="tab-btn" data-tab="tab-not-recommended">Not Recommended <span class="tab-badge">0</span></button>
     </div>
 
     <!-- ══════ Tab: Donor Targets ══════ -->
@@ -154,6 +155,32 @@
             </tr>
           </thead>
           <tbody id="rec-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══════ Tab: Not Recommended ══════ -->
+    <div id="tab-not-recommended" class="tab-panel">
+      <div class="section-header">
+        <h3>Not Recommended</h3>
+        <p class="section-desc">Previous donors who lapsed and donor prospects who didn't meet inclusion criteria.</p>
+      </div>
+      <div class="table-search-bar">
+        <input type="search" id="not-rec-search" class="table-search" placeholder="Search…" />
+      </div>
+      <div class="table-wrapper">
+        <table id="not-rec-table" class="data-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th class="sortable" data-col="donor" data-table="not-rec">Donor</th>
+              <th class="sortable" data-col="type" data-table="not-rec">Type</th>
+              <th class="sortable" data-col="lastGave" data-table="not-rec">Last Gave</th>
+              <th class="sortable num" data-col="amount" data-table="not-rec">Amount</th>
+              <th>Why Not Included</th>
+            </tr>
+          </thead>
+          <tbody id="not-rec-tbody"></tbody>
         </table>
       </div>
     </div>

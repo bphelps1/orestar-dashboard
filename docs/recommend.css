@@ -446,6 +446,27 @@
   box-shadow: inset 0 -1px 0 var(--color-border);
 }
 
+/* ── Cycle controls centering ──────────────────────────────────────────── */
+#cycle-section .controls-bar {
+  justify-content: center;
+}
+
+/* ── Not Recommended styling ──────────────────────────────────────────── */
+.not-rec-type {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: #f3f4f6;
+  color: #4b5563;
+}
+.not-rec-reason {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
 /* ── Responsive ─────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .results-header { flex-direction: column; gap: 8px; align-items: flex-start; }
