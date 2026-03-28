@@ -829,7 +829,7 @@ def scrape_account_summaries(
     *,
     cache_path: Path = DATA_DIR / "orestar_cash_balances.json",
     max_workers: int = 10,
-    max_age_days: int = 7,
+    max_age_days: int = 1,
 ) -> dict[str, dict]:
     """Fetch full Account Summary from ORESTAR publicAccountSummary for each filer ID.
 
