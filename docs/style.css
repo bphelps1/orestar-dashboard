@@ -979,6 +979,10 @@ main {
   width: 100%;
   height: 350px;
 }
+.echart-container-radar {
+  width: 100%;
+  height: 400px;
+}
 
 /* ── Multi-Chart Layout (ECharts multi-filer) ────────────────────────── */
 .multi-chart-row {
@@ -1125,6 +1129,14 @@ main {
   }
   .echart-container-compact {
     height: 280px;
+  }
+  .echart-container-radar {
+    height: auto;
+    aspect-ratio: 1 / 1;
+    max-height: 340px;
+  }
+  .chart-area:has(.echart-container-radar) {
+    padding: 12px;
   }
 }
 

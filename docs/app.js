@@ -2099,7 +2099,7 @@ function renderOverviewMultiFiler(profiles) {
   resetChartBox();
   const el = document.getElementById("chart-contributor-type");
   if (el) {
-    el.className = "echart-container";
+    el.className = IS_MOBILE ? "echart-container-radar" : "echart-container";
     const chart = initEChart(el);
 
     // Collect per-filer type data, merge to base types
@@ -2208,8 +2208,8 @@ function renderOverviewMultiFiler(profiles) {
           return baseTypes.map(bt => ({ name: shortTypeName(bt), max: uniformMax }));
         })(),
         shape: 'polygon',
-        radius: IS_MOBILE ? '40%' : '65%',
-        center: ['50%', IS_MOBILE ? '50%' : '45%'],
+        radius: IS_MOBILE ? '35%' : '65%',
+        center: ['50%', '48%'],
         axisName: {
           fontSize: IS_MOBILE ? 8 : 11,
           color: '#6b7280',
