@@ -955,13 +955,15 @@ function displayResults(recommendations, repeatTargets, targetProfile, comparabl
   const summaryEl = document.getElementById("results-summary");
   summaryEl.innerHTML = `
     <div class="summary-card"><span class="sc-label">Cycle Contributions</span><br><span class="sc-value">${fmt$(cycleContributions)}</span></div>
-    <div class="summary-card"><span class="sc-label">Donor Targets</span><br><span class="sc-value">${fmtNum(repeatTargets.length)}</span></div>
     <div class="summary-card"><span class="sc-label">Donor Target Total</span><br><span class="sc-value">${fmt$(repeatRemaining)}</span></div>
-    <div class="summary-card"><span class="sc-label">New Prospects</span><br><span class="sc-value">${fmtNum(recommendations.length)}</span></div>
     <div class="summary-card"><span class="sc-label">New Prospect Target</span><br><span class="sc-value">${fmt$(newRemaining)}</span></div>
     <div class="summary-card"><span class="sc-label">Comparable Filers</span><br><span class="sc-value">${fmtNum(comparables.length)}</span></div>
     <div class="summary-card"><span class="sc-label">Total Fundraising Target</span><br><span class="sc-value">${fmt$(repeatRemaining + newRemaining)}</span></div>
   `;
+
+  // Update tab badges with counts
+  document.querySelectorAll(".tab-btn[data-tab='tab-repeat'] .tab-badge").forEach(el => el.textContent = repeatTargets.length);
+  document.querySelectorAll(".tab-btn[data-tab='tab-prospects'] .tab-badge").forEach(el => el.textContent = recommendations.length);
 
   // Wire up tabs
   document.querySelectorAll(".tab-btn").forEach(btn => {
