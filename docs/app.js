@@ -198,6 +198,18 @@ function makeStackedAreaChart(canvasId, byMonthData, byTypeRows) {
     options: {
       responsive: true,
       interaction: { mode: "index", intersect: false },
+      onClick: (evt) => {
+        // Use "nearest" with intersect to find which specific stack was clicked
+        const elements = chart.getElementsAtEventForMode(evt, "nearest", { intersect: true }, false);
+        if (elements.length > 0) {
+          const dsIndex = elements[0].datasetIndex;
+          const clickedBase = baseTypes[dsIndex];
+          selectedDonorTypeGroup = selectedDonorTypeGroup === clickedBase ? null : clickedBase;
+          updateStackedAreaStyles(chart, baseTypes);
+          updateStackedAreaLegendStyles(chart.canvas.parentElement, baseTypes);
+          chart.update("none");
+        }
+      },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -328,8 +340,13 @@ function makeStackedAreaTooltip(months, monthlyBaseData, baseTypes) {
 
     let html = `<div style="font-weight:600;margin-bottom:6px;font-size:0.85rem">${esc(monthLabel)}</div>`;
 
-    // Category rows
-    baseTypes.forEach(bt => {
+    // Category rows — sorted by amount descending
+    const sortedTypes = baseTypes.slice().sort((a, b) => {
+      const va = data[a] ? data[a].total : 0;
+      const vb = data[b] ? data[b].total : 0;
+      return vb - va;
+    });
+    sortedTypes.forEach(bt => {
       const val = data[bt] ? data[bt].total : 0;
       if (val === 0 && selectedDonorTypeGroup !== bt) return;
       const pct = grandTotal > 0 ? (val / grandTotal * 100).toFixed(1) : "0.0";
@@ -358,7 +375,7 @@ function makeStackedAreaTooltip(months, monthlyBaseData, baseTypes) {
         </div>`;
       });
     } else if (!selectedDonorTypeGroup) {
-      html += `<div style="margin-top:6px;font-size:0.68rem;color:#a0aec0;font-style:italic">Click a category above to see top donors</div>`;
+      html += `<div style="margin-top:6px;font-size:0.68rem;color:#a0aec0;font-style:italic">Click a colored area to see top donors</div>`;
     }
 
     el.innerHTML = html;
