@@ -1,0 +1,720 @@
+{
+  "generated": "2026-03-28T02:54:30.113656",
+  "periods": {
+    "30d": {
+      "label": "Last 30 Days",
+      "months": [
+        "2026-02",
+        "2026-03"
+      ],
+      "by_office_tier": {
+        "statewide": [
+          {
+            "slug": "friends_of_christine_drazan",
+            "name": "Friends of Christine Drazan",
+            "office": "Governor",
+            "party": "Republican",
+            "raised": 555049.72,
+            "cash_on_hand": 1483324.83
+          },
+          {
+            "slug": "friends_of_tina_kotek",
+            "name": "Friends of Tina Kotek",
+            "office": "Governor",
+            "party": "Democrat",
+            "raised": 534092.76,
+            "cash_on_hand": 2989001.15
+          },
+          {
+            "slug": "friends_of_paul_romero_for_governor",
+            "name": "Friends of Paul Romero for Governor",
+            "office": "Governor",
+            "party": "Republican",
+            "raised": 8100.0,
+            "cash_on_hand": 311.37
+          }
+        ],
+        "legislative": [
+          {
+            "slug": "dick_anderson_for_oregon",
+            "name": "Dick Anderson for Oregon",
+            "office": "State Senator",
+            "party": "Republican",
+            "raised": 260.25,
+            "cash_on_hand": 25293.01
+          }
+        ],
+        "local": [
+          {
+            "slug": "friends_of_janeen_sollman",
+            "name": "Friends of Janeen Sollman",
+            "office": "Director",
+            "party": "Nonpartisan",
+            "raised": 49635.0,
+            "cash_on_hand": 238881.94
+          },
+          {
+            "slug": "friends_of_julie_hoy",
+            "name": "Friends of Julie Hoy",
+            "office": "City Councilor",
+            "party": "Nonpartisan",
+            "raised": 40838.0,
+            "cash_on_hand": 54265.61
+          },
+          {
+            "slug": "friends_of_danielle_bethell",
+            "name": "Friends of Danielle Bethell",
+            "office": "Director",
+            "party": "Nonpartisan",
+            "raised": 15267.52,
+            "cash_on_hand": 20927.17
+          },
+          {
+            "slug": "friends_of_greg_evans",
+            "name": "Friends of Greg Evans",
+            "office": "City Councilor",
+            "party": "Nonpartisan",
+            "raised": 9525.0,
+            "cash_on_hand": 9910.86
+          },
+          {
+            "slug": "friends_of_deanna_gwyn",
+            "name": "Friends of Deanna Gwyn",
+            "office": "City Councilor",
+            "party": "Nonpartisan",
+            "raised": 8778.0,
+            "cash_on_hand": 14470.62
+          }
+        ]
+      },
+      "top_growth": [
+        {
+          "slug": "ben_west_for_oregon",
+          "name": "Ben West for Oregon",
+          "office": "City Councilor",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 5000.0,
+          "growth_pct": 669,
+          "is_new": false
+        },
+        {
+          "slug": "reelect_colleen_roberts",
+          "name": "ReElect Colleen Roberts",
+          "office": "County Commissioner",
+          "party": "Republican",
+          "tier": "local",
+          "raised": 5200.0,
+          "growth_pct": 478,
+          "is_new": false
+        },
+        {
+          "slug": "friends_of_julie_hoy",
+          "name": "Friends of Julie Hoy",
+          "office": "City Councilor",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 40838.0,
+          "growth_pct": 115,
+          "is_new": false
+        },
+        {
+          "slug": "friends_of_deanna_gwyn",
+          "name": "Friends of Deanna Gwyn",
+          "office": "City Councilor",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 8778.0,
+          "growth_pct": 21,
+          "is_new": false
+        },
+        {
+          "slug": "friends_of_greg_evans",
+          "name": "Friends of Greg Evans",
+          "office": "City Councilor",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 9525.0,
+          "growth_pct": 999,
+          "is_new": true
+        },
+        {
+          "slug": "friends_of_paul_romero_for_governor",
+          "name": "Friends of Paul Romero for Governor",
+          "office": "Governor",
+          "party": "Republican",
+          "tier": "statewide",
+          "raised": 8100.0,
+          "growth_pct": 999,
+          "is_new": true
+        },
+        {
+          "slug": "elect_mark_adams",
+          "name": "Elect Mark Adams",
+          "office": "County Commissioner",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 3100.0,
+          "growth_pct": 999,
+          "is_new": true
+        },
+        {
+          "slug": "friends_of_jenny_kamprath",
+          "name": "Friends of Jenny Kamprath",
+          "office": "City Councilor",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 2550.0,
+          "growth_pct": 999,
+          "is_new": true
+        }
+      ],
+      "top_donors": [
+        {
+          "name": "Phil Knight",
+          "total": 1000000.0,
+          "committees": 1
+        },
+        {
+          "name": "Don H Jones, Jr.",
+          "total": 148333.0,
+          "committees": 1
+        },
+        {
+          "name": "Columbia Distributing",
+          "total": 116407.0,
+          "committees": 2
+        },
+        {
+          "name": "Oregon Nurses Association",
+          "total": 115226.47,
+          "committees": 1
+        },
+        {
+          "name": "Democratic Governors' Association",
+          "total": 105000.0,
+          "committees": 1
+        },
+        {
+          "name": "Jay (JB) Pritzker",
+          "total": 100000.0,
+          "committees": 1
+        },
+        {
+          "name": "Avamere Skilled Advisors",
+          "total": 100000.0,
+          "committees": 1
+        },
+        {
+          "name": "AGC Union Contractor Group",
+          "total": 100000.0,
+          "committees": 1
+        },
+        {
+          "name": "Murphy Plywood",
+          "total": 100000.0,
+          "committees": 2
+        },
+        {
+          "name": "Friends of Tina Kotek",
+          "total": 100000.0,
+          "committees": 1
+        }
+      ]
+    },
+    "90d": {
+      "label": "Last 90 Days",
+      "months": [
+        "2026-01",
+        "2026-02",
+        "2026-03"
+      ],
+      "by_office_tier": {
+        "statewide": [
+          {
+            "slug": "friends_of_christine_drazan",
+            "name": "Friends of Christine Drazan",
+            "office": "Governor",
+            "party": "Republican",
+            "raised": 904988.24,
+            "cash_on_hand": 1483324.83
+          },
+          {
+            "slug": "friends_of_tina_kotek",
+            "name": "Friends of Tina Kotek",
+            "office": "Governor",
+            "party": "Democrat",
+            "raised": 840181.36,
+            "cash_on_hand": 2989001.15
+          },
+          {
+            "slug": "friends_of_paul_romero_for_governor",
+            "name": "Friends of Paul Romero for Governor",
+            "office": "Governor",
+            "party": "Republican",
+            "raised": 8100.0,
+            "cash_on_hand": 311.37
+          }
+        ],
+        "legislative": [
+          {
+            "slug": "dick_anderson_for_oregon",
+            "name": "Dick Anderson for Oregon",
+            "office": "State Senator",
+            "party": "Republican",
+            "raised": 10260.25,
+            "cash_on_hand": 25293.01
+          }
+        ],
+        "local": [
+          {
+            "slug": "friends_of_janeen_sollman",
+            "name": "Friends of Janeen Sollman",
+            "office": "Director",
+            "party": "Nonpartisan",
+            "raised": 73935.0,
+            "cash_on_hand": 238881.94
+          },
+          {
+            "slug": "friends_of_julie_hoy",
+            "name": "Friends of Julie Hoy",
+            "office": "City Councilor",
+            "party": "Nonpartisan",
+            "raised": 46429.0,
+            "cash_on_hand": 54265.61
+          },
+          {
+            "slug": "friends_of_danielle_bethell",
+            "name": "Friends of Danielle Bethell",
+            "office": "Director",
+            "party": "Nonpartisan",
+            "raised": 24580.05,
+            "cash_on_hand": 20927.17
+          },
+          {
+            "slug": "friends_of_deanna_gwyn",
+            "name": "Friends of Deanna Gwyn",
+            "office": "City Councilor",
+            "party": "Nonpartisan",
+            "raised": 13053.0,
+            "cash_on_hand": 14470.62
+          },
+          {
+            "slug": "court_boice_for_oregon",
+            "name": "Court Boice for Oregon",
+            "office": "County Commissioner",
+            "party": "Nonpartisan",
+            "raised": 12192.76,
+            "cash_on_hand": 35524.33
+          }
+        ]
+      },
+      "top_growth": [
+        {
+          "slug": "reelect_colleen_roberts",
+          "name": "ReElect Colleen Roberts",
+          "office": "County Commissioner",
+          "party": "Republican",
+          "tier": "local",
+          "raised": 6000.0,
+          "growth_pct": 400,
+          "is_new": false
+        },
+        {
+          "slug": "friends_of_deanna_gwyn",
+          "name": "Friends of Deanna Gwyn",
+          "office": "City Councilor",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 13053.0,
+          "growth_pct": 253,
+          "is_new": false
+        },
+        {
+          "slug": "friends_of_julie_hoy",
+          "name": "Friends of Julie Hoy",
+          "office": "City Councilor",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 46429.0,
+          "growth_pct": 44,
+          "is_new": false
+        },
+        {
+          "slug": "friends_of_lew_frederick",
+          "name": "Friends of Lew Frederick",
+          "office": "County Commissioner",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 4700.0,
+          "growth_pct": 10,
+          "is_new": false
+        },
+        {
+          "slug": "friends_of_chris_cummings",
+          "name": "Friends of Chris Cummings",
+          "office": "City Councilor",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 7196.0,
+          "growth_pct": 10,
+          "is_new": false
+        },
+        {
+          "slug": "friends_of_john_wilson",
+          "name": "Friends of John Wilson",
+          "office": "City Councilor",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 2688.0,
+          "growth_pct": 9,
+          "is_new": false
+        },
+        {
+          "slug": "friends_of_greg_evans",
+          "name": "Friends of Greg Evans",
+          "office": "City Councilor",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 9525.0,
+          "growth_pct": 999,
+          "is_new": true
+        },
+        {
+          "slug": "friends_of_paul_romero_for_governor",
+          "name": "Friends of Paul Romero for Governor",
+          "office": "Governor",
+          "party": "Republican",
+          "tier": "statewide",
+          "raised": 8100.0,
+          "growth_pct": 999,
+          "is_new": true
+        }
+      ],
+      "top_donors": [
+        {
+          "name": "Phil Knight",
+          "total": 1000000.0,
+          "committees": 1
+        },
+        {
+          "name": "Murphy Company",
+          "total": 272500.0,
+          "committees": 3
+        },
+        {
+          "name": "Don H Jones, Jr.",
+          "total": 248333.0,
+          "committees": 1
+        },
+        {
+          "name": "Building a Stronger West",
+          "total": 185500.0,
+          "committees": 11
+        },
+        {
+          "name": "Oregon Nurses Association",
+          "total": 171836.56,
+          "committees": 1
+        },
+        {
+          "name": "Columbia Distributing",
+          "total": 116407.0,
+          "committees": 2
+        },
+        {
+          "name": "Democratic Governors' Association",
+          "total": 105000.0,
+          "committees": 1
+        },
+        {
+          "name": "Kayse Jama for Oregon (18744)",
+          "total": 102500.0,
+          "committees": 2
+        },
+        {
+          "name": "Jay (JB) Pritzker",
+          "total": 100000.0,
+          "committees": 1
+        },
+        {
+          "name": "Avamere Skilled Advisors",
+          "total": 100000.0,
+          "committees": 1
+        }
+      ]
+    },
+    "cycle": {
+      "label": "This Cycle",
+      "months": [
+        "2025-01",
+        "2025-02",
+        "2025-03",
+        "2025-04",
+        "2025-05",
+        "2025-06",
+        "2025-07",
+        "2025-08",
+        "2025-09",
+        "2025-10",
+        "2025-11",
+        "2025-12",
+        "2026-01",
+        "2026-02",
+        "2026-03"
+      ],
+      "by_office_tier": {
+        "statewide": [
+          {
+            "slug": "friends_of_tina_kotek",
+            "name": "Friends of Tina Kotek",
+            "office": "Governor",
+            "party": "Democrat",
+            "raised": 3340602.71,
+            "cash_on_hand": 2989001.15
+          },
+          {
+            "slug": "friends_of_christine_drazan",
+            "name": "Friends of Christine Drazan",
+            "office": "Governor",
+            "party": "Republican",
+            "raised": 2061358.88,
+            "cash_on_hand": 1483324.83
+          },
+          {
+            "slug": "friends_of_paul_romero_for_governor",
+            "name": "Friends of Paul Romero for Governor",
+            "office": "Governor",
+            "party": "Republican",
+            "raised": 8100.0,
+            "cash_on_hand": 311.37
+          },
+          {
+            "slug": "betsy_pac",
+            "name": "Betsy PAC",
+            "office": "Governor",
+            "party": "Nonaffiliated",
+            "raised": 2000.0,
+            "cash_on_hand": -167994.98
+          }
+        ],
+        "legislative": [
+          {
+            "slug": "dick_anderson_for_oregon",
+            "name": "Dick Anderson for Oregon",
+            "office": "State Senator",
+            "party": "Republican",
+            "raised": 60510.9,
+            "cash_on_hand": 25293.01
+          },
+          {
+            "slug": "jessica_george_community_fund",
+            "name": "Jessica George Community Fund",
+            "office": "State Representative",
+            "party": "Republican",
+            "raised": 28000.0,
+            "cash_on_hand": 232.8
+          },
+          {
+            "slug": "friends_of_william_miller",
+            "name": "Friends of William Miller",
+            "office": "State Representative",
+            "party": "Democrat",
+            "raised": 2251.0,
+            "cash_on_hand": 1353.98
+          },
+          {
+            "slug": "tipsord_for_oregon",
+            "name": "Tipsord for Oregon",
+            "office": "State Representative",
+            "party": "Republican",
+            "raised": 25.0,
+            "cash_on_hand": 0.0
+          }
+        ],
+        "local": [
+          {
+            "slug": "friends_of_danielle_bethell",
+            "name": "Friends of Danielle Bethell",
+            "office": "Director",
+            "party": "Nonpartisan",
+            "raised": 178761.48,
+            "cash_on_hand": 20927.17
+          },
+          {
+            "slug": "friends_of_janeen_sollman",
+            "name": "Friends of Janeen Sollman",
+            "office": "Director",
+            "party": "Nonpartisan",
+            "raised": 170727.0,
+            "cash_on_hand": 238881.94
+          },
+          {
+            "slug": "ben_west_for_oregon",
+            "name": "Ben West for Oregon",
+            "office": "City Councilor",
+            "party": "Nonpartisan",
+            "raised": 145775.0,
+            "cash_on_hand": 112790.24
+          },
+          {
+            "slug": "friends_of_julie_hoy",
+            "name": "Friends of Julie Hoy",
+            "office": "City Councilor",
+            "party": "Nonpartisan",
+            "raised": 102009.0,
+            "cash_on_hand": 54265.61
+          },
+          {
+            "slug": "virginia_la_forte_for_school_board",
+            "name": "Virginia La Forte for School Board",
+            "office": "Director",
+            "party": "Nonpartisan",
+            "raised": 49181.0,
+            "cash_on_hand": 1525.98
+          }
+        ]
+      },
+      "top_growth": [
+        {
+          "slug": "friends_of_paul_romero_for_governor",
+          "name": "Friends of Paul Romero for Governor",
+          "office": "Governor",
+          "party": "Republican",
+          "tier": "statewide",
+          "raised": 8100.0,
+          "growth_pct": 3790,
+          "is_new": false
+        },
+        {
+          "slug": "ben_west_for_oregon",
+          "name": "Ben West for Oregon",
+          "office": "City Councilor",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 145775.0,
+          "growth_pct": 2702,
+          "is_new": false
+        },
+        {
+          "slug": "friends_of_christine_drazan",
+          "name": "Friends of Christine Drazan",
+          "office": "Governor",
+          "party": "Republican",
+          "tier": "statewide",
+          "raised": 2061358.88,
+          "growth_pct": 323,
+          "is_new": false
+        },
+        {
+          "slug": "friends_of_tina_kotek",
+          "name": "Friends of Tina Kotek",
+          "office": "Governor",
+          "party": "Democrat",
+          "tier": "statewide",
+          "raised": 3340602.71,
+          "growth_pct": 185,
+          "is_new": false
+        },
+        {
+          "slug": "friends_of_danielle_bethell",
+          "name": "Friends of Danielle Bethell",
+          "office": "Director",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 178761.48,
+          "growth_pct": 48,
+          "is_new": false
+        },
+        {
+          "slug": "friends_of_janeen_sollman",
+          "name": "Friends of Janeen Sollman",
+          "office": "Director",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 170727.0,
+          "growth_pct": 4,
+          "is_new": false
+        },
+        {
+          "slug": "virginia_la_forte_for_school_board",
+          "name": "Virginia La Forte for School Board",
+          "office": "Director",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 49181.0,
+          "growth_pct": 999,
+          "is_new": true
+        },
+        {
+          "slug": "friends_of_jeff_cooper",
+          "name": "Friends of Jeff Cooper",
+          "office": "Director",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 41450.0,
+          "growth_pct": 999,
+          "is_new": true
+        }
+      ],
+      "top_donors": [
+        {
+          "name": "Phil Knight",
+          "total": 4000000.0,
+          "committees": 2
+        },
+        {
+          "name": "Nurses United Political Action Committee (12987)",
+          "total": 1208352.82,
+          "committees": 1
+        },
+        {
+          "name": "Oregon Nurses Association",
+          "total": 801611.58,
+          "committees": 2
+        },
+        {
+          "name": "Columbia Distributing",
+          "total": 460775.58,
+          "committees": 2
+        },
+        {
+          "name": "Local 48 Electricians PAC (4572)",
+          "total": 370818.0,
+          "committees": 23
+        },
+        {
+          "name": "Don H Jones, Jr.",
+          "total": 328333.0,
+          "committees": 2
+        },
+        {
+          "name": "NewSun Energy LLC",
+          "total": 325000.0,
+          "committees": 1
+        },
+        {
+          "name": "AGC - Oregon Columbia Chapter",
+          "total": 304435.7,
+          "committees": 1
+        },
+        {
+          "name": "The Library Foundation",
+          "total": 300000.0,
+          "committees": 1
+        },
+        {
+          "name": "Oregon Healthcare Enterprises dba Apprise Health",
+          "total": 290000.0,
+          "committees": 1
+        }
+      ]
+    }
+  },
+  "meta": {
+    "total_candidates": 1636,
+    "statewide_count": 50,
+    "legislative_count": 376,
+    "local_count": 1210
+  }
+}
