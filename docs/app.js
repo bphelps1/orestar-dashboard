@@ -241,13 +241,24 @@ function makeStackedAreaChart(canvasId, byMonthData, byTypeRows) {
     ctx._areaTooltipLeaveAttached = true;
   }
 
-  // 7. Render custom legend
-  renderStackedAreaLegend(chart, baseTypes);
+  // 7. Compute grand totals per base type for legend
+  const baseTotals = {};
+  let grandTotal = 0;
+  for (const month of months) {
+    for (const base of baseTypes) {
+      const val = monthlyBaseData[month]?.[base]?.total || 0;
+      baseTotals[base] = (baseTotals[base] || 0) + val;
+      grandTotal += val;
+    }
+  }
+
+  // 8. Render custom legend
+  renderStackedAreaLegend(chart, baseTypes, baseTotals, grandTotal);
 
   return chart;
 }
 
-function renderStackedAreaLegend(chart, baseTypes) {
+function renderStackedAreaLegend(chart, baseTypes, baseTotals, grandTotal) {
   const canvas = chart.canvas;
   const box = canvas.closest("#overview-donut-box");
   if (!box) return;
@@ -262,7 +273,12 @@ function renderStackedAreaLegend(chart, baseTypes) {
     const color = TYPE_COLOR_MAP[base] ?? PALETTE[Object.keys(TYPE_COLOR_MAP).length % PALETTE.length];
     const item = document.createElement("span");
     item.className = "stacked-area-legend-item";
-    item.innerHTML = `<span class="swatch" style="background:${color}"></span>${esc(base)}`;
+    const total = baseTotals[base] || 0;
+    const pct = grandTotal > 0 ? (total / grandTotal * 100).toFixed(1) : "0.0";
+    item.innerHTML = `<span class="swatch" style="background:${color}"></span>
+      <span class="legend-type-name">${esc(base)}</span>
+      <span class="legend-type-amount">${fmt$(total)}</span>
+      <span class="legend-type-pct">(${pct}%)</span>`;
 
     item.addEventListener("click", () => {
       if (selectedDonorTypeGroup === base) {
@@ -298,6 +314,7 @@ function updateStackedAreaLegendStyles(legendDiv, baseTypes) {
 }
 
 function updateStackedAreaStyles(chart, baseTypes) {
+  const selectedIdx = selectedDonorTypeGroup ? baseTypes.indexOf(selectedDonorTypeGroup) : -1;
   chart.data.datasets.forEach((ds, i) => {
     const base = baseTypes[i];
     const color = TYPE_COLOR_MAP[base] ?? PALETTE[Object.keys(TYPE_COLOR_MAP).length % PALETTE.length];
@@ -310,8 +327,8 @@ function updateStackedAreaStyles(chart, baseTypes) {
       ds.borderColor = color;
       ds.borderWidth = 2;
     } else {
-      ds.backgroundColor = hexToRgba(color, 0.15);
-      ds.borderColor = hexToRgba(color, 0.15);
+      ds.backgroundColor = hexToRgba(color, 0.05);
+      ds.borderColor = hexToRgba(color, 0.05);
       ds.borderWidth = 0;
     }
   });
@@ -1745,6 +1762,7 @@ function renderOverviewGlobal() {
   renderAcctSummary(null);  // No per-filer account summary in global view
   fitStatCards();
   loadCampaignPulse();
+  loadPartyFundraising();
 }
 
 // ── Discrepancy severity thresholds (absolute dollar difference) ──────────
@@ -1846,6 +1864,10 @@ function cohIndicatorHTML(profile) {
 function renderOverviewSingleFiler(profile) {
   const pulseEl = document.getElementById("campaign-pulse");
   if (pulseEl) pulseEl.hidden = true;
+  const partyBox = document.getElementById("party-fundraising-box");
+  if (partyBox) partyBox.hidden = true;
+  const racesBox = document.getElementById("races-to-watch");
+  if (racesBox) racesBox.hidden = true;
   const hasDate = state.dateStart || state.dateEnd;
   if (hasDate) {
     const { totalIn, totalInKind, totalOut, cashOnHand, count } =
@@ -1901,6 +1923,10 @@ function renderOverviewSingleFiler(profile) {
 function renderOverviewMultiFiler(profiles) {
   const pulseEl = document.getElementById("campaign-pulse");
   if (pulseEl) pulseEl.hidden = true;
+  const partyBox = document.getElementById("party-fundraising-box");
+  if (partyBox) partyBox.hidden = true;
+  const racesBox = document.getElementById("races-to-watch");
+  if (racesBox) racesBox.hidden = true;
   document.getElementById("stat-cards").hidden             = true;
   document.getElementById("filer-comparison-grid").hidden  = false;
   document.getElementById("overview-donut-box").hidden     = false;
@@ -2552,6 +2578,104 @@ function renderSearchResults(rows) {
   }).join("");
 }
 
+// ── Party Fundraising ───────────────────────────────────────────────────
+async function loadPartyFundraising() {
+  try {
+    const data = await fetchJSON(`${DATA}/by_party_type.json`);
+    if (!data || !data.by_year) return;
+    const box = document.getElementById("party-fundraising-box");
+    if (!box) return;
+    box.hidden = false;
+
+    const years = Object.keys(data.by_year).filter(y => y >= "2006").sort();
+    const demTotals = years.map(y => {
+      const types = data.by_year[y]?.Democrat || [];
+      return types.reduce((s, t) => s + t.total, 0);
+    });
+    const repTotals = years.map(y => {
+      const types = data.by_year[y]?.Republican || [];
+      return types.reduce((s, t) => s + t.total, 0);
+    });
+
+    const ctx = document.getElementById("chart-party-fundraising");
+    if (!ctx) return;
+    if (ctx._chart) ctx._chart.destroy();
+
+    const chart = new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels: years,
+        datasets: [
+          {
+            label: "Democrat",
+            data: demTotals,
+            backgroundColor: "rgba(37, 99, 235, 0.7)",
+            borderColor: "#2563eb",
+            borderWidth: 1,
+          },
+          {
+            label: "Republican",
+            data: repTotals,
+            backgroundColor: "rgba(220, 38, 38, 0.7)",
+            borderColor: "#dc2626",
+            borderWidth: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { position: "top" },
+          tooltip: {
+            callbacks: {
+              label: ctx => ` ${ctx.dataset.label}: ${fmt$(ctx.raw)}`,
+            },
+          },
+        },
+        scales: {
+          x: { grid: { display: false } },
+          y: { ticks: { callback: v => fmt$(v) }, grid: { color: "#e2e8f0" } },
+        },
+      },
+    });
+    ctx._chart = chart;
+  } catch (e) { console.warn("Party fundraising load failed:", e); }
+}
+
+// ── Races to Watch ──────────────────────────────────────────────────────
+function renderRacesToWatch() {
+  if (!activitySnapshot || !activitySnapshot.races) return;
+  const races = activitySnapshot.races;
+  if (!races.length) return;
+
+  const el = document.getElementById("races-to-watch");
+  const list = document.getElementById("races-list");
+  if (!el || !list) return;
+  el.hidden = false;
+
+  let html = "";
+  for (const race of races.slice(0, 15)) {
+    html += `<div class="race-card">
+      <div class="race-card-header">
+        <span class="race-office">${esc(race.office)}</span>
+        <span class="race-total">${fmt$(race.total_raised)} total</span>
+      </div>
+      <div class="race-candidates">`;
+    for (const c of race.candidates) {
+      const partyClass = c.party === "Democrat" ? "party-d" : c.party === "Republican" ? "party-r" : "party-other";
+      const partyBadge = c.party ? `<span class="pulse-entry-party ${partyClass}">${c.party.charAt(0)}</span>` : "";
+      html += `<div class="race-candidate" ${c.slug ? `onclick="selectFilerBySlug('${c.slug}')" style="cursor:pointer"` : ""}>
+        ${partyBadge}
+        <span class="race-candidate-name">${esc(c.candidate_name || c.name)}</span>
+        <span class="race-candidate-raised">${fmt$(c.raised_cycle)}</span>
+        <span class="race-candidate-coh">${fmt$(c.cash_on_hand)} COH</span>
+      </div>`;
+    }
+    html += `</div></div>`;
+  }
+  list.innerHTML = html;
+}
+
 // ── Campaign Pulse ──────────────────────────────────────────────────────
 let activitySnapshot = null;
 let pulseCurrentPeriod = "90d";
@@ -2562,8 +2686,10 @@ async function loadCampaignPulse() {
     const resp = await fetch(`${DATA}/activity_snapshot.json`);
     if (!resp.ok) return;
     activitySnapshot = await resp.json();
+    await ensureDonorFilerMap();
     const el = document.getElementById("campaign-pulse");
     if (el) { el.hidden = false; renderPulsePeriod(pulseCurrentPeriod); }
+    renderRacesToWatch();
     // Wire up period toggle
     const toggle = document.getElementById("pulse-period-toggle");
     if (toggle) {
@@ -2643,14 +2769,48 @@ function renderPulseDonors(data) {
   let html = "";
   const entries = (data.top_donors || []).slice(0, PULSE_ROWS * 2);
   for (const e of entries) {
-    const meta = e.committees > 1 ? `<span class="pulse-entry-meta">${e.committees} cmtes</span>` : "";
-    html += `<div class="pulse-entry">
-      <span class="pulse-entry-name" title="${e.name}">${e.name}</span>
+    const hasDetails = e.details && e.details.length > 1;
+    const donorKey = e.name.toLowerCase();
+    const filerLink = donorFilerMap && donorFilerMap[donorKey];
+    const nameHTML = filerLink
+      ? `<a href="#" class="pulse-entry-name pulse-donor-link" onclick="event.preventDefault();selectFilerBySlug('${esc(filerLink.slug)}')" title="${esc(e.name)}">${esc(e.name)}</a>`
+      : `<span class="pulse-entry-name" title="${esc(e.name)}">${esc(e.name)}</span>`;
+
+    const metaHTML = hasDetails
+      ? `<span class="pulse-entry-meta pulse-donor-expand" data-donor="${esc(e.name)}">${e.committees} cmtes ▾</span>`
+      : (e.committees > 1 ? `<span class="pulse-entry-meta">${e.committees} cmtes</span>` : "");
+
+    html += `<div class="pulse-entry pulse-donor-entry">
+      ${nameHTML}
       <span class="pulse-entry-value">$${Number(e.total).toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
-      ${meta}
+      ${metaHTML}
     </div>`;
+
+    if (hasDetails) {
+      html += `<div class="pulse-donor-details" data-donor-details="${esc(e.name)}" hidden>`;
+      for (const d of e.details) {
+        const detailClick = d.slug ? `onclick="selectFilerBySlug('${esc(d.slug)}')" style="cursor:pointer"` : "";
+        html += `<div class="pulse-donor-detail" ${detailClick}>
+          <span class="pulse-donor-detail-name">${esc(d.filer)}</span>
+          <span class="pulse-donor-detail-amt">$${Number(d.amount).toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
+        </div>`;
+      }
+      html += `</div>`;
+    }
   }
   body.innerHTML = html || '<div class="pulse-entry-meta">No data</div>';
+
+  // Wire up expand/collapse
+  body.querySelectorAll(".pulse-donor-expand").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const name = btn.dataset.donor;
+      const details = body.querySelector(`[data-donor-details="${name}"]`);
+      if (details) {
+        details.hidden = !details.hidden;
+        btn.textContent = details.hidden ? `${btn.textContent.replace(" ▴", "")} ▾`.replace(" ▾ ▾", " ▾") : btn.textContent.replace(" ▾", " ▴");
+      }
+    });
+  });
 }
 
 function selectFilerBySlug(slug) {

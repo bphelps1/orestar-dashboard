@@ -71,9 +71,12 @@ def aggregate_top_donors_from_filers(
     """
     donor_totals: dict[str, float] = defaultdict(float)
     donor_filers: dict[str, set] = defaultdict(set)
+    donor_filer_amounts: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    donor_filer_slugs: dict[str, dict[str, str]] = {}  # donor_name → {filer_name: slug}
 
     for detail in filer_details:
         filer_name = detail.get("name", "")
+        filer_slug = detail.get("slug", "")
         by_month = detail.get("by_contributor_type_by_month", {})
         for month, type_rows in by_month.items():
             if month not in target_months:
@@ -83,8 +86,13 @@ def aggregate_top_donors_from_filers(
                     name = d.get("name", "")
                     if not name or name.startswith("Miscellaneous Cash"):
                         continue
-                    donor_totals[name] += d.get("total", 0)
+                    amt = d.get("total", 0)
+                    donor_totals[name] += amt
                     donor_filers[name].add(filer_name)
+                    donor_filer_amounts[name][filer_name] += amt
+                    if name not in donor_filer_slugs:
+                        donor_filer_slugs[name] = {}
+                    donor_filer_slugs[name][filer_name] = filer_slug
 
     # Sort by total, take top 10
     ranked = sorted(donor_totals.items(), key=lambda x: -x[1])[:10]
@@ -93,9 +101,55 @@ def aggregate_top_donors_from_filers(
             "name": name,
             "total": round(total, 2),
             "committees": len(donor_filers[name]),
+            "details": sorted(
+                [{"filer": fn, "slug": donor_filer_slugs[name].get(fn, ""), "amount": round(amt, 2)}
+                 for fn, amt in donor_filer_amounts[name].items()],
+                key=lambda x: -x["amount"]
+            )[:10],
         }
         for name, total in ranked
     ]
+
+
+def build_races(filer_metrics: list[dict], index: list[dict]) -> list[dict]:
+    """Group candidates by office_district to find contested races."""
+    # Build lookup from filer_metrics
+    metric_by_slug = {fm["slug"]: fm for fm in filer_metrics}
+
+    # Group candidates by office_district
+    races = defaultdict(list)
+    for row in index:
+        if row.get("committee_type") != "Candidate Committee":
+            continue
+        od = row.get("office_district", "")
+        if not od:
+            continue
+        slug = row.get("slug", "")
+        fm = metric_by_slug.get(slug, {})
+        races[od].append({
+            "slug": slug,
+            "name": row.get("name", ""),
+            "party": row.get("party", ""),
+            "candidate_name": row.get("candidate_name", ""),
+            "raised_cycle": fm.get("raised_cycle", 0),
+            "cash_on_hand": row.get("cash_on_hand", 0),
+        })
+
+    # Filter to contested races (2+ candidates) and sort by total fundraising
+    contested = []
+    for office, candidates in races.items():
+        if len(candidates) < 2:
+            continue
+        total = sum(c["raised_cycle"] for c in candidates)
+        candidates.sort(key=lambda c: -c["raised_cycle"])
+        contested.append({
+            "office": office,
+            "total_raised": round(total, 2),
+            "candidates": candidates,
+        })
+
+    contested.sort(key=lambda r: -r["total_raised"])
+    return contested[:20]  # Top 20 most expensive races
 
 
 def generate(agg_dir: Path = AGG_DIR, filers_dir: Path = FILERS_DIR) -> dict:
@@ -319,6 +373,8 @@ def generate(agg_dir: Path = AGG_DIR, filers_dir: Path = FILERS_DIR) -> dict:
             "local_count": sum(1 for _, t in candidates if t == "local"),
         },
     }
+
+    snapshot["races"] = build_races(filer_metrics, index)
 
     return snapshot
 

@@ -448,8 +448,12 @@ main {
   display: none;
   position: absolute;
   top: calc(100% + 8px);
-  right: -4px;
+  right: auto;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 300;
+  text-transform: none;
+  letter-spacing: normal;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
@@ -1734,7 +1738,9 @@ footer a:hover { color: var(--color-accent); }
   /* Card help tip */
   .card-help-tip {
     width: 240px;
+    left: auto;
     right: -8px;
+    transform: none;
   }
 }
 
@@ -1824,4 +1830,118 @@ footer a:hover { color: var(--color-accent); }
 }
 .stacked-area-legend-item.dimmed {
   opacity: 0.45;
+}
+.legend-type-amount {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-left: 2px;
+}
+.legend-type-pct {
+  font-size: 0.68rem;
+  color: var(--color-text-muted);
+}
+
+/* ── Races to Watch ──────────────────────────────────────────────── */
+.races-to-watch {
+  margin-bottom: 40px;
+}
+.races-to-watch h2 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+.race-card {
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.race-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.race-office {
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+.race-total {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+.race-candidates {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.race-candidate {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 0.82rem;
+}
+.race-candidate:hover {
+  background: var(--color-surface-alt);
+  border-radius: 3px;
+}
+.race-candidate-name {
+  flex: 1;
+  font-weight: 500;
+}
+.race-candidate-raised {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.race-candidate-coh {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 768px) {
+  .race-candidate-coh { display: none; }
+}
+
+/* ── Pulse Donor Details ─────────────────────────────────────────── */
+.pulse-donor-link {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+.pulse-donor-link:hover {
+  text-decoration: underline;
+}
+.pulse-donor-expand {
+  cursor: pointer;
+  color: var(--color-accent);
+}
+.pulse-donor-expand:hover {
+  text-decoration: underline;
+}
+.pulse-donor-details {
+  padding-left: 16px;
+  margin: 2px 0 6px;
+}
+.pulse-donor-detail {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 4px;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  border-radius: 3px;
+}
+.pulse-donor-detail:hover {
+  background: var(--color-surface-alt);
+}
+.pulse-donor-detail-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pulse-donor-detail-amt {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
