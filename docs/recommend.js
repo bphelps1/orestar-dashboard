@@ -660,7 +660,7 @@ function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years
       prev_cycles: prevCycles.length,
       last_cycle_amt: lastCycleAmt,
       avg_prev: Math.round(avgPrev * 100) / 100,
-      comp_max: compMax,
+      comp_max: compRef,
       target,
       current_cycle_amt: currentCycleAmt,
       remaining,
