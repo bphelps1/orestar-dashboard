@@ -1,5 +1,5 @@
 {
-  "generated": "2026-03-28T17:51:20.653413",
+  "generated": "2026-03-28T17:55:42.671386",
   "periods": {
     "30d": {
       "label": "Last 30 Days",
@@ -112,124 +112,124 @@
       },
       "top_growth": [
         {
-          "slug": "friends_of_paul_romero_for_governor",
-          "name": "Friends of Paul Romero for Governor",
-          "office": "Governor",
-          "party": "Republican",
-          "tier": "statewide",
-          "raised": 8100.0,
-          "growth_pct": 999,
-          "is_new": true
-        },
-        {
-          "slug": "chris_lynch_for_oregon",
-          "name": "Chris Lynch for Oregon",
-          "office": "Commissioner of the Bureau of Labor and Industries",
-          "party": "Nonpartisan",
-          "tier": "statewide",
-          "raised": 3720.0,
-          "growth_pct": 1140,
+          "slug": "professional_adjusters_interested_in_democracy",
+          "name": "Professional Adjusters Interested In Democracy",
+          "office": "Political Action Committee",
+          "party": "",
+          "tier": "committees",
+          "raised": 8170.0,
+          "growth_pct": 40750,
           "is_new": false
         },
         {
-          "slug": "dudley_for_oregon",
-          "name": "Dudley for Oregon",
-          "office": "Governor",
-          "party": "Republican",
-          "tier": "statewide",
-          "raised": 1733273.05,
-          "growth_pct": 796,
-          "is_new": false
-        },
-        {
-          "slug": "myrna_for_oregon",
-          "name": "Myrna for Oregon",
+          "slug": "love_where_you_live",
+          "name": "Love Where You Live",
           "office": "State Senator",
-          "party": "Democrat",
-          "tier": "legislative",
-          "raised": 37714.8,
-          "growth_pct": 999,
-          "is_new": true
-        },
-        {
-          "slug": "friends_of_beth_jones",
-          "name": "Friends of Beth Jones",
-          "office": "State Representative",
           "party": "Republican",
           "tier": "legislative",
-          "raised": 25736.48,
-          "growth_pct": 999,
-          "is_new": true
+          "raised": 5390.0,
+          "growth_pct": 26850,
+          "is_new": false
         },
         {
-          "slug": "hege_for_oregon",
-          "name": "Hege for Oregon",
-          "office": "State Representative",
+          "slug": "fields_for_yamhill_county",
+          "name": "Fields for Yamhill County",
+          "office": "County Commissioner",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 48877.96,
+          "growth_pct": 16387,
+          "is_new": false
+        },
+        {
+          "slug": "torrie_philippi_griggs_for_morrow_county_commissioner",
+          "name": "Torrie Philippi-Griggs for Morrow County Commissioner",
+          "office": "County Commissioner",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 11434.38,
+          "growth_pct": 11334,
+          "is_new": false
+        },
+        {
+          "slug": "livability_oregon",
+          "name": "Livability Oregon",
+          "office": "Political Action Committee",
+          "party": "",
+          "tier": "committees",
+          "raised": 22175.0,
+          "growth_pct": 10988,
+          "is_new": false
+        },
+        {
+          "slug": "phil_brady_for_wasco_county",
+          "name": "Phil Brady for Wasco County",
+          "office": "County Commissioner",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 7596.5,
+          "growth_pct": 4964,
+          "is_new": false
+        },
+        {
+          "slug": "tripp_for_oregon",
+          "name": "Tripp for Oregon",
+          "office": "State Senator",
           "party": "Republican",
           "tier": "legislative",
-          "raised": 19975.0,
-          "growth_pct": 999,
-          "is_new": true
+          "raised": 22642.03,
+          "growth_pct": 4733,
+          "is_new": false
         },
         {
-          "slug": "laura_rowan_for_judge",
-          "name": "Laura Rowan for Judge",
-          "office": "Judge of the Circuit Court",
-          "party": "Nonpartisan",
-          "tier": "local",
-          "raised": 46509.0,
-          "growth_pct": 999,
-          "is_new": true
-        },
-        {
-          "slug": "jo_perini_abbott_for_judge",
-          "name": "Jo Perini-Abbott for Judge",
-          "office": "Judge of the Circuit Court",
-          "party": "Nonpartisan",
-          "tier": "local",
-          "raised": 36094.0,
-          "growth_pct": 999,
-          "is_new": true
-        },
-        {
-          "slug": "elect_judge_michelle_bartov",
-          "name": "Elect Judge Michelle Bartov",
-          "office": "Judge of the Circuit Court",
-          "party": "Nonpartisan",
-          "tier": "local",
-          "raised": 27360.0,
-          "growth_pct": 999,
-          "is_new": true
-        },
-        {
-          "slug": "oregon_forest_industries_council_political_action_committee",
-          "name": "Oregon Forest Industries Council Political Action Committee",
+          "slug": "jackson_county_republican_central_committee",
+          "name": "Jackson County Republican Central Committee",
           "office": "Political Action Committee",
           "party": "",
           "tier": "committees",
-          "raised": 65500.0,
-          "growth_pct": 999,
-          "is_new": true
+          "raised": 9211.56,
+          "growth_pct": 3250,
+          "is_new": false
         },
         {
-          "slug": "feed_oregon_pac",
-          "name": "Feed Oregon PAC",
+          "slug": "friends_of_kit_johnston",
+          "name": "Friends of Kit Johnston",
+          "office": "County Commissioner",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 3300.0,
+          "growth_pct": 3200,
+          "is_new": false
+        },
+        {
+          "slug": "wallowa_county_republicans",
+          "name": "Wallowa County Republicans",
           "office": "Political Action Committee",
           "party": "",
           "tier": "committees",
-          "raised": 40600.0,
-          "growth_pct": 999,
-          "is_new": true
+          "raised": 5825.0,
+          "growth_pct": 2934,
+          "is_new": false
         },
         {
-          "slug": "pmar_sdc",
-          "name": "PMAR SDC",
+          "slug": "iec_oregon_merit_shop_electrical_pac",
+          "name": "IEC Oregon Merit Shop Electrical PAC",
           "office": "Political Action Committee",
           "party": "",
           "tier": "committees",
-          "raised": 37380.0,
-          "growth_pct": 999,
-          "is_new": true
+          "raised": 6000.0,
+          "growth_pct": 2900,
+          "is_new": false
+        },
+        {
+          "slug": "jasmine_for_the_people",
+          "name": "Jasmine for the People",
+          "office": "City Councilor",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 10075.0,
+          "growth_pct": 2738,
+          "is_new": false
         }
       ],
       "top_donors": [
@@ -487,124 +487,124 @@
       },
       "top_growth": [
         {
-          "slug": "dudley_for_oregon",
-          "name": "Dudley for Oregon",
-          "office": "Governor",
-          "party": "Republican",
-          "tier": "statewide",
-          "raised": 1926723.05,
-          "growth_pct": 999,
-          "is_new": true
-        },
-        {
-          "slug": "david_medina_for_oregon",
-          "name": "David Medina For Oregon",
-          "office": "Governor",
-          "party": "Republican",
-          "tier": "statewide",
-          "raised": 41154.0,
-          "growth_pct": 999,
-          "is_new": true
-        },
-        {
-          "slug": "friends_of_paul_romero_for_governor",
-          "name": "Friends of Paul Romero for Governor",
-          "office": "Governor",
-          "party": "Republican",
-          "tier": "statewide",
-          "raised": 8100.0,
-          "growth_pct": 999,
-          "is_new": true
-        },
-        {
-          "slug": "friends_of_troy_cribbins",
-          "name": "Friends of Troy Cribbins",
-          "office": "State Representative",
-          "party": "Republican",
-          "tier": "legislative",
-          "raised": 43197.17,
-          "growth_pct": 999,
-          "is_new": true
-        },
-        {
-          "slug": "claire_for_oregon",
-          "name": "Claire for Oregon",
-          "office": "State Representative",
-          "party": "Republican",
-          "tier": "legislative",
-          "raised": 42263.0,
-          "growth_pct": 999,
-          "is_new": true
-        },
-        {
-          "slug": "myrna_for_oregon",
-          "name": "Myrna for Oregon",
-          "office": "State Senator",
-          "party": "Democrat",
-          "tier": "legislative",
-          "raised": 37714.8,
-          "growth_pct": 999,
-          "is_new": true
-        },
-        {
-          "slug": "diana_helm_for_county_commissioner",
-          "name": "Diana Helm for County Commissioner",
+          "slug": "fields_for_yamhill_county",
+          "name": "Fields for Yamhill County",
           "office": "County Commissioner",
           "party": "Nonpartisan",
           "tier": "local",
-          "raised": 58950.0,
-          "growth_pct": 999,
-          "is_new": true
+          "raised": 49174.42,
+          "growth_pct": 245772,
+          "is_new": false
         },
         {
-          "slug": "laura_rowan_for_judge",
-          "name": "Laura Rowan for Judge",
-          "office": "Judge of the Circuit Court",
+          "slug": "jasmine_for_the_people",
+          "name": "Jasmine for the People",
+          "office": "City Councilor",
           "party": "Nonpartisan",
           "tier": "local",
-          "raised": 46509.0,
-          "growth_pct": 999,
-          "is_new": true
+          "raised": 10425.0,
+          "growth_pct": 208400,
+          "is_new": false
         },
         {
-          "slug": "alex_for_judge",
-          "name": "Alex for Judge",
-          "office": "Judge of the Circuit Court",
+          "slug": "elect_kellie_jo_smith",
+          "name": "Elect Kellie Jo Smith",
+          "office": "County Commissioner",
           "party": "Nonpartisan",
           "tier": "local",
-          "raised": 46466.0,
-          "growth_pct": 999,
-          "is_new": true
+          "raised": 2450.0,
+          "growth_pct": 48900,
+          "is_new": false
         },
         {
-          "slug": "community_action_network",
-          "name": "Community Action Network",
+          "slug": "dentists_of_oregon_pac",
+          "name": "Dentists of Oregon PAC",
           "office": "Political Action Committee",
           "party": "",
           "tier": "committees",
-          "raised": 143250.0,
-          "growth_pct": 999,
-          "is_new": true
+          "raised": 112531.0,
+          "growth_pct": 37917,
+          "is_new": false
         },
         {
-          "slug": "natural_gas_political_action_committee",
-          "name": "Natural Gas Political Action Committee",
+          "slug": "friends_of_julia_brim_edwards",
+          "name": "Friends of Julia Brim-Edwards",
+          "office": "Chair of the Board of County Commissioners",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 42893.0,
+          "growth_pct": 7013,
+          "is_new": false
+        },
+        {
+          "slug": "tillamook_county_republican_central_committee",
+          "name": "Tillamook County Republican Central Committee",
           "office": "Political Action Committee",
           "party": "",
           "tier": "committees",
-          "raised": 100000.0,
-          "growth_pct": 999,
-          "is_new": true
+          "raised": 1005.0,
+          "growth_pct": 6600,
+          "is_new": false
         },
         {
-          "slug": "allcare_physicians_pac",
-          "name": "AllCare Physicians PAC",
+          "slug": "fix_marion_county_pac",
+          "name": "Fix Marion County PAC",
           "office": "Political Action Committee",
           "party": "",
           "tier": "committees",
-          "raised": 100000.0,
-          "growth_pct": 999,
-          "is_new": true
+          "raised": 6329.0,
+          "growth_pct": 6229,
+          "is_new": false
+        },
+        {
+          "slug": "safe_water_strong_smiles",
+          "name": "Safe Water Strong Smiles",
+          "office": "Political Action Committee",
+          "party": "",
+          "tier": "committees",
+          "raised": 5382.11,
+          "growth_pct": 5282,
+          "is_new": false
+        },
+        {
+          "slug": "noemi_legaspi_pac",
+          "name": "Noemi Legaspi PAC",
+          "office": "State Representative",
+          "party": "Republican",
+          "tier": "legislative",
+          "raised": 17450.0,
+          "growth_pct": 3778,
+          "is_new": false
+        },
+        {
+          "slug": "mullen_for_portland",
+          "name": "Mullen for Portland",
+          "office": "City Councilor",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 5592.0,
+          "growth_pct": 3628,
+          "is_new": false
+        },
+        {
+          "slug": "friends_of_kit_johnston",
+          "name": "Friends of Kit Johnston",
+          "office": "County Commissioner",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 3400.0,
+          "growth_pct": 3300,
+          "is_new": false
+        },
+        {
+          "slug": "iec_oregon_merit_shop_electrical_pac",
+          "name": "IEC Oregon Merit Shop Electrical PAC",
+          "office": "Political Action Committee",
+          "party": "",
+          "tier": "committees",
+          "raised": 6000.0,
+          "growth_pct": 2900,
+          "is_new": false
         }
       ],
       "top_donors": [
@@ -929,124 +929,124 @@
       },
       "top_growth": [
         {
-          "slug": "dudley_for_oregon",
-          "name": "Dudley for Oregon",
-          "office": "Governor",
-          "party": "Republican",
-          "tier": "statewide",
-          "raised": 1926723.05,
-          "growth_pct": 999,
-          "is_new": true
-        },
-        {
-          "slug": "david_medina_for_oregon",
-          "name": "David Medina For Oregon",
-          "office": "Governor",
-          "party": "Republican",
-          "tier": "statewide",
-          "raised": 41154.0,
-          "growth_pct": 999,
-          "is_new": true
-        },
-        {
-          "slug": "friends_of_paul_romero_for_governor",
-          "name": "Friends of Paul Romero for Governor",
-          "office": "Governor",
-          "party": "Republican",
-          "tier": "statewide",
-          "raised": 8100.0,
-          "growth_pct": 3790,
+          "slug": "universal_preschool_now",
+          "name": "Universal Preschool Now",
+          "office": "Political Action Committee",
+          "party": "",
+          "tier": "committees",
+          "raised": 5048.02,
+          "growth_pct": 2403719,
           "is_new": false
         },
         {
-          "slug": "hicks_for_senate",
-          "name": "Hicks for Senate",
-          "office": "State Senator",
-          "party": "Republican",
-          "tier": "legislative",
-          "raised": 247867.55,
-          "growth_pct": 999,
-          "is_new": true
+          "slug": "friends_of_felicita",
+          "name": "Friends of Felicita",
+          "office": "County Commissioner",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 46595.9,
+          "growth_pct": 43448,
+          "is_new": false
         },
         {
-          "slug": "stephanie_for_oregon",
-          "name": "Stephanie for Oregon",
+          "slug": "heather_buch_for_oregon",
+          "name": "Heather Buch for Oregon",
+          "office": "County Commissioner",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 151590.47,
+          "growth_pct": 33587,
+          "is_new": false
+        },
+        {
+          "slug": "kevin_cameron_for_oregon",
+          "name": "Kevin Cameron for Oregon",
+          "office": "County Commissioner",
+          "party": "Republican",
+          "tier": "local",
+          "raised": 25600.0,
+          "growth_pct": 25500,
+          "is_new": false
+        },
+        {
+          "slug": "friends_of_ashley_hartmeier_prigg",
+          "name": "Friends of Ashley Hartmeier-Prigg",
           "office": "State Representative",
-          "party": "Republican",
+          "party": "Democrat",
           "tier": "legislative",
-          "raised": 126248.66,
-          "growth_pct": 999,
-          "is_new": true
+          "raised": 77943.9,
+          "growth_pct": 22170,
+          "is_new": false
         },
         {
-          "slug": "courtney_bangs_pac",
-          "name": "Courtney Bangs PAC",
-          "office": "State Senator",
-          "party": "Republican",
-          "tier": "legislative",
-          "raised": 77887.0,
-          "growth_pct": 999,
-          "is_new": true
-        },
-        {
-          "slug": "friends_of_jamie_collins",
-          "name": "Friends of Jamie Collins",
-          "office": "County Commissioner",
-          "party": "Nonpartisan",
-          "tier": "local",
-          "raised": 142039.26,
-          "growth_pct": 999,
-          "is_new": true
-        },
-        {
-          "slug": "pelroy_for_commissioner",
-          "name": "Pelroy for Commissioner",
-          "office": "County Commissioner",
-          "party": "Nonpartisan",
-          "tier": "local",
-          "raised": 103244.49,
-          "growth_pct": 999,
-          "is_new": true
-        },
-        {
-          "slug": "friends_of_rick_russell",
-          "name": "Friends of Rick Russell",
-          "office": "County Commissioner",
-          "party": "Nonpartisan",
-          "tier": "local",
-          "raised": 95927.0,
-          "growth_pct": 999,
-          "is_new": true
-        },
-        {
-          "slug": "oregon_realtors_political_action_committee_2",
-          "name": "Oregon REALTORS Political Action Committee 2",
+          "slug": "oregon_election_reform_coalition",
+          "name": "Oregon Election Reform Coalition",
           "office": "Political Action Committee",
           "party": "",
           "tier": "committees",
-          "raised": 550416.2,
-          "growth_pct": 999,
-          "is_new": true
+          "raised": 48405.0,
+          "growth_pct": 19262,
+          "is_new": false
         },
         {
-          "slug": "libraries_yes_committee",
-          "name": "Libraries Yes! Committee",
+          "slug": "linda_nishioka_for_salem",
+          "name": "Linda Nishioka for Salem",
+          "office": "City Councilor",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 17444.0,
+          "growth_pct": 17344,
+          "is_new": false
+        },
+        {
+          "slug": "friends_of_columbia_911",
+          "name": "Friends of Columbia 911",
           "office": "Political Action Committee",
           "party": "",
           "tier": "committees",
-          "raised": 300000.0,
-          "growth_pct": 999,
-          "is_new": true
+          "raised": 10155.02,
+          "growth_pct": 10055,
+          "is_new": false
         },
         {
-          "slug": "no_gas_hikes",
-          "name": "No Gas Hikes",
-          "office": "Political Action Committee",
-          "party": "",
-          "tier": "committees",
-          "raised": 194300.0,
-          "growth_pct": 999,
-          "is_new": true
+          "slug": "friends_of_pam_treece",
+          "name": "Friends of Pam Treece",
+          "office": "County Commissioner",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 187932.9,
+          "growth_pct": 7417,
+          "is_new": false
+        },
+        {
+          "slug": "friends_of_steve_callaway",
+          "name": "Friends of Steve Callaway",
+          "office": "County Commissioner",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 28205.0,
+          "growth_pct": 5541,
+          "is_new": false
+        },
+        {
+          "slug": "friends_of_herman_greene",
+          "name": "Friends of Herman Greene",
+          "office": "County Commissioner",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 10750.0,
+          "growth_pct": 4200,
+          "is_new": false
+        },
+        {
+          "slug": "friends_of_tai_pruce_zimmerman",
+          "name": "Friends of Tai Pruce-Zimmerman",
+          "office": "City Councilor",
+          "party": "Nonpartisan",
+          "tier": "local",
+          "raised": 6257.0,
+          "growth_pct": 4071,
+          "is_new": false
         }
       ],
       "top_donors": [

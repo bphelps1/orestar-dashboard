@@ -426,15 +426,12 @@ def generate(agg_dir: Path = AGG_DIR, filers_dir: Path = FILERS_DIR) -> dict:
             by_tier[tier].sort(key=lambda x: -x["raised"])
             by_tier[tier] = by_tier[tier][:3]
 
-        # Top growth: ensure at least 3 per tier, sorted by growth_pct desc
-        # (positive growth first, then negative, within each tier)
-        top_growth_list = []
-        for tier_key in ["statewide", "legislative", "local", "committees"]:
-            tier_entries = [c for c in growth_candidates if c.get("tier") == tier_key]
-            # Sort: new entrants first (by raised), then by growth_pct descending
-            new_in_tier = sorted([c for c in tier_entries if c.get("is_new")], key=lambda x: -x["raised"])
-            existing_in_tier = sorted([c for c in tier_entries if not c.get("is_new")], key=lambda x: -x["growth_pct"])
-            top_growth_list.extend((new_in_tier + existing_in_tier)[:3])
+        # Top growth: only existing filers with positive growth (no new entrants)
+        # Sorted by growth percentage descending, flat list (no tiers)
+        top_growth_list = sorted(
+            [c for c in growth_candidates if not c.get("is_new") and c["growth_pct"] > 0],
+            key=lambda x: -x["growth_pct"],
+        )[:12]
 
         return {
             "by_office_tier": by_tier,

@@ -3346,52 +3346,14 @@ function renderPulseMomentum(data) {
   const body = document.getElementById("pulse-momentum-body");
   if (!body) return;
   let html = "";
-  const allGrowth = data.top_growth || [];
-
-  // Group by tier (same subcategories as Raising the Most)
-  const tiers = [
-    { key: "statewide", label: "Statewide" },
-    { key: "legislative", label: "Legislative" },
-    { key: "local", label: "Local" },
-    { key: "committees", label: "Committees" },
-  ];
-  for (const tier of tiers) {
-    const tierEntries = allGrowth.filter(e => e.tier === tier.key).slice(0, 3);
-    if (!tierEntries.length) continue;
-    html += `<div class="pulse-tier-label">${tier.label}</div>`;
-    for (const e of tierEntries) {
-      const gt = e.is_new ? `<span class="pulse-new-badge">New</span>`
-        : e.growth_pct > 0 ? `<span class="pulse-growth-pct">+${e.growth_pct}%</span>`
-        : e.growth_pct < 0 ? `<span class="pulse-growth-neg">${e.growth_pct}%</span>`
-        : ``;
-      html += pulseEntryHTML(e, "$" + Number(e.raised).toLocaleString("en-US", { maximumFractionDigits: 0 }), gt);
-    }
-  }
-
-  // Fallback: if no tier data, show flat list (old format)
-  if (!html) {
-    const entries = allGrowth.slice(0, PULSE_ROWS * 2);
-    for (const e of entries) {
-      const growthText = e.is_new
-        ? `<span class="pulse-new-badge">New</span>`
-        : `<span class="pulse-growth-pct">+${e.growth_pct}%</span>`;
-      html += pulseEntryHTML(e,
-        "$" + Number(e.raised).toLocaleString("en-US", { maximumFractionDigits: 0 }),
-        growthText
+  const entries = (data.top_growth || []).slice(0, 10);
+  for (const e of entries) {
+    html += pulseEntryHTML(e,
+      "$" + Number(e.raised).toLocaleString("en-US", { maximumFractionDigits: 0 }),
+      `<span class="pulse-growth-pct">+${e.growth_pct}%</span>`
     );
-    }
   }
   body.innerHTML = html || '<div class="pulse-entry-meta">No data</div>';
-
-  // Wire up show-more toggles
-  body.querySelectorAll(".pulse-show-more").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const target = document.getElementById(btn.dataset.target);
-      if (!target) return;
-      target.hidden = !target.hidden;
-      btn.textContent = target.hidden ? `+${target.children.length} more` : "show fewer";
-    });
-  });
 }
 
 function renderPulseDonors(data) {
