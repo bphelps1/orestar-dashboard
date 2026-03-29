@@ -1796,11 +1796,13 @@ if __name__ == "__main__":
             df = df.drop_duplicates(subset=["tran_id"], keep="last")
             log.info("Deduplicated by tran_id: %d → %d rows", before, len(df))
             df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0.0)
-            # Ensure filed_date exists for year-splitting in _save_transactions
-            if "filed_date" not in df.columns:
-                log.warning("No filed_date column — cannot split by year")
-            else:
+            # Normalize filed_date to YYYY-MM-DD (ORESTAR Excel uses MM/DD/YYYY)
+            if "filed_date" in df.columns:
+                _fd = pd.to_datetime(df["filed_date"], format="mixed", dayfirst=False, errors="coerce")
+                df["filed_date"] = _fd.dt.strftime("%Y-%m-%d").fillna(df["filed_date"])
                 _save_transactions(df)
+            else:
+                log.warning("No filed_date column — cannot split by year")
             # Clean up raw files
             for f in RAW_DIR.glob("*.xls*"):
                 f.unlink()
