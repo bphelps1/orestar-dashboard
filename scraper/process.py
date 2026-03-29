@@ -862,7 +862,7 @@ def aggregate(df: pd.DataFrame) -> None:
     _write_json("recent_transactions.json", recent.to_dict(orient="records"))
 
     # ── per-filer index + detail files ───────────────────────────────────────
-    global_coh_data = aggregate_filers(df, cash_contribs, inkind_contribs, expenditures,
+    global_coh_data = aggregate_filers(df, contributions, inkind_contribs, expenditures,
                                        other_receipts, other_disburse, filer_col, contrib_col)
 
     # Update summary.json with correct global cash-on-hand (sum of per-filer COH)
@@ -1031,7 +1031,7 @@ def scrape_account_summaries(
 
 def aggregate_filers(
     df: pd.DataFrame,
-    contributions: pd.DataFrame,   # cash contributions only (C type, non-inkind)
+    contributions: pd.DataFrame,   # all type C contributions (including in-kind)
     inkind_contribs: pd.DataFrame,
     expenditures: pd.DataFrame,    # E type
     other_receipts: pd.DataFrame,  # OR/O/OA type (e.g. Return/Refund, Misc Receipt)
