@@ -3353,30 +3353,15 @@ function renderPulseMomentum(data) {
     { key: "statewide", label: "Statewide" },
     { key: "legislative", label: "Legislative" },
     { key: "local", label: "Local" },
+    { key: "committees", label: "Committees" },
   ];
   for (const tier of tiers) {
-    const tierEntries = allGrowth.filter(e => e.tier === tier.key).slice(0, PULSE_ROWS);
+    const tierEntries = allGrowth.filter(e => e.tier === tier.key).slice(0, 3);
     if (!tierEntries.length) continue;
     html += `<div class="pulse-tier-label">${tier.label}</div>`;
-    // Show top 1, rest collapsed
-    const first = tierEntries[0];
-    const growthText0 = first.is_new
-      ? `<span class="pulse-new-badge">New</span>`
-      : `<span class="pulse-growth-pct">+${first.growth_pct}%</span>`;
-    html += pulseEntryHTML(first,
-      "$" + Number(first.raised).toLocaleString("en-US", { maximumFractionDigits: 0 }),
-      growthText0
-    );
-    if (tierEntries.length > 1) {
-      const extraId = `pulse-momentum-extra-${tier.key}`;
-      html += `<div id="${extraId}" hidden>`;
-      for (let i = 1; i < tierEntries.length; i++) {
-        const e = tierEntries[i];
-        const gt = e.is_new ? `<span class="pulse-new-badge">New</span>` : `<span class="pulse-growth-pct">+${e.growth_pct}%</span>`;
-        html += pulseEntryHTML(e, "$" + Number(e.raised).toLocaleString("en-US", { maximumFractionDigits: 0 }), gt);
-      }
-      html += `</div>`;
-      html += `<div class="pulse-show-more" data-target="${extraId}">+${tierEntries.length - 1} more</div>`;
+    for (const e of tierEntries) {
+      const gt = e.is_new ? `<span class="pulse-new-badge">New</span>` : `<span class="pulse-growth-pct">+${e.growth_pct}%</span>`;
+      html += pulseEntryHTML(e, "$" + Number(e.raised).toLocaleString("en-US", { maximumFractionDigits: 0 }), gt);
     }
   }
 

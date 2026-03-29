@@ -333,10 +333,19 @@ def generate(agg_dir: Path = AGG_DIR, filers_dir: Path = FILERS_DIR) -> dict:
             continue
         timeline = detail.get("timeline", [])
         raised_1m = sum_timeline_months(timeline, recent_1m)
+        raised_prior_1m = sum_timeline_months(timeline, prior_1m_months)
         raised_3m = sum_timeline_months(timeline, recent_3m)
+        raised_prior_3m = sum_timeline_months(timeline, prior_3m)
         raised_cycle = sum_timeline_months(timeline, cycle_months)
+        raised_prior_cycle = sum_timeline_months(timeline, prior_cycle)
         if raised_1m <= 0 and raised_3m <= 0 and raised_cycle <= 0:
             continue
+
+        def _cgrowth(current, prior):
+            if prior <= 0:
+                return 999 if current > 0 else 0
+            return round((current - prior) / prior * 100)
+
         committee_metrics.append({
             "slug": slug,
             "name": row["name"],
@@ -344,6 +353,9 @@ def generate(agg_dir: Path = AGG_DIR, filers_dir: Path = FILERS_DIR) -> dict:
             "raised_1m": round(raised_1m, 2),
             "raised_3m": round(raised_3m, 2),
             "raised_cycle": round(raised_cycle, 2),
+            "growth_1m": _cgrowth(raised_1m, raised_prior_1m),
+            "growth_3m": _cgrowth(raised_3m, raised_prior_3m),
+            "growth_cycle": _cgrowth(raised_cycle, raised_prior_cycle),
         })
 
     # Aggregate top donors from per-filer monthly data (full, not limited)
@@ -384,7 +396,7 @@ def generate(agg_dir: Path = AGG_DIR, filers_dir: Path = FILERS_DIR) -> dict:
                     "is_new": fm[growth_key] == 999,
                 })
 
-        # Add non-candidate committees
+        # Add non-candidate committees (raising + growth)
         for cm in committee_metrics:
             raised = cm[metric_key]
             if raised <= 0:
@@ -396,6 +408,18 @@ def generate(agg_dir: Path = AGG_DIR, filers_dir: Path = FILERS_DIR) -> dict:
                 "party": "",
                 "raised": raised,
             })
+            # Committee growth
+            if raised >= min_raised and cm[growth_key] > 0:
+                growth_candidates.append({
+                    "slug": cm["slug"],
+                    "name": cm["name"],
+                    "office": cm.get("committee_type", ""),
+                    "party": "",
+                    "tier": "committees",
+                    "raised": raised,
+                    "growth_pct": cm[growth_key],
+                    "is_new": cm[growth_key] == 999,
+                })
 
         # Sort each tier by raised amount, take top entries
         for tier in by_tier:
@@ -407,7 +431,7 @@ def generate(agg_dir: Path = AGG_DIR, filers_dir: Path = FILERS_DIR) -> dict:
         new_entrants = [c for c in growth_candidates if c.get("is_new")]
         existing.sort(key=lambda x: -x["growth_pct"])
         new_entrants.sort(key=lambda x: -x["raised"])
-        top_growth_list = (existing + new_entrants)[:8]
+        top_growth_list = (existing + new_entrants)[:20]
 
         return {
             "by_office_tier": by_tier,
