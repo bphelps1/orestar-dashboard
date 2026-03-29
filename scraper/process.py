@@ -1356,25 +1356,35 @@ def aggregate_filers(
         # Timeline — matches ORESTAR methodology (empirically verified).
         # contributions = Cash Contribution + In-Kind (matches ORESTAR "Cash Contributions")
         # expenditures  = Cash Expenditure + In-Kind mirrored (matches ORESTAR "Cash Expenditures")
+        # loans_received / loan_payments = separate for COH calculation
         # inkind shown separately for transparency
-        # COH: in-kind is on both sides so it cancels out
+        # COH = begin + contributions + loans_received + other_receipts
+        #       - expenditures - loan_payments - other_disbursements
+        #   (in-kind is in both contributions and expenditures, nets to zero)
+        _loans_in  = filer_contrib[filer_contrib["sub_type"] == "Loan Received (Non-Exempt)"] if not filer_contrib.empty else filer_contrib
+        _loans_out = filer_expend[filer_expend["sub_type"] == "Loan Payment (Non-Exempt)"] if not filer_expend.empty else filer_expend
+
         c_monthly  = monthly_sum(_orestar_contrib,   "contributions")
         i_monthly  = monthly_sum(filer_inkind,        "inkind")
+        li_monthly = monthly_sum(_loans_in,           "loans_received")
         # Expenditures = Cash Expenditure + In-Kind (mirrored)
         ce_monthly = monthly_sum(_cash_expend_only,   "cash_exp")
         ik_monthly = monthly_sum(filer_inkind,        "inkind_exp")
+        lo_monthly = monthly_sum(_loans_out,          "loan_payments")
         or_monthly = monthly_sum(filer_or,            "other_receipts")
         od_monthly = monthly_sum(filer_od,            "other_disbursements")
         count_monthly_filer = filer_all.groupby("month").size().rename("count")
-        tl_df = pd.concat([c_monthly, i_monthly, ce_monthly, ik_monthly,
-                           or_monthly, od_monthly,
+        tl_df = pd.concat([c_monthly, i_monthly, li_monthly, ce_monthly, ik_monthly,
+                           lo_monthly, or_monthly, od_monthly,
                            count_monthly_filer], axis=1).fillna(0).sort_index()
         timeline = [
             {
                 "month": m,
                 "contributions":       round(float(row.get("contributions",       0)), 2),
                 "inkind":              round(float(row.get("inkind",              0)), 2),
+                "loans_received":      round(float(row.get("loans_received",      0)), 2),
                 "expenditures":        round(float(row.get("cash_exp", 0)) + float(row.get("inkind_exp", 0)), 2),
+                "loan_payments":       round(float(row.get("loan_payments",       0)), 2),
                 "other_receipts":      round(float(row.get("other_receipts",      0)), 2),
                 "other_disbursements": round(float(row.get("other_disbursements", 0)), 2),
                 "count":               int(row.get("count", 0)),
