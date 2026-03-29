@@ -69,16 +69,27 @@ jobs:
             xvfb-run --auto-servernum python scraper/fetch.py $ARGS
           fi
 
-      - name: Process and aggregate data
-        run: python scraper/process.py
+      - name: Process data
+        run: |
+          FILER_IDS="${{ inputs.filer_ids }}"
+          if [ -n "$FILER_IDS" ]; then
+            # Filer-targeted: merge only (skip aggregation — daily refresh handles it)
+            python scraper/process.py --merge-only
+          else
+            # Full backfill: aggregate everything
+            python scraper/process.py
+          fi
 
       - name: Commit and push backfill data
         if: always()
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          mkdir -p docs/data/aggregated
-          cp -r data/aggregated/. docs/data/aggregated/
+          FILER_IDS="${{ inputs.filer_ids }}"
+          if [ -z "$FILER_IDS" ]; then
+            mkdir -p docs/data/aggregated
+            cp -r data/aggregated/. docs/data/aggregated/
+          fi
           git add data/ docs/data/
           git diff --cached --quiet || git commit -m "chore: backfill ${{ inputs.date_field }}-date ${{ inputs.start_year }}–${{ inputs.end_year || 'now' }}"
           for attempt in 1 2 3 4 5; do

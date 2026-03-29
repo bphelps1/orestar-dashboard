@@ -1778,4 +1778,31 @@ def _write_json(filename: str, data) -> None:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    process()
+    import sys
+    if "--merge-only" in sys.argv:
+        # Just merge raw Excel into txn_YYYY.csv.gz — skip aggregation.
+        # Used by filer-targeted backfill to save time; the daily refresh
+        # will run the full aggregation later.
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)-8s  %(message)s", datefmt="%H:%M:%S")
+        log.info("Merge-only mode: loading raw Excel files and updating transaction files")
+        entity_map = load_entity_map()
+        new_df = load_excel_files(RAW_DIR)
+        if new_df.empty:
+            log.info("No new data to merge.")
+        else:
+            existing = _load_all_transactions()
+            df = pd.concat([existing, new_df], ignore_index=True) if not existing.empty else new_df
+            df["tran_id"] = df["tran_id"].astype(str).str.strip()
+            before = len(df)
+            df = df.drop_duplicates(subset=["tran_id"], keep="last")
+            log.info("Deduplicated by tran_id: %d → %d rows", before, len(df))
+            df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0.0)
+            # Apply entity map for name normalization
+            _apply_entity_map(df, entity_map)
+            _save_transactions(df)
+            # Clean up raw files
+            for f in RAW_DIR.glob("*.xls*"):
+                f.unlink()
+            log.info("Merge complete. Raw files cleaned up.")
+    else:
+        process()
