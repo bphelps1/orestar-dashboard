@@ -730,18 +730,20 @@ def get_filers_with_discrepancies(threshold: float = 100.0) -> list[tuple[str, s
 
     results = []
     for entry in index:
-        disc = abs(entry.get("orestar_discrepancy", 0.0))
+        slug = entry.get("slug", "")
+        detail_path = DATA_DIR / "aggregated" / "filers" / f"{slug}.json"
+        if not detail_path.exists():
+            continue
+        with open(detail_path) as f:
+            detail = json.load(f)
+        # Read discrepancy from detail file (not index — index doesn't have it)
+        disc = abs(detail.get("orestar_discrepancy", 0.0))
         if disc >= threshold:
-            slug = entry.get("slug", "")
-            detail_path = DATA_DIR / "aggregated" / "filers" / f"{slug}.json"
-            if detail_path.exists():
-                with open(detail_path) as f:
-                    detail = json.load(f)
-                fid = detail.get("orestar_account_summary", {}).get("filer_id")
-                if not fid:
-                    fid = str(entry.get("filer_id", ""))
-                if fid:
-                    results.append((str(fid), entry.get("name", slug), disc))
+            fid = detail.get("orestar_account_summary", {}).get("filer_id")
+            if not fid:
+                fid = str(entry.get("filer_id", ""))
+            if fid:
+                results.append((str(fid), entry.get("name", slug), disc))
 
     results.sort(key=lambda x: x[2], reverse=True)
     return results
