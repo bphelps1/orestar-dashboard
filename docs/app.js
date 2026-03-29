@@ -694,7 +694,7 @@ function mergeTypeByMonth(byMonth) {
 // Sum contributions/expenditures/count from a (possibly filtered) timeline array.
 // When beginningBalances is provided, cash on hand is calculated as:
 //   beginning_balance[earliest_year] + contributions + other_receipts - expenditures - other_disbursements
-function statsFromTimeline(rows, beginningBalances) {
+function statsFromTimeline(rows, beginningBalances, fullTimeline) {
   // ORESTAR methodology (empirically verified):
   // contributions = Cash Contribution + In-Kind (ORESTAR "Cash Contributions")
   // expenditures = Cash Expenditure + In-Kind mirrored (ORESTAR "Cash Expenditures")
@@ -710,17 +710,27 @@ function statsFromTimeline(rows, beginningBalances) {
   const totalOD      = rows.reduce((s, r) => s + (r.other_disbursements || 0), 0);
   const count        = rows.reduce((s, r) => s + (r.count || 0), 0);
 
+  // Beginning balance: only the first year's ORESTAR-scraped value is trusted.
+  // For later years, roll forward from the first year through the timeline.
   let beginBal = 0;
   if (beginningBalances && rows.length > 0) {
+    const sortedYears = Object.keys(beginningBalances).sort();
+    const firstYear = sortedYears[0] || "";
+    const firstYearBal = firstYear ? (beginningBalances[firstYear] || 0) : 0;
     const earliestMonth = rows[0].month || "";
     const earliestYear = earliestMonth.slice(0, 4);
-    if (earliestYear && beginningBalances[earliestYear] !== undefined) {
-      beginBal = beginningBalances[earliestYear];
+    if (!earliestYear || earliestYear === firstYear) {
+      beginBal = firstYearBal;
     } else {
-      const sortedYears = Object.keys(beginningBalances).sort();
-      if (sortedYears.length > 0) {
-        beginBal = beginningBalances[sortedYears[0]];
+      // Roll forward from first year through timeline months before the filtered range
+      let running = firstYearBal;
+      const src = fullTimeline || rows;
+      for (const r of src) {
+        if (!r.month || r.month >= earliestMonth) break;
+        running += (r.contributions || 0) + (r.loans_received || 0) + (r.other_receipts || 0)
+                 - (r.expenditures || 0) - (r.loan_payments || 0) - (r.other_disbursements || 0);
       }
+      beginBal = Math.round(running * 100) / 100;
     }
   }
 
@@ -892,14 +902,24 @@ function buildCalcSummary(profile, year) {
     otherDisburse += row.other_disbursements || 0;
   }
 
+  // Beginning balance: only the first year's ORESTAR-scraped value is trusted.
+  // For later years, roll forward from the first year through the timeline.
   const beginBalances = profile.beginning_balances || {};
+  const sortedYears = Object.keys(beginBalances).sort();
+  const firstYear = sortedYears[0] || "";
+  const firstYearBal = firstYear ? (beginBalances[firstYear] || 0) : 0;
   let beginBal;
-  if (year) {
-    beginBal = beginBalances[year] || 0;
+  if (!year || year === firstYear) {
+    beginBal = firstYearBal;
   } else {
-    const sortedYears = Object.keys(beginBalances).sort();
-    const firstYear = sortedYears[0] || "";
-    beginBal = firstYear ? (beginBalances[firstYear] || 0) : 0;
+    // Roll forward from first year through timeline months before the target year
+    let running = firstYearBal;
+    for (const r of timeline) {
+      if (!r.month || r.month >= year) break;
+      running += (r.contributions || 0) + (r.loans_received || 0) + (r.other_receipts || 0)
+               - (r.expenditures || 0) - (r.loan_payments || 0) - (r.other_disbursements || 0);
+    }
+    beginBal = Math.round(running * 100) / 100;
   }
 
   // COH = begin + contributions + loans_received + other_receipts
@@ -1495,18 +1515,11 @@ async function showPreviewPopover(slug, anchorEl) {
     const profile = await loadFilerProfile(slug);
     if (_previewPopover !== pop) return; // stale
 
-    // Respect current filters
+    // Always compute from timeline for consistency
     const hasDate = state.dateStart || state.dateEnd;
-    let stats;
-    if (hasDate) {
-      stats = statsFromTimeline(filterMonthRows(profile.timeline || []), profile.beginning_balances);
-    } else {
-      stats = {
-        totalIn: profile.total_in,
-        totalOut: profile.total_out,
-        cashOnHand: profile.cash_on_hand,
-      };
-    }
+    const fullTl = profile.timeline || [];
+    const popTlRows = hasDate ? filterMonthRows(fullTl) : fullTl;
+    const stats = statsFromTimeline(popTlRows, profile.beginning_balances, fullTl);
 
     // Top 5 donors (respect date filter)
     const years = yearsInRange();
@@ -1937,7 +1950,8 @@ function renderOverviewGlobal() {
   const tlRows = hasDate
     ? filterMonthRows(timelineData || [])
     : (timelineData || []);
-  const { totalIn, totalInKind, totalOut, cashOnHand, count } = statsFromTimeline(tlRows, globalBeginBal);
+  const fullGlobalTl = timelineData || [];
+  const { totalIn, totalInKind, totalOut, cashOnHand, count } = statsFromTimeline(tlRows, globalBeginBal, fullGlobalTl);
   document.getElementById("stat-contributions").textContent = fmt$(totalIn);
   document.getElementById("stat-inkind").textContent        = fmt$(totalInKind);
   document.getElementById("stat-expenditures").textContent  = fmt$(totalOut);
@@ -2111,8 +2125,9 @@ function renderOverviewSingleFiler(profile) {
   const tlRows = hasDate
     ? filterMonthRows(profile.timeline || [])
     : (profile.timeline || []);
+  const fullFilerTl = profile.timeline || [];
   const { totalIn, totalInKind, totalOut, cashOnHand, count } =
-    statsFromTimeline(tlRows, profile.beginning_balances);
+    statsFromTimeline(tlRows, profile.beginning_balances, fullFilerTl);
   document.getElementById("stat-contributions").textContent = fmt$(totalIn);
   document.getElementById("stat-inkind").textContent        = fmt$(totalInKind);
   document.getElementById("stat-expenditures").textContent  = fmt$(totalOut);
@@ -2452,8 +2467,8 @@ function renderOverviewMultiFiler(profiles) {
   document.getElementById("filer-comparison-grid").innerHTML = profiles.map(p => {
     const hasDate = state.dateStart || state.dateEnd;
     const s = hasDate
-      ? statsFromTimeline(filterMonthRows(p.timeline || []), p.beginning_balances)
-      : { totalIn: p.total_in, totalInKind: p.total_inkind || 0, totalOut: p.total_out, cashOnHand: p.cash_on_hand, count: p.tran_count };
+      ? statsFromTimeline(filterMonthRows(p.timeline || []), p.beginning_balances, p.timeline || [])
+      : statsFromTimeline(p.timeline || [], p.beginning_balances);
     const tranCount = s.count ? fmtNum(s.count) : "—";
     const cohInd = cohIndicatorHTML(p);
     return `
