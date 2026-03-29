@@ -672,12 +672,18 @@ def aggregate(df: pd.DataFrame) -> None:
     other_receipts  = df[ttype.isin({"OR", "O", "OA"})]   # Other Receipt, Other, Other AR
     other_disburse  = df[ttype == "OD"]                    # Other Disbursement
 
-    # Separate cash contributions from in-kind (forgiven expenditures, etc.)
-    inkind_mask     = contributions["sub_type"].str.contains("In-Kind", case=False, na=False)
+    # Separate cash contributions from in-kind.
+    # IMPORTANT: Use exact "In-Kind Contribution" match only. Other sub_types containing
+    # "In-Kind" (e.g. "In-Kind/Forgiven Account Payable", "In-Kind/Forgiven Personal
+    # Expenditures", "Pledge of In-Kind") should NOT be mirrored to the expenditure side,
+    # as they are not standard in-kind contributions in ORESTAR's methodology.
+    # Using str.contains("In-Kind") was a bug that inflated expenditures by $5.2M across
+    # 1,483 filers without a matching contribution offset.
+    inkind_mask     = contributions["sub_type"] == "In-Kind Contribution"
     cash_contribs   = contributions[~inkind_mask]
     inkind_contribs = contributions[inkind_mask]
 
-    # ORESTAR-matching: Cash Contributions = Cash Contribution + In-Kind
+    # ORESTAR-matching: Cash Contributions = Cash Contribution + In-Kind Contribution
     _orestar_contrib_mask = contributions["sub_type"].isin({"Cash Contribution", "In-Kind Contribution"})
     _orestar_contribs = contributions[_orestar_contrib_mask]
     # ORESTAR-matching: Cash Expenditures = Cash Expenditure + In-Kind mirrored
