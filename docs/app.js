@@ -1291,11 +1291,21 @@ function makeLineChart(containerId, labels, datasets) {
     type: 'line',
     data: ds.data,
     symbol: 'none',
-    lineStyle: { color: ds.borderColor, width: 2 },
+    lineStyle: {
+      color: ds.borderColor,
+      width: 2,
+      type: ds.lineType || 'solid',
+    },
     itemStyle: { color: ds.borderColor },
     areaStyle: ds.fill ? { color: ds.backgroundColor, opacity: 0.3 } : undefined,
     smooth: ds.tension ? true : false,
   }));
+
+  // Only show legend entries for datasets that opt in (or all if none specify)
+  const legendEntries = datasets.filter(d => d.showInLegend !== false).map(d => d.label);
+  const hasHiddenLegend = datasets.some(d => d.showInLegend === false);
+  const legendRows = Math.ceil(legendEntries.length / (IS_MOBILE ? 2 : 3));
+  const legendHeight = legendRows * (IS_MOBILE ? 18 : 22) + (hasHiddenLegend ? 20 : 10);
 
   chart.setOption({
     tooltip: {
@@ -1310,14 +1320,16 @@ function makeLineChart(containerId, labels, datasets) {
       },
     },
     legend: {
-      data: datasets.map(d => d.label),
+      data: legendEntries,
       top: 0,
-      textStyle: { fontSize: IS_MOBILE ? 10 : 12 },
+      textStyle: { fontSize: IS_MOBILE ? 9 : 11 },
+      itemGap: IS_MOBILE ? 8 : 15,
+      padding: [0, 0, 5, 0],
     },
     grid: {
       left: IS_MOBILE ? 10 : 20,
       right: IS_MOBILE ? 10 : 20,
-      top: 35,
+      top: legendHeight,
       bottom: IS_MOBILE ? 80 : 40,
       containLabel: true,
     },
@@ -1340,6 +1352,16 @@ function makeLineChart(containerId, labels, datasets) {
       { type: 'slider', start: 70, end: 100, height: 25, bottom: 5 },
       { type: 'inside' },
     ] : [{ type: 'inside' }],
+    graphic: hasHiddenLegend ? [{
+      type: 'text',
+      left: 'center',
+      top: legendRows * (IS_MOBILE ? 20 : 24) + 4,
+      style: {
+        text: 'Solid = Contributions · Dashed = Expenditures',
+        fontSize: IS_MOBILE ? 8 : 10,
+        fill: '#9ca3af',
+      },
+    }] : [],
     series,
   });
 
@@ -2815,7 +2837,10 @@ async function loadTimeline() {
 
   if (n === 0) {
     renderTimeline("all");
-
+  } else if (n === 1) {
+    // Single filer: use same green/amber as global view
+    const profile = await loadFilerProfile(state.selectedFilers[0].slug);
+    renderTimelineSingleFiler(profile);
   } else {
     const profiles = await Promise.all(state.selectedFilers.map(f => loadFilerProfile(f.slug)));
     renderTimelineMultiFiler(profiles);
@@ -2859,6 +2884,39 @@ function renderTimeline(year) {
   );
 }
 
+function renderTimelineSingleFiler(profile) {
+  const sm = state.dateStart ? state.dateStart.slice(0, 7) : null;
+  const em = state.dateEnd ? state.dateEnd.slice(0, 7) : null;
+  const rows = (profile.timeline || [])
+    .filter(t => t.month >= "2006-01")
+    .filter(t => (!sm || t.month >= sm) && (!em || t.month <= em));
+
+  makeLineChart(
+    "chart-timeline",
+    rows.map(r => r.month),
+    [
+      {
+        label: "Contributions",
+        data: rows.map(r => r.contributions || 0),
+        borderColor: "#16a34a",
+        backgroundColor: "rgba(22,163,74,0.08)",
+        fill: true,
+        tension: 0.3,
+        pointRadius: rows.length > 60 ? 0 : 3,
+      },
+      {
+        label: "Expenditures",
+        data: rows.map(r => r.expenditures || 0),
+        borderColor: "#d97706",
+        backgroundColor: "rgba(217,119,6,0.08)",
+        fill: true,
+        tension: 0.3,
+        pointRadius: rows.length > 60 ? 0 : 3,
+      },
+    ],
+  );
+}
+
 function renderTimelineMultiFiler(profiles) {
   // Union of all months across profiles, filtered to date range
   const monthSet = new Set();
@@ -2873,23 +2931,26 @@ function renderTimelineMultiFiler(profiles) {
     const byMonth = new Map((profile.timeline || []).map(t => [t.month, t]));
 
     datasets.push({
-      label: `${profile.name} (Contributions)`,
+      label: `${profile.name}`,
       data: months.map(m => (byMonth.get(m) || {}).contributions || 0),
       borderColor: color,
       backgroundColor: "transparent",
       fill: false,
       tension: 0.3,
       pointRadius: months.length > 60 ? 0 : 3,
+      lineType: 'solid',
+      showInLegend: true,
     });
     datasets.push({
-      label: `${profile.name} (Expenditures)`,
+      label: `${profile.name} (Expend)`,
       data: months.map(m => (byMonth.get(m) || {}).expenditures || 0),
       borderColor: color,
       backgroundColor: "transparent",
-      borderDash: [5, 5],
       fill: false,
       tension: 0.3,
       pointRadius: months.length > 60 ? 0 : 3,
+      lineType: 'dashed',
+      showInLegend: false,
     });
   });
 
