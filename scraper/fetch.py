@@ -481,6 +481,166 @@ def _fetch_range(start: date, end: date, date_field: str = "filed") -> None:
     log.info("Fetch complete. Raw files in: %s", RAW_DIR)
 
 
+def download_filer_window(
+    page,
+    context,
+    filer_id: str,
+    start: date,
+    end: date,
+    raw_dir: Path,
+) -> Path | None:
+    """
+    Download ALL transactions for a specific filer in a date range.
+
+    No transaction type filter — pulls everything. If results hit
+    the 4,999 row cap, splits the window in half and retries both halves.
+    """
+    filename = raw_dir / f"filer{filer_id}_{start.isoformat()}_{end.isoformat()}.xlsx"
+    if filename.exists():
+        rows = _validate_download(filename)
+        if rows > 0 and rows < ORESTAR_ROW_CAP:
+            log.debug("Already downloaded: %s (%d rows)", filename.name, rows)
+            return filename
+
+    try:
+        _return_to_search(page)
+
+        # Fill filer committee ID (no transaction type = all types)
+        page.fill('input[name="cneSearchFilerCommitteeId"]', str(filer_id))
+        page.wait_for_timeout(300)
+
+        # Transaction date range
+        page.fill('input[name="cneSearchTranStartDate"]', start.strftime("%m/%d/%Y"))
+        page.fill('input[name="cneSearchTranEndDate"]', end.strftime("%m/%d/%Y"))
+
+        # Submit
+        page.click('input[name="search"]')
+        try:
+            page.wait_for_url(RESULTS_URL_PATTERN, timeout=30_000)
+        except PlaywrightTimeout:
+            log.warning("Timed out waiting for results: filer %s %s→%s", filer_id, start, end)
+            _return_to_search(page)
+            return None
+
+        # Extract CSRF + session for Excel export
+        results_url = page.url
+        csrf = page.evaluate("""() => {
+            const links = [...document.querySelectorAll('a[href*="OWASP_CSRFTOKEN"]')];
+            if (!links.length) return null;
+            const m = links[0].href.match(/OWASP_CSRFTOKEN=([^&"'\\s]+)/);
+            return m ? m[1] : null;
+        }""")
+        if not csrf:
+            log.warning("No CSRF token for filer %s %s→%s", filer_id, start, end)
+            _return_to_search(page)
+            return None
+
+        session_match = re.search(r";(JSESSIONID_ORESTAR=[^?&\s]+)", results_url)
+        session_path = f";{session_match.group(1)}" if session_match else ""
+
+        # Download Excel
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        cookies = {c["name"]: c["value"] for c in context.cookies()}
+        export_url = f"{EXPORT_URL}{session_path}?OWASP_CSRFTOKEN={csrf}"
+        resp = requests.get(
+            export_url,
+            cookies=cookies,
+            headers={"User-Agent": USER_AGENT, "Referer": results_url},
+            timeout=120,
+        )
+
+        ct = resp.headers.get("Content-Type", "")
+        if "html" in ct.lower():
+            log.debug("requests returned HTML; falling back to browser download...")
+            with page.expect_download(timeout=60_000) as dl_info:
+                page.goto(f"{EXPORT_URL}?OWASP_CSRFTOKEN={csrf}",
+                          wait_until="commit", timeout=60_000)
+            dl_info.value.save_as(filename)
+        else:
+            filename.write_bytes(resp.content)
+
+        # Validate
+        row_count = _validate_download(filename)
+        if row_count < 0:
+            log.warning("Invalid download for filer %s %s→%s — deleting", filer_id, start, end)
+            filename.unlink(missing_ok=True)
+            _return_to_search(page)
+            return None
+
+        log.info("Filer %s %s→%s: %d rows (%d bytes)",
+                 filer_id, start, end, row_count, filename.stat().st_size)
+
+        # Row-cap check — split window and recurse
+        if row_count >= ORESTAR_ROW_CAP:
+            span_days = (end - start).days
+            if span_days <= 1:
+                log.warning("Row cap hit on a single day for filer %s on %s — cannot split further",
+                            filer_id, start)
+                _return_to_search(page)
+                return filename
+
+            mid = start + timedelta(days=span_days // 2)
+            log.warning("Row cap hit for filer %s %s→%s — splitting at %s",
+                         filer_id, start, end, mid)
+            filename.unlink(missing_ok=True)
+            _return_to_search(page)
+            download_filer_window(page, context, filer_id, start, mid, raw_dir)
+            time.sleep(REQUEST_DELAY)
+            download_filer_window(page, context, filer_id, mid + timedelta(days=1), end, raw_dir)
+            return None
+
+        _return_to_search(page)
+        time.sleep(REQUEST_DELAY)
+        return filename
+
+    except SessionExpiredError:
+        raise
+    except Exception as exc:
+        if "secure.sos.state.or.us/orestar" not in page.url:
+            raise SessionExpiredError(
+                f"Session expired during filer fetch — redirected to {page.url}"
+            ) from exc
+        log.warning("Failed filer %s %s→%s: %s", filer_id, start, end, exc)
+        try:
+            _return_to_search(page)
+        except Exception:
+            pass
+        return None
+
+
+def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
+    """Fetch all transactions for specific filers across all years."""
+    end_date = date.today()
+    start_date = date(start_year, 1, 1)
+    RAW_DIR.mkdir(parents=True, exist_ok=True)
+
+    log.info("Backfilling %d filers from %s to %s", len(filer_ids), start_date, end_date)
+
+    with sync_playwright() as p:
+        browser, context, page = setup_browser(p)
+        for fid in filer_ids:
+            log.info("=== Backfilling filer %s ===", fid)
+            try:
+                download_filer_window(page, context, fid, start_date, end_date, RAW_DIR)
+            except SessionExpiredError:
+                log.warning("Session expired during filer %s — restarting browser", fid)
+                try:
+                    browser.close()
+                except Exception:
+                    pass
+                browser, context, page = setup_browser(p)
+                # Retry once
+                try:
+                    download_filer_window(page, context, fid, start_date, end_date, RAW_DIR)
+                except Exception as exc:
+                    log.error("Failed filer %s after restart: %s", fid, exc)
+            except Exception as exc:
+                log.error("Failed filer %s: %s", fid, exc)
+        browser.close()
+
+    log.info("Filer backfill complete. Raw files in: %s", RAW_DIR)
+
+
 def run_incremental(days: int = 14) -> None:
     today = date.today()
     start = today - timedelta(days=days)
@@ -600,9 +760,17 @@ def main() -> None:
         dest="date_field",
         help="Search by filed date (default) or transaction date (use 'tran' for pre-2017 backfill)",
     )
+    parser.add_argument(
+        "--filer-ids",
+        nargs="+",
+        help="Fetch all transactions for specific filer committee IDs (bypasses --mode)",
+    )
 
     args = parser.parse_args()
-    if args.mode == "incremental":
+
+    if args.filer_ids:
+        backfill_filers(args.filer_ids, start_year=args.start_year)
+    elif args.mode == "incremental":
         run_incremental(days=args.days)
     elif args.mode == "backfill":
         run_backfill(start_year=args.start_year, end_year=args.end_year,
