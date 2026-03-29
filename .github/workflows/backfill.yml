@@ -108,6 +108,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          FILER_IDS="${{ inputs.filer_ids }}"
+          if [ -n "$FILER_IDS" ]; then
+            echo "Filer-targeted backfill — skipping re-trigger (daily refresh will aggregate)."
+            exit 0
+          fi
           ARGS="--mode=count-remaining --start-year=${{ inputs.start_year }} --date-field=${{ inputs.date_field }}"
           if [ -n "${{ inputs.end_year }}" ]; then
             ARGS="$ARGS --end-year=${{ inputs.end_year }}"
