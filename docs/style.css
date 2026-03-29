@@ -930,6 +930,25 @@ main {
 }
 .acct-tile-tip strong { font-weight: 600; }
 
+/* COH-contributing tile accent */
+.acct-tile-coh {
+  border-left: 3px solid var(--color-accent);
+}
+/* Per-tile ORESTAR warning badge */
+.acct-tile-warn {
+  display: inline-block;
+  font-size: 0.6rem;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: #fefcbf;
+  color: #975a16;
+  border: 1px solid #ecc94b;
+  cursor: help;
+  margin-left: 4px;
+  vertical-align: middle;
+  font-weight: 700;
+}
+
 /* ── Yearly Discrepancy Table ──────────────────────────────────────────── */
 .disc-table {
   font-size: 0.8rem;

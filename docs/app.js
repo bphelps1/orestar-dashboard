@@ -740,55 +740,57 @@ function statsFromTimeline(rows, beginningBalances) {
 // year's beginning balance, which anchors our running cash position.
 
 const CALC_TILE_META = {
-  // ── Calculated from transaction data ──────────────────────────────────────
-  cash_contributions: {
-    label: "Cash Contributions",
-    tip: "<strong>Counted:</strong> Sum of every individual cash contribution transaction we scraped.<br><strong>Condition:</strong> Transactions with type 'C' and sub-type 'Cash Contribution'.<br><strong>Meaning:</strong> Total direct cash and check donations received by this committee.",
-  },
-  inkind_contributions: {
-    label: "In-Kind Contributions",
-    tip: "<strong>Counted:</strong> Sum of every in-kind contribution transaction we scraped.<br><strong>Condition:</strong> Transactions with type 'C' and sub-type containing 'In-Kind'.<br><strong>Meaning:</strong> The estimated fair-market value of goods, services, or event space donated instead of cash.",
-  },
-  total_contributions: {
-    label: "Total Contributions",
-    subtotal: true,
-    compute: d => d.cash_contributions + d.inkind_contributions,
-    tip: "<strong>Counted:</strong> Cash contributions + in-kind contributions.<br><strong>Meaning:</strong> Everything the committee received from donors.",
-  },
-  cash_expenditures: {
-    label: "Cash Expenditures",
-    tip: "<strong>Counted:</strong> Sum of every cash expenditure transaction we scraped.<br><strong>Condition:</strong> Transactions with type 'E', excluding non-cash-affecting sub-types like 'Account Payable' and 'Personal Expenditure for Reimbursement'.<br><strong>Meaning:</strong> Total cash actually spent on campaign operations.",
-  },
-  other_disbursements: {
-    label: "Other Disbursements",
-    tip: "<strong>Counted:</strong> Sum of non-expenditure cash outflows from our scraped transactions.<br><strong>Condition:</strong> Transactions with type 'OD' (Other Disbursement).<br><strong>Meaning:</strong> Miscellaneous cash payments that are not standard campaign expenditures.",
-  },
-  total_outflows: {
-    label: "Total Outflows",
-    subtotal: true,
-    compute: d => d.cash_expenditures + d.other_disbursements,
-    tip: "<strong>Counted:</strong> Cash expenditures + other disbursements.<br><strong>Meaning:</strong> Total cash paid out by the committee.",
-  },
-  // ── Cash Balance (calculated from transactions + first-year anchor) ───────
+  // ── Cash Balance tiles (COH-contributing) ─────────────────────────────────
   beginning_balance: {
     label: "Beginning Balance",
+    coh: true,
+    orestar_field: "orestar_beginning_balance",
     tip: "<strong>Counted:</strong> The committee's cash position at the start of the selected period.<br><strong>Condition:</strong> Anchored to the first-ever ORESTAR beginning balance for this committee, then rolled forward year-to-year using our transaction data.<br><strong>Meaning:</strong> How much cash the committee started with. Only the very first year's balance comes from ORESTAR; every subsequent year is calculated from the prior year's ending balance.",
+  },
+  cash_contributions: {
+    label: "Cash Contributions",
+    coh: true,
+    orestar_field: "orestar_contributions",
+    tip: "<strong>Counted:</strong> Cash Contribution + In-Kind Contribution sub-types. Matches ORESTAR's Cash Contributions line.<br><strong>Note:</strong> In-kind appears on both the contribution and expenditure sides, netting to zero for cash balance purposes.",
   },
   other_receipts: {
     label: "Other Receipts",
-    tip: "<strong>Counted:</strong> Sum of non-contribution cash received from our scraped transactions.<br><strong>Condition:</strong> Transactions with type 'OR', 'O', or 'OA' (excluding 'Account Payable Rescinded').<br><strong>Meaning:</strong> Refunds, interest, and other miscellaneous income that is not a contribution.",
+    coh: true,
+    orestar_field: "orestar_other_receipts",
+    tip: "<strong>Counted:</strong> Type OR transactions only. Matches ORESTAR's Other Receipts line.<br><strong>Condition:</strong> Transactions with type 'OR' (Other Receipt).<br><strong>Meaning:</strong> Refunds, interest, and other miscellaneous income that is not a contribution.",
+  },
+  cash_expenditures: {
+    label: "Cash Expenditures",
+    coh: true,
+    orestar_field: "orestar_expenditures",
+    tip: "<strong>Counted:</strong> Cash Expenditure sub-type + In-Kind (mirrored from contributions). Matches ORESTAR's Cash Expenditures line.<br><strong>Excludes:</strong> Agent expenditures, Account Payable, Personal Expenditure for Reimbursement, Loan Payments.",
+  },
+  other_disbursements: {
+    label: "Other Disbursements",
+    coh: true,
+    orestar_field: "orestar_other_disbursements",
+    tip: "<strong>Counted:</strong> Type OD transactions only. Matches ORESTAR's Other Disbursements line.<br><strong>Meaning:</strong> Miscellaneous cash payments that are not standard campaign expenditures.",
   },
   net_cash_flow: {
     label: "Net Cash Flow",
+    coh: true,
     subtotal: true,
     compute: d => d.cash_contributions + d.other_receipts - d.cash_expenditures - d.other_disbursements,
-    tip: "<strong>Counted:</strong> (Cash contributions + other receipts) minus (cash expenditures + other disbursements).<br><strong>Meaning:</strong> How much cash the committee gained or lost during this period.",
+    tip: "<strong>Counted:</strong> (Cash contributions + other receipts) minus (cash expenditures + other disbursements). In-kind is on both sides and nets to zero.<br><strong>Meaning:</strong> How much cash the committee gained or lost during this period.",
   },
   ending_cash_balance: {
     label: "Ending Cash Balance",
+    coh: true,
     subtotal: true,
+    orestar_field: "orestar_ending",
     compute: d => d.beginning_balance + d.cash_contributions + d.other_receipts - d.cash_expenditures - d.other_disbursements,
     tip: "<strong>Counted:</strong> Beginning balance + net cash flow.<br><strong>Meaning:</strong> Our calculated cash position at the end of the period. This should closely match the ORESTAR ending balance if our transaction data is complete.",
+  },
+  // ── Non-cash items ────────────────────────────────────────────────────────
+  inkind_contributions: {
+    label: "In-Kind (included above)",
+    nonCoh: true,
+    tip: "<strong>Shown for transparency.</strong> Already included in Cash Contributions and mirrored in Cash Expenditures. Nets to zero for cash balance purposes.<br><strong>Condition:</strong> Transactions with type 'C' and sub-type 'In-Kind Contribution'.",
   },
   // ── ORESTAR-reported values (for comparison / validation) ─────────────────
   orestar_ending: {
@@ -827,27 +829,20 @@ const CALC_TILE_META = {
 
 const CALC_GROUPS = [
   {
-    title: "Contributions (Calculated from Transactions)",
-    fields: ["cash_contributions", "inkind_contributions", "total_contributions"],
+    title: "Cash Balance (ORESTAR Methodology)",
+    fields: ["beginning_balance", "cash_contributions", "other_receipts",
+             "cash_expenditures", "other_disbursements", "net_cash_flow", "ending_cash_balance"],
   },
   {
-    title: "Outflows (Calculated from Transactions)",
-    fields: ["cash_expenditures", "other_disbursements", "total_outflows"],
-  },
-  {
-    title: "Cash Balance (Calculated)",
-    fields: [
-      "beginning_balance", "cash_contributions", "other_receipts",
-      "cash_expenditures", "other_disbursements",
-      "net_cash_flow", "ending_cash_balance",
-    ],
+    title: "Non-Cash Items",
+    fields: ["inkind_contributions"],
   },
   {
     title: "ORESTAR Validation",
     fields: ["orestar_ending", "orestar_discrepancy"],
   },
   {
-    title: "ORESTAR-Reported Balances",
+    title: "ORESTAR Balance Sheet",
     fields: ["accounts_receivable", "accounts_payable", "total_outstanding_loans", "outstanding_personal_expenditures"],
   },
 ];
@@ -1034,6 +1029,7 @@ function renderAcctSummaryTiles(profile, year) {
       let cls = "acct-tile";
       if (isSubtotal) cls += " acct-tile-subtotal";
       if (isOrestar) cls += " acct-tile-orestar";
+      if (meta.coh) cls += " acct-tile-coh";
 
       // Color the discrepancy tile by severity
       let extraStyle = "";
@@ -1048,11 +1044,22 @@ function renderAcctSummaryTiles(profile, year) {
         ? `<span class="acct-tile-help" tabindex="0" role="button" aria-label="Info">?<span class="acct-tile-tip">${meta.tip}</span></span>`
         : "";
 
+      // ORESTAR per-tile warning: show if our value differs from ORESTAR by >$1
+      let warnHTML = "";
+      if (meta.orestar_field && calcData[meta.orestar_field] != null) {
+        const orestarVal = calcData[meta.orestar_field];
+        const delta = Math.round((val - orestarVal) * 100) / 100;
+        if (Math.abs(delta) > 1) {
+          const sign = delta > 0 ? "+" : "";
+          warnHTML = `<span class="acct-tile-warn" title="ORESTAR: ${fmt$(orestarVal)} (${sign}${fmt$(delta)} diff)">&#9888;</span>`;
+        }
+      }
+
       const displayVal = val != null ? fmt$(val) : "N/A";
 
       return `<div class="${cls}"${extraStyle}>
         ${helpBtn}
-        <div class="acct-tile-label">${esc(meta.label)}</div>
+        <div class="acct-tile-label">${esc(meta.label)}${warnHTML}</div>
         <div class="acct-tile-value">${displayVal}</div>
       </div>`;
     }).join("");

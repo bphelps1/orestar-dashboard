@@ -642,11 +642,19 @@ def aggregate(df: pd.DataFrame) -> None:
     cash_contribs   = contributions[~inkind_mask]
     inkind_contribs = contributions[inkind_mask]
 
+    # ORESTAR-matching: Cash Contributions = Cash Contribution + In-Kind
+    _orestar_contrib_mask = contributions["sub_type"].isin({"Cash Contribution", "In-Kind Contribution"})
+    _orestar_contribs = contributions[_orestar_contrib_mask]
+    # ORESTAR-matching: Cash Expenditures = Cash Expenditure + In-Kind mirrored
+    _cash_expend_mask = expenditures["sub_type"] == "Cash Expenditure"
+    _cash_expend_global = expenditures[_cash_expend_mask]
+    _inkind_global_amount = round(inkind_contribs["amount"].sum(), 2)
+
     # ── summary.json ─────────────────────────────────────────────────────────
     summary = {
-        "total_contributions":  round(cash_contribs["amount"].sum(), 2),
+        "total_contributions":  round(_orestar_contribs["amount"].sum(), 2),
         "total_inkind":         round(inkind_contribs["amount"].sum(), 2),
-        "total_expenditures":   round(expenditures["amount"].sum(), 2),
+        "total_expenditures":   round(_cash_expend_global["amount"].sum() + _inkind_global_amount, 2),
         "total_other_receipts":  round(other_receipts["amount"].sum(), 2),
         "total_other_disburse":  round(other_disburse["amount"].sum(), 2),
         "total_transactions":   int(len(df)),
@@ -1150,30 +1158,37 @@ def aggregate_filers(
         filer_od      = get_group(od_groups,      name)
         filer_all     = get_group(all_groups,     name)
 
-        # ── ORESTAR-matching line item definitions ────────────────────────────
-        # ORESTAR's Account Summary counts in-kind on BOTH sides: it appears
-        # as a contribution AND as an expenditure, netting to zero for cash.
+        # ── ORESTAR-matching line item definitions (empirically verified) ──────
+        # ORESTAR "Cash Contributions" = Cash Contribution + In-Kind Contribution
+        #   (In-kind is on BOTH sides — contribution AND expenditure — netting to zero)
+        # ORESTAR "Cash Expenditures" = Cash Expenditure + In-Kind (mirrored)
+        #   EXCLUDES: Account Payable, PER, Agent, Loan Payment
+        # ORESTAR "Other Receipts" = type OR only
+        # ORESTAR "Other Disbursements" = type OD only
         #
-        # "Cash Contributions" = ALL type C (cash + in-kind + loans + pledges)
-        # "Cash Expenditures"  = ALL type E EXCEPT "Expenditure Made by an Agent"
-        #   (Agent expenditures have their own section on ORESTAR)
-        # "Other Receipts"     = type OR only (NOT type O or OA)
-        # "Other Disbursements"= type OD only
-        #
-        # COH formula: Begin + Contributions + OtherReceipts
-        #              - Expenditures - OtherDisbursements
-        _AGENT_EXCLUDE = {"Expenditure Made by an Agent"}
-        _c_for_coh  = filer_contrib  # ALL type C
-        _e_for_coh  = filer_expend[~filer_expend["sub_type"].isin(_AGENT_EXCLUDE)] if not filer_expend.empty else filer_expend
-        _or_for_coh = filer_or  # type OR only (already filtered at line 637)
+        # COH effective formula (in-kind cancels):
+        #   Ending = Begin + CashContribution + LoansReceived + OtherReceipts
+        #            - CashExpenditure - LoanPayments - OtherDisbursements
 
-        # total_in/total_out: match ORESTAR "Cash Contributions"/"Cash Expenditures"
-        total_in        = round(float(_c_for_coh["amount"].sum())  if not _c_for_coh.empty  else 0.0, 2)
-        total_inkind    = round(float(filer_inkind["amount"].sum()) if not filer_inkind.empty else 0.0, 2)
-        total_out       = round(float(_e_for_coh["amount"].sum())  if not _e_for_coh.empty  else 0.0, 2)
-        total_or        = round(float(filer_or["amount"].sum())    if not filer_or.empty     else 0.0, 2)
-        total_od        = round(float(filer_od["amount"].sum())    if not filer_od.empty     else 0.0, 2)
-        tran_count      = int(len(filer_all))
+        # Stat card / ORESTAR-matching totals
+        _CONTRIB_TYPES = {"Cash Contribution", "In-Kind Contribution"}
+        _orestar_contrib = filer_contrib[filer_contrib["sub_type"].isin(_CONTRIB_TYPES)] if not filer_contrib.empty else filer_contrib
+        _cash_expend_only = filer_expend[filer_expend["sub_type"] == "Cash Expenditure"] if not filer_expend.empty else filer_expend
+        _inkind_amount = round(float(filer_inkind["amount"].sum()) if not filer_inkind.empty else 0.0, 2)
+
+        total_in    = round(float(_orestar_contrib["amount"].sum()) if not _orestar_contrib.empty else 0.0, 2)
+        total_inkind = _inkind_amount
+        total_out   = round(float(_cash_expend_only["amount"].sum()) if not _cash_expend_only.empty else 0.0, 2) + _inkind_amount
+        total_or    = round(float(filer_or["amount"].sum()) if not filer_or.empty else 0.0, 2)
+        total_od    = round(float(filer_od["amount"].sum()) if not filer_od.empty else 0.0, 2)
+        tran_count  = int(len(filer_all))
+
+        # COH-affecting frames (in-kind nets to zero, so exclude it)
+        _COH_C_TYPES = {"Cash Contribution", "Loan Received (Non-Exempt)"}
+        _COH_E_TYPES = {"Cash Expenditure", "Loan Payment (Non-Exempt)"}
+        _c_for_coh = filer_contrib[filer_contrib["sub_type"].isin(_COH_C_TYPES)] if not filer_contrib.empty else filer_contrib
+        _e_for_coh = filer_expend[filer_expend["sub_type"].isin(_COH_E_TYPES)] if not filer_expend.empty else filer_expend
+        _or_for_coh = filer_or  # All type OR
 
         # Calculate net transactions per year for COH computation
         def _yearly_net(contrib_df, expend_df, or_df, od_df):
@@ -1236,8 +1251,10 @@ def aggregate_filers(
                 return {}
             return frame.groupby("year")["amount"].sum().to_dict()
 
-        _yearly_c  = _yearly_sums(_c_for_coh)
-        _yearly_e  = _yearly_sums(_e_for_coh)
+        # For ORESTAR comparison: Cash Contribution + In-Kind, Cash Expenditure + In-Kind
+        _yearly_orestar_c = _yearly_sums(_orestar_contrib)
+        _yearly_cash_exp  = _yearly_sums(_cash_expend_only)
+        _yearly_inkind    = _yearly_sums(filer_inkind)
         _yearly_or = _yearly_sums(_or_for_coh)
         _yearly_od = _yearly_sums(filer_od)
 
@@ -1249,8 +1266,8 @@ def aggregate_filers(
 
                 yr_int = int(yr_s) if yr_s.isdigit() else None
                 our_begin = beginning_balances.get(yr_s, 0.0)
-                our_c  = round(float(_yearly_c.get(yr_int, 0)), 2)
-                our_e  = round(float(_yearly_e.get(yr_int, 0)), 2)
+                our_c  = round(float(_yearly_orestar_c.get(yr_int, 0)), 2)
+                our_e  = round(float(_yearly_cash_exp.get(yr_int, 0)) + float(_yearly_inkind.get(yr_int, 0)), 2)
                 our_or = round(float(_yearly_or.get(yr_int, 0)), 2)
                 our_od = round(float(_yearly_od.get(yr_int, 0)), 2)
                 our_net = yearly_nets.get(yr_s, 0.0)
@@ -1301,25 +1318,28 @@ def aggregate_filers(
                 _global_beginning_balances.get(yr_s, 0.0) + bal, 2
             )
 
-        # Timeline — each field matches ORESTAR methodology.
-        # contributions = ALL type C (includes in-kind, loans, pledges)
-        # expenditures  = ALL type E minus Agent (includes AP, PER, loan payments)
-        # In-kind nets to zero (counted in both contributions and expenditures)
-        # COH = Begin + contributions + other_receipts - expenditures - other_disbursements
-        c_monthly  = monthly_sum(_c_for_coh,   "contributions")
-        i_monthly  = monthly_sum(filer_inkind,  "inkind")
-        e_monthly  = monthly_sum(_e_for_coh,    "expenditures")
-        or_monthly = monthly_sum(filer_or,      "other_receipts")
-        od_monthly = monthly_sum(filer_od,      "other_disbursements")
+        # Timeline — matches ORESTAR methodology (empirically verified).
+        # contributions = Cash Contribution + In-Kind (matches ORESTAR "Cash Contributions")
+        # expenditures  = Cash Expenditure + In-Kind mirrored (matches ORESTAR "Cash Expenditures")
+        # inkind shown separately for transparency
+        # COH: in-kind is on both sides so it cancels out
+        c_monthly  = monthly_sum(_orestar_contrib,   "contributions")
+        i_monthly  = monthly_sum(filer_inkind,        "inkind")
+        # Expenditures = Cash Expenditure + In-Kind (mirrored)
+        ce_monthly = monthly_sum(_cash_expend_only,   "cash_exp")
+        ik_monthly = monthly_sum(filer_inkind,        "inkind_exp")
+        or_monthly = monthly_sum(filer_or,            "other_receipts")
+        od_monthly = monthly_sum(filer_od,            "other_disbursements")
         count_monthly_filer = filer_all.groupby("month").size().rename("count")
-        tl_df = pd.concat([c_monthly, i_monthly, e_monthly, or_monthly, od_monthly,
+        tl_df = pd.concat([c_monthly, i_monthly, ce_monthly, ik_monthly,
+                           or_monthly, od_monthly,
                            count_monthly_filer], axis=1).fillna(0).sort_index()
         timeline = [
             {
                 "month": m,
                 "contributions":       round(float(row.get("contributions",       0)), 2),
                 "inkind":              round(float(row.get("inkind",              0)), 2),
-                "expenditures":        round(float(row.get("expenditures",        0)), 2),
+                "expenditures":        round(float(row.get("cash_exp", 0)) + float(row.get("inkind_exp", 0)), 2),
                 "other_receipts":      round(float(row.get("other_receipts",      0)), 2),
                 "other_disbursements": round(float(row.get("other_disbursements", 0)), 2),
                 "count":               int(row.get("count", 0)),
