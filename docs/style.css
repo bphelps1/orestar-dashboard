@@ -691,6 +691,12 @@ main {
   font-size: 0.8rem;
   white-space: nowrap;
 }
+.pulse-growth-neg {
+  color: #dc2626;
+  font-weight: 700;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
 .pulse-new-badge {
   display: inline-block;
   font-size: 0.6rem;

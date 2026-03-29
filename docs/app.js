@@ -3360,7 +3360,10 @@ function renderPulseMomentum(data) {
     if (!tierEntries.length) continue;
     html += `<div class="pulse-tier-label">${tier.label}</div>`;
     for (const e of tierEntries) {
-      const gt = e.is_new ? `<span class="pulse-new-badge">New</span>` : `<span class="pulse-growth-pct">+${e.growth_pct}%</span>`;
+      const gt = e.is_new ? `<span class="pulse-new-badge">New</span>`
+        : e.growth_pct > 0 ? `<span class="pulse-growth-pct">+${e.growth_pct}%</span>`
+        : e.growth_pct < 0 ? `<span class="pulse-growth-neg">${e.growth_pct}%</span>`
+        : ``;
       html += pulseEntryHTML(e, "$" + Number(e.raised).toLocaleString("en-US", { maximumFractionDigits: 0 }), gt);
     }
   }
