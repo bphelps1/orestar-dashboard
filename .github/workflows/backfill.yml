@@ -91,7 +91,12 @@ jobs:
             cp -r data/aggregated/. docs/data/aggregated/
           fi
           git add data/ docs/data/
-          git diff --cached --quiet || git commit -m "chore: backfill ${{ inputs.date_field }}-date ${{ inputs.start_year }}–${{ inputs.end_year || 'now' }}"
+          FILER_IDS="${{ inputs.filer_ids }}"
+          if [ -n "$FILER_IDS" ]; then
+            git diff --cached --quiet || git commit -m "chore: backfill filers $FILER_IDS"
+          else
+            git diff --cached --quiet || git commit -m "chore: backfill ${{ inputs.date_field }}-date ${{ inputs.start_year }}–${{ inputs.end_year || 'now' }}"
+          fi
           for attempt in 1 2 3 4 5; do
             git pull --rebase -X ours && git push && break
             echo "Push attempt $attempt failed, retrying in $((attempt * 15))s..."
