@@ -87,12 +87,12 @@ function typeColor(label) {
 function resetChartBox() {
   const box = document.getElementById("overview-donut-box");
   // Dispose any ECharts instances inside
-  box.querySelectorAll('.echart-container, .echart-container-tall').forEach(el => {
+  box.querySelectorAll('.echart-container, .echart-container-tall, .echart-container-radar').forEach(el => {
     const inst = echarts.getInstanceByDom(el);
     if (inst) inst.dispose();
   });
-  // Remove any dynamically added elements (legends, multi-filer divs)
-  box.querySelectorAll('.stacked-area-legend, .multi-chart-row').forEach(el => el.remove());
+  // Remove any dynamically added elements (legends, multi-filer divs, radar layout)
+  box.querySelectorAll('.stacked-area-legend, .multi-chart-row, .radar-layout').forEach(el => el.remove());
   // Ensure the main chart div exists
   let chartEl = document.getElementById("chart-contributor-type");
   if (!chartEl) {
@@ -102,6 +102,7 @@ function resetChartBox() {
     box.appendChild(chartEl);
   }
   chartEl.className = "echart-container";
+  chartEl.style.display = "";  // Restore visibility (hidden in multi-filer mode)
 }
 
 function buildMultiChartBox(profiles) {
@@ -2095,11 +2096,38 @@ function renderOverviewMultiFiler(profiles) {
 
   const hasDate = state.dateStart || state.dateEnd;
 
-  // Build radar chart comparing donor type percentages across filers
+  // Build radar chart + table in a two-card layout
   resetChartBox();
-  const el = document.getElementById("chart-contributor-type");
+  const donutBox = document.getElementById("overview-donut-box");
+
+  // Create the two-card layout wrapper
+  let radarLayout = donutBox.querySelector(".radar-layout");
+  if (radarLayout) radarLayout.remove();
+  radarLayout = document.createElement("div");
+  radarLayout.className = "radar-layout";
+
+  // Card 1: Radar chart
+  const radarCard = document.createElement("div");
+  radarCard.className = "radar-card";
+  const radarChartDiv = document.createElement("div");
+  radarChartDiv.id = "chart-radar-multi";
+  radarChartDiv.className = IS_MOBILE ? "echart-container-radar" : "echart-container";
+  radarCard.appendChild(radarChartDiv);
+  radarLayout.appendChild(radarCard);
+
+  // Card 2: Table (built later)
+  const tableCard = document.createElement("div");
+  tableCard.className = "radar-card radar-card-table";
+  radarLayout.appendChild(tableCard);
+
+  // Hide the main chart-contributor-type (used for single-filer stacked area)
+  const mainChart = document.getElementById("chart-contributor-type");
+  if (mainChart) mainChart.style.display = "none";
+
+  donutBox.appendChild(radarLayout);
+
+  const el = radarChartDiv;
   if (el) {
-    el.className = IS_MOBILE ? "echart-container-radar" : "echart-container";
     const chart = initEChart(el);
 
     // Collect per-filer type data, merge to base types
@@ -2222,10 +2250,6 @@ function renderOverviewMultiFiler(profiles) {
     });
 
     // Build comparison table below the radar chart
-    const box = el.closest("#overview-donut-box") || el.parentElement;
-    let existingTable = box.querySelector(".radar-compare-table");
-    if (existingTable) existingTable.remove();
-
     const tableDiv = document.createElement("div");
     tableDiv.className = "radar-compare-table";
 
@@ -2352,7 +2376,7 @@ function renderOverviewMultiFiler(profiles) {
       });
     }
 
-    box.appendChild(tableDiv);
+    tableCard.appendChild(tableDiv);
     renderRadarTable();
   }
 

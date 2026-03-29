@@ -981,7 +981,9 @@ main {
 }
 .echart-container-radar {
   width: 100%;
-  height: 400px;
+  aspect-ratio: 1;
+  min-height: 280px;
+  max-height: 500px;
 }
 
 /* ── Multi-Chart Layout (ECharts multi-filer) ────────────────────────── */
@@ -1001,13 +1003,34 @@ main {
   margin-bottom: 8px;
 }
 
+/* ── Radar Layout (chart + table side by side) ───────────────────────── */
+.radar-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+.radar-card {
+  min-width: 0;
+}
+.radar-card-table {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 768px) {
+  .radar-layout {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
 /* ── Radar Comparison Table ───────────────────────────────────────────── */
 .radar-compare-table {
-  margin-top: 16px;
-  overflow-x: auto;
+  margin-top: 0;
 }
 .radar-table {
-  width: 100%;
+  min-width: max-content;
   font-size: 0.8rem;
   border-collapse: collapse;
 }
