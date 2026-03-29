@@ -2045,8 +2045,15 @@ function updateCohIndicator(profile) {
     ind.hidden = true;
     return;
   }
+
+  // Compute COH from timeline (same as stat card) instead of using stored value
+  const fullTl = profile.timeline || [];
+  const calcCoh = statsFromTimeline(fullTl, profile.beginning_balances).cashOnHand;
+
   const src = profile.cash_on_hand_source;
-  const disc = profile.orestar_discrepancy || 0;
+  const acct = profile.orestar_account_summary || {};
+  const orestarEnding = acct.ending_cash_balance != null ? acct.ending_cash_balance : null;
+  const disc = orestarEnding != null ? Math.round((calcCoh - orestarEnding) * 100) / 100 : 0;
   const absDisc = Math.abs(disc);
 
   if (src === "orestar" && absDisc > 0.01) {
@@ -2060,8 +2067,6 @@ function updateCohIndicator(profile) {
     ind.removeAttribute("title");
 
     // Build rich popover
-    const acct = profile.orestar_account_summary || {};
-    const orestarEnding = acct.ending_cash_balance != null ? acct.ending_cash_balance : null;
     const scrapeTs = acct.scrape_ts || 0;
 
     const popover = document.createElement("div");
@@ -2069,7 +2074,7 @@ function updateCohIndicator(profile) {
     popover.setAttribute("role", "tooltip");
     popover.innerHTML = `
       <div class="disc-row"><span>ORESTAR ending cash balance:</span><span>${orestarEnding != null ? fmt$(orestarEnding) : "N/A"}</span></div>
-      <div class="disc-row"><span>Calculated cash on hand:</span><span>${fmt$(profile.cash_on_hand)}</span></div>
+      <div class="disc-row"><span>Calculated cash on hand:</span><span>${fmt$(calcCoh)}</span></div>
       <div class="disc-row disc-diff"><span>Difference:</span><span>${disc >= 0 ? "+" : ""}${fmt$(disc)}</span></div>
       <div class="disc-ts">ORESTAR account summary scraped at: ${formatTimestamp(scrapeTs)}</div>
     `;
@@ -2098,16 +2103,18 @@ function updateCohIndicator(profile) {
 // Build discrepancy indicator HTML for multi-filer cards (inline)
 function cohIndicatorHTML(profile) {
   const src = profile.cash_on_hand_source;
-  const disc = profile.orestar_discrepancy || 0;
+  const calcCoh = statsFromTimeline(profile.timeline || [], profile.beginning_balances).cashOnHand;
+  const acct = profile.orestar_account_summary || {};
+  const orestarEnding = acct.ending_cash_balance != null ? acct.ending_cash_balance : null;
+  const disc = orestarEnding != null ? Math.round((calcCoh - orestarEnding) * 100) / 100 : 0;
   const absDisc = Math.abs(disc);
   if (src === "calculated") {
     return '<span class="coh-indicator coh-estimated" tabindex="0" title="Estimated: no ORESTAR beginning balance data scraped yet">EST</span>';
   }
   if (absDisc > 0.01) {
     const severity = discrepancySeverity(absDisc);
-    const acct = profile.orestar_account_summary || {};
     const tsText = formatTimestamp(acct.scrape_ts || 0);
-    const tip = `ORESTAR ending: ${fmt$(acct.ending_cash_balance || 0)} | Website: ${fmt$(profile.cash_on_hand)} | Diff: ${fmt$(disc)} | Scraped: ${tsText}`;
+    const tip = `ORESTAR ending: ${fmt$(orestarEnding || 0)} | Calculated: ${fmt$(calcCoh)} | Diff: ${fmt$(disc)} | Scraped: ${tsText}`;
     return `<span class="coh-indicator coh-warn-${severity}" tabindex="0" title="${esc(tip)}">\u26a0</span>`;
   }
   return '';
