@@ -3346,17 +3346,64 @@ function renderPulseMomentum(data) {
   const body = document.getElementById("pulse-momentum-body");
   if (!body) return;
   let html = "";
-  const entries = (data.top_growth || []).slice(0, PULSE_ROWS * 2);
-  for (const e of entries) {
-    const growthText = e.is_new
+  const allGrowth = data.top_growth || [];
+
+  // Group by tier (same subcategories as Raising the Most)
+  const tiers = [
+    { key: "statewide", label: "Statewide" },
+    { key: "legislative", label: "Legislative" },
+    { key: "local", label: "Local" },
+  ];
+  for (const tier of tiers) {
+    const tierEntries = allGrowth.filter(e => e.tier === tier.key).slice(0, PULSE_ROWS);
+    if (!tierEntries.length) continue;
+    html += `<div class="pulse-tier-label">${tier.label}</div>`;
+    // Show top 1, rest collapsed
+    const first = tierEntries[0];
+    const growthText0 = first.is_new
       ? `<span class="pulse-new-badge">New</span>`
-      : `<span class="pulse-growth-pct">+${e.growth_pct}%</span>`;
-    html += pulseEntryHTML(e,
-      "$" + Number(e.raised).toLocaleString("en-US", { maximumFractionDigits: 0 }),
-      growthText
+      : `<span class="pulse-growth-pct">+${first.growth_pct}%</span>`;
+    html += pulseEntryHTML(first,
+      "$" + Number(first.raised).toLocaleString("en-US", { maximumFractionDigits: 0 }),
+      growthText0
     );
+    if (tierEntries.length > 1) {
+      const extraId = `pulse-momentum-extra-${tier.key}`;
+      html += `<div id="${extraId}" hidden>`;
+      for (let i = 1; i < tierEntries.length; i++) {
+        const e = tierEntries[i];
+        const gt = e.is_new ? `<span class="pulse-new-badge">New</span>` : `<span class="pulse-growth-pct">+${e.growth_pct}%</span>`;
+        html += pulseEntryHTML(e, "$" + Number(e.raised).toLocaleString("en-US", { maximumFractionDigits: 0 }), gt);
+      }
+      html += `</div>`;
+      html += `<div class="pulse-show-more" data-target="${extraId}">+${tierEntries.length - 1} more</div>`;
+    }
+  }
+
+  // Fallback: if no tier data, show flat list (old format)
+  if (!html) {
+    const entries = allGrowth.slice(0, PULSE_ROWS * 2);
+    for (const e of entries) {
+      const growthText = e.is_new
+        ? `<span class="pulse-new-badge">New</span>`
+        : `<span class="pulse-growth-pct">+${e.growth_pct}%</span>`;
+      html += pulseEntryHTML(e,
+        "$" + Number(e.raised).toLocaleString("en-US", { maximumFractionDigits: 0 }),
+        growthText
+    );
+    }
   }
   body.innerHTML = html || '<div class="pulse-entry-meta">No data</div>';
+
+  // Wire up show-more toggles
+  body.querySelectorAll(".pulse-show-more").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const target = document.getElementById(btn.dataset.target);
+      if (!target) return;
+      target.hidden = !target.hidden;
+      btn.textContent = target.hidden ? `+${target.children.length} more` : "show fewer";
+    });
+  });
 }
 
 function renderPulseDonors(data) {
