@@ -62,15 +62,18 @@ async function signOut() {
 /** Get the current user's role from user_roles table. Returns null if not logged in or no role. */
 async function getUserRole() {
   const session = await getSession();
-  if (!session) return null;
+  if (!session) { console.debug("[getUserRole] no session"); return null; }
   try {
     const sb = await getSupabase();
-    const { data } = await sb.from("user_roles")
+    const { data, error } = await sb.from("user_roles")
       .select("role")
       .eq("user_id", session.user.id)
       .single();
+    if (error) console.warn("[getUserRole] query error:", error.message);
+    console.debug("[getUserRole] user_id:", session.user.id, "role:", data?.role);
     return data?.role || null;
   } catch (e) {
+    console.warn("[getUserRole] exception:", e);
     return null; // table may not exist yet
   }
 }

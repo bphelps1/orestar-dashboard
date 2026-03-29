@@ -3502,10 +3502,16 @@ const loaders = {
   // Silently check if user has admin/reviewer role — show admin button if so
   (async () => {
     try {
-      if (typeof isAdminOrReviewer === "function" && await isAdminOrReviewer()) {
-        const adminLink = document.getElementById("admin-link");
-        if (adminLink) adminLink.hidden = false;
+      if (typeof isAdminOrReviewer === "function") {
+        const ok = await isAdminOrReviewer();
+        console.debug("[admin-check] isAdminOrReviewer =", ok);
+        if (ok) {
+          const adminLink = document.getElementById("admin-link");
+          if (adminLink) adminLink.hidden = false;
+        }
+      } else {
+        console.debug("[admin-check] isAdminOrReviewer not defined");
       }
-    } catch (e) { /* silently fail for non-auth users */ }
+    } catch (e) { console.warn("[admin-check] error:", e); }
   })();
 })();
