@@ -18,6 +18,11 @@ on:
         required: false
         default: "tran"
         type: string
+      filer_ids:
+        description: "Space-separated filer committee IDs to backfill (bypasses date-range mode)"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: write
@@ -52,11 +57,17 @@ jobs:
 
       - name: Backfill ORESTAR data
         run: |
-          ARGS="--mode=backfill --start-year=${{ inputs.start_year }} --date-field=${{ inputs.date_field }}"
-          if [ -n "${{ inputs.end_year }}" ]; then
-            ARGS="$ARGS --end-year=${{ inputs.end_year }}"
+          FILER_IDS="${{ inputs.filer_ids }}"
+          if [ -n "$FILER_IDS" ]; then
+            echo "Filer-targeted backfill: $FILER_IDS"
+            xvfb-run --auto-servernum python scraper/fetch.py --filer-ids $FILER_IDS --start-year=${{ inputs.start_year }}
+          else
+            ARGS="--mode=backfill --start-year=${{ inputs.start_year }} --date-field=${{ inputs.date_field }}"
+            if [ -n "${{ inputs.end_year }}" ]; then
+              ARGS="$ARGS --end-year=${{ inputs.end_year }}"
+            fi
+            xvfb-run --auto-servernum python scraper/fetch.py $ARGS
           fi
-          xvfb-run --auto-servernum python scraper/fetch.py $ARGS
 
       - name: Process and aggregate data
         run: python scraper/process.py
