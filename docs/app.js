@@ -1061,38 +1061,70 @@ function renderAcctSummaryTiles(profile, year) {
     </div>`;
   }).join("");
 
-  // Per-year discrepancy warnings
+  // Per-year discrepancy warnings with line-item detail
   const disc = profile.yearly_discrepancies;
   if (disc && Object.keys(disc).length > 0) {
     const discYears = Object.keys(disc).sort();
-    let discHTML = `<div class="acct-group">
-      <div class="acct-group-title">Yearly Discrepancies (Calculated vs. ORESTAR)</div>
-      <div class="disc-table">
-        <div class="disc-table-header">
-          <span class="disc-col-year">Year</span>
-          <span class="disc-col-num">Our Begin</span>
-          <span class="disc-col-num">Our Net</span>
-          <span class="disc-col-num">Our End</span>
-          <span class="disc-col-num">ORESTAR End</span>
-          <span class="disc-col-num disc-col-diff">Difference</span>
-        </div>`;
-    // If a specific year is selected, show only that year; otherwise show all
     const showYears = year ? discYears.filter(y => y === year) : discYears;
-    for (const yr of showYears) {
-      const d = disc[yr];
-      const severity = Math.abs(d.discrepancy) >= 10000 ? "disc-severe"
-        : Math.abs(d.discrepancy) >= 1000 ? "disc-warn" : "disc-minor";
-      discHTML += `<div class="disc-row ${severity}">
-        <span class="disc-col-year">${yr}</span>
-        <span class="disc-col-num">${fmt$(d.our_begin)}</span>
-        <span class="disc-col-num">${fmt$(d.our_net)}</span>
-        <span class="disc-col-num">${fmt$(d.our_end)}</span>
-        <span class="disc-col-num">${fmt$(d.orestar_end)}</span>
-        <span class="disc-col-num disc-col-diff">${d.discrepancy > 0 ? "+" : ""}${fmt$(d.discrepancy)}</span>
-      </div>`;
+    if (showYears.length) {
+      let discHTML = `<div class="acct-group">
+        <div class="acct-group-title">Yearly Discrepancies (Calculated vs. ORESTAR)</div>
+        <div class="disc-table">
+          <div class="disc-table-header">
+            <span class="disc-col-year">Year</span>
+            <span class="disc-col-num">Our End</span>
+            <span class="disc-col-num">ORESTAR End</span>
+            <span class="disc-col-num disc-col-diff">Δ End</span>
+          </div>`;
+      for (const yr of showYears) {
+        const d = disc[yr];
+        const endDisc = d.discrepancy || 0;
+        const severity = Math.abs(endDisc) >= 10000 ? "disc-severe"
+          : Math.abs(endDisc) >= 1000 ? "disc-warn" : "disc-minor";
+        const rowId = `disc-detail-${yr}`;
+        discHTML += `<div class="disc-row ${severity}" style="cursor:pointer" data-detail="${rowId}">
+          <span class="disc-col-year">${yr} ▸</span>
+          <span class="disc-col-num">${fmt$(d.our_end)}</span>
+          <span class="disc-col-num">${fmt$(d.orestar_end)}</span>
+          <span class="disc-col-num disc-col-diff">${endDisc > 0 ? "+" : ""}${fmt$(endDisc)}</span>
+        </div>`;
+        // Expandable line-item detail
+        discHTML += `<div id="${rowId}" class="disc-detail" hidden>`;
+        const lines = [
+          { label: "Begin Balance", ours: d.our_begin, theirs: d.orestar_begin, delta: d.delta_begin },
+          { label: "Contributions", ours: d.our_contributions, theirs: d.orestar_contributions, delta: d.delta_contributions },
+          { label: "Expenditures", ours: d.our_expenditures, theirs: d.orestar_expenditures, delta: d.delta_expenditures },
+          { label: "Other Receipts", ours: d.our_other_receipts, theirs: d.orestar_other_receipts, delta: d.delta_other_receipts },
+          { label: "Other Disburse", ours: d.our_other_disbursements, theirs: d.orestar_other_disbursements, delta: d.delta_other_disbursements },
+        ];
+        for (const line of lines) {
+          if (line.delta == null) continue;
+          const absDelta = Math.abs(line.delta);
+          const cls = absDelta >= 1000 ? "disc-severe" : absDelta >= 10 ? "disc-warn" : "disc-minor";
+          discHTML += `<div class="disc-detail-row ${cls}">
+            <span class="disc-detail-label">${line.label}</span>
+            <span class="disc-col-num">${fmt$(line.ours)}</span>
+            <span class="disc-col-num">${line.theirs != null ? fmt$(line.theirs) : '—'}</span>
+            <span class="disc-col-num disc-col-diff">${line.delta > 0 ? "+" : ""}${fmt$(line.delta)}</span>
+          </div>`;
+        }
+        discHTML += `</div>`;
+      }
+      discHTML += `</div></div>`;
+      grid.innerHTML += discHTML;
+
+      // Wire expand/collapse
+      grid.querySelectorAll("[data-detail]").forEach(row => {
+        row.addEventListener("click", () => {
+          const detail = document.getElementById(row.dataset.detail);
+          if (detail) {
+            detail.hidden = !detail.hidden;
+            const arrow = row.querySelector(".disc-col-year");
+            if (arrow) arrow.textContent = arrow.textContent.replace(/[▸▾]/, detail.hidden ? "▸" : "▾");
+          }
+        });
+      });
     }
-    discHTML += `</div></div>`;
-    grid.innerHTML += discHTML;
   }
 }
 

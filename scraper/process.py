@@ -1150,25 +1150,14 @@ def aggregate_filers(
         filer_od      = get_group(od_groups,      name)
         filer_all     = get_group(all_groups,     name)
 
-        # total_in/total_out: strict "Cash Contribution" / "Cash Expenditure" sub_type only
-        _cash_contrib   = filer_contrib[filer_contrib["sub_type"] == "Cash Contribution"] if not filer_contrib.empty else filer_contrib
-        _cash_expend    = filer_expend[filer_expend["sub_type"] == "Cash Expenditure"]    if not filer_expend.empty  else filer_expend
-        total_in        = round(float(_cash_contrib["amount"].sum()) if not _cash_contrib.empty else 0.0, 2)
-        total_inkind    = round(float(filer_inkind["amount"].sum())  if not filer_inkind.empty  else 0.0, 2)
-        total_out       = round(float(_cash_expend["amount"].sum())  if not _cash_expend.empty  else 0.0, 2)
-        total_or        = round(float(filer_or["amount"].sum())      if not filer_or.empty      else 0.0, 2)
-        total_od        = round(float(filer_od["amount"].sum())      if not filer_od.empty      else 0.0, 2)
-        # ── Cash-on-hand calculation ───────────────────────────────────────────
-        # All cash-affecting transactions contribute to COH:
-        #
-        # Contributions (type C): all sub-types EXCEPT in-kind (which don't affect cash).
-        #   Includes: Cash Contribution, Loan Received, etc.
+        # ── Cash-affecting transaction filters ─────────────────────────────────
+        # Contributions (type C): all sub-types EXCEPT in-kind (no cash effect).
+        #   Includes: Cash Contribution, Loan Received, Pledge of Cash, etc.
         # Expenditures (type E): all sub-types EXCEPT non-cash obligations:
         #   "Personal Expenditure for Reimbursement" — obligation only
         #   "Account Payable" — outstanding payable; cash outflow is later
         # Other Receipts: all sub-types EXCEPT:
         #   "Account Payable Rescinded" — reverses a payable; no cash effect
-        # In-kind contributions don't involve cash changing hands — exclude from COH
         _COH_EXCLUDE_C  = {
             "In-Kind Contribution",
             "In-Kind/Forgiven Personal Expenditures",
@@ -1179,6 +1168,14 @@ def aggregate_filers(
         _c_for_coh      = filer_contrib[~filer_contrib["sub_type"].isin(_COH_EXCLUDE_C)] if not filer_contrib.empty else filer_contrib
         _e_for_coh      = filer_expend[~filer_expend["sub_type"].isin(_COH_EXCLUDE_E)] if not filer_expend.empty else filer_expend
         _or_for_coh     = filer_or[~filer_or["sub_type"].isin(_COH_EXCLUDE_OR)] if not filer_or.empty else filer_or
+
+        # total_in/total_out: use the same cash-affecting definition as COH
+        # and timeline, matching ORESTAR's "Cash Contributions"/"Cash Expenditures"
+        total_in        = round(float(_c_for_coh["amount"].sum()) if not _c_for_coh.empty else 0.0, 2)
+        total_inkind    = round(float(filer_inkind["amount"].sum())  if not filer_inkind.empty  else 0.0, 2)
+        total_out       = round(float(_e_for_coh["amount"].sum()) if not _e_for_coh.empty else 0.0, 2)
+        total_or        = round(float(filer_or["amount"].sum())      if not filer_or.empty      else 0.0, 2)
+        total_od        = round(float(filer_od["amount"].sum())      if not filer_od.empty      else 0.0, 2)
         tran_count      = int(len(filer_all))
 
         # Calculate net transactions per year for COH computation
@@ -1231,27 +1228,74 @@ def aggregate_filers(
             orestar_discrepancy = round(our_anchor_ending - orestar_ending, 2)
 
         # Per-year discrepancy tracking: compare our rolling calculation
-        # against ORESTAR's yearly ending balances to pinpoint where
-        # discrepancies originate.
+        # against ORESTAR's yearly data — both ending balance AND line items
+        # (contributions, expenditures, other receipts, other disbursements).
         orestar_yearly = _name_to_yearly.get(name, {})
         yearly_discrepancies: dict[str, dict] = {}
+
+        # Pre-compute per-year sums from our filtered transaction frames
+        def _yearly_sums(frame):
+            if frame.empty or "year" not in frame.columns:
+                return {}
+            return frame.groupby("year")["amount"].sum().to_dict()
+
+        _yearly_c  = _yearly_sums(_c_for_coh)
+        _yearly_e  = _yearly_sums(_e_for_coh)
+        _yearly_or = _yearly_sums(_or_for_coh)
+        _yearly_od = _yearly_sums(filer_od)
+
         if orestar_yearly:
             for yr_s in sorted_years:
                 yr_orestar = orestar_yearly.get(yr_s, {})
-                orestar_end = yr_orestar.get("ending_cash_balance")
-                if orestar_end is None:
+                if not yr_orestar:
                     continue
+
+                yr_int = int(yr_s) if yr_s.isdigit() else None
                 our_begin = beginning_balances.get(yr_s, 0.0)
+                our_c  = round(float(_yearly_c.get(yr_int, 0)), 2)
+                our_e  = round(float(_yearly_e.get(yr_int, 0)), 2)
+                our_or = round(float(_yearly_or.get(yr_int, 0)), 2)
+                our_od = round(float(_yearly_od.get(yr_int, 0)), 2)
                 our_net = yearly_nets.get(yr_s, 0.0)
                 our_end = round(our_begin + our_net, 2)
-                disc = round(our_end - orestar_end, 2)
-                if abs(disc) > 0.01:
+
+                orestar_end = yr_orestar.get("ending_cash_balance")
+                orestar_c   = yr_orestar.get("contributions")
+                orestar_e   = yr_orestar.get("expenditures")
+                orestar_or  = yr_orestar.get("other_receipts")
+                orestar_od  = yr_orestar.get("other_disbursements")
+                orestar_beg = yr_orestar.get("beginning_balance")
+
+                delta_c   = round(our_c  - (orestar_c or 0), 2) if orestar_c is not None else None
+                delta_e   = round(our_e  - (orestar_e or 0), 2) if orestar_e is not None else None
+                delta_or  = round(our_or - (orestar_or or 0), 2) if orestar_or is not None else None
+                delta_od  = round(our_od - (orestar_od or 0), 2) if orestar_od is not None else None
+                delta_end = round(our_end - (orestar_end or 0), 2) if orestar_end is not None else None
+                delta_beg = round(our_begin - (orestar_beg or 0), 2) if orestar_beg is not None else None
+
+                # Include if any line-item delta exceeds $0.01
+                deltas = [d for d in [delta_c, delta_e, delta_or, delta_od, delta_end, delta_beg] if d is not None]
+                if any(abs(d) > 0.01 for d in deltas):
                     yearly_discrepancies[yr_s] = {
                         "our_begin": our_begin,
+                        "our_contributions": our_c,
+                        "our_expenditures": our_e,
+                        "our_other_receipts": our_or,
+                        "our_other_disbursements": our_od,
                         "our_net": round(our_net, 2),
                         "our_end": our_end,
-                        "orestar_end": round(orestar_end, 2),
-                        "discrepancy": disc,
+                        "orestar_begin": round(orestar_beg, 2) if orestar_beg is not None else None,
+                        "orestar_contributions": round(orestar_c, 2) if orestar_c is not None else None,
+                        "orestar_expenditures": round(orestar_e, 2) if orestar_e is not None else None,
+                        "orestar_other_receipts": round(orestar_or, 2) if orestar_or is not None else None,
+                        "orestar_other_disbursements": round(orestar_od, 2) if orestar_od is not None else None,
+                        "orestar_end": round(orestar_end, 2) if orestar_end is not None else None,
+                        "delta_contributions": delta_c,
+                        "delta_expenditures": delta_e,
+                        "delta_other_receipts": delta_or,
+                        "delta_other_disbursements": delta_od,
+                        "delta_begin": delta_beg,
+                        "discrepancy": delta_end,
                     }
 
         # Accumulate global beginning balances (sum across all filers per year)

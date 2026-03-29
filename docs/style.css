@@ -960,6 +960,22 @@ main {
 .disc-severe .disc-col-diff { color: #dc2626; }
 .disc-warn .disc-col-diff { color: #d97706; }
 .disc-minor .disc-col-diff { color: var(--color-text-muted); }
+.disc-detail {
+  margin-left: 12px;
+  padding: 4px 0 8px;
+  border-left: 2px solid var(--color-border-light);
+}
+.disc-detail-row {
+  display: flex;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+}
+.disc-detail-label {
+  width: 100px;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
 
 /* ════════════════════════════════════════════════════════════════════════════
    CHARTS — Open, unboxed treatment
