@@ -149,7 +149,9 @@ def navigate_to_filer_search(page, filer_id: str) -> bool:
     page.wait_for_timeout(300)
 
     # Click search
-    search_btn = page.locator('input[type="submit"][value="Search"]')
+    search_btn = page.locator('input[type="submit"][value="Submit"]')
+    if search_btn.count() == 0:
+        search_btn = page.locator('input[type="submit"][value="Search"]')
     if search_btn.count() == 0:
         search_btn = page.locator('input[name="search"]')
     if search_btn.count() == 0:
@@ -213,7 +215,9 @@ def _submit_filer_search(page, filer_id: str) -> tuple[bool, int]:
     """
     _return_to_filer_search(page, filer_id)
 
-    search_btn = page.locator('input[name="search"]')
+    search_btn = page.locator('input[type="submit"][value="Submit"]')
+    if search_btn.count() == 0:
+        search_btn = page.locator('input[name="search"]')
     if search_btn.count() == 0:
         search_btn = page.locator('input[type="submit"][value="Search"]')
     if search_btn.count() == 0:
