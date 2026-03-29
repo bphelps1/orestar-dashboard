@@ -268,7 +268,10 @@ document.querySelectorAll(".admin-tab-btn").forEach(btn => {
     document.querySelectorAll(".admin-tab").forEach(t => t.hidden = true);
     btn.classList.add("active");
     document.getElementById(btn.dataset.adminTab).hidden = false;
-    if (btn.dataset.adminTab === "tab-merges") loadMergeManager();
+    const tab = btn.dataset.adminTab;
+    if (tab === "tab-active-merges" || tab === "tab-manual-merge" || tab === "tab-rejected") {
+      loadMergeManager();
+    }
   });
 });
 

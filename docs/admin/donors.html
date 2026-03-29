@@ -48,7 +48,9 @@
 
   <div class="admin-tabs">
     <button class="admin-tab-btn active" data-admin-tab="tab-pending">Pending Review</button>
-    <button class="admin-tab-btn" data-admin-tab="tab-merges">Merge Manager</button>
+    <button class="admin-tab-btn" data-admin-tab="tab-active-merges">Active Merges</button>
+    <button class="admin-tab-btn" data-admin-tab="tab-manual-merge">Manual Merge</button>
+    <button class="admin-tab-btn" data-admin-tab="tab-rejected">Rejected Pairs</button>
   </div>
 
   <!-- Tab: Pending Review (existing content) -->
@@ -85,17 +87,21 @@
 
   </div>
 
-  <!-- Tab: Merge Manager -->
-  <div id="tab-merges" class="admin-tab" hidden>
-
-    <div class="merge-section">
-      <h3>Active Merges</h3>
+  <!-- Tab: Active Merges -->
+  <div id="tab-active-merges" class="admin-tab" hidden>
+    <section class="admin-section">
+      <h2>Active Merges</h2>
+      <p class="section-desc">All donor name merges currently in effect, from both entity_map.json and admin decisions.</p>
       <input type="search" id="merge-search" class="table-search" placeholder="Search merges…" />
       <div id="merge-list"></div>
-    </div>
+    </section>
+  </div>
 
-    <div class="merge-section">
-      <h3>Create Manual Merge</h3>
+  <!-- Tab: Manual Merge -->
+  <div id="tab-manual-merge" class="admin-tab" hidden>
+    <section class="admin-section">
+      <h2>Create Manual Merge</h2>
+      <p class="section-desc">Search for two donor names and merge them under a single canonical identity.</p>
       <div class="merge-creator">
         <div class="merge-input-group">
           <label>Donor A</label>
@@ -110,13 +116,17 @@
         </div>
         <button id="merge-create-btn" class="btn-primary" disabled>Merge</button>
       </div>
-    </div>
+    </section>
+  </div>
 
-    <div class="merge-section">
-      <h3>Rejected Pairs</h3>
+  <!-- Tab: Rejected Pairs -->
+  <div id="tab-rejected" class="admin-tab" hidden>
+    <section class="admin-section">
+      <h2>Rejected Pairs</h2>
+      <p class="section-desc">Pairs that were explicitly rejected. Use "Reconsider" to move back to pending review.</p>
       <div id="rejected-list"></div>
-    </div>
-
+      <p id="rejected-empty" class="empty-msg" hidden>No rejected pairs.</p>
+    </section>
   </div>
 
 </main>
