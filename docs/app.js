@@ -695,15 +695,14 @@ function mergeTypeByMonth(byMonth) {
 // When beginningBalances is provided, cash on hand is calculated as:
 //   beginning_balance[earliest_year] + contributions + other_receipts - expenditures - other_disbursements
 function statsFromTimeline(rows, beginningBalances) {
-  // Each field matches an ORESTAR account summary line item exactly
-  const totalIn      = rows.reduce((s, r) => s + (r.contributions || 0), 0);      // Cash Contributions
-  const totalLoansIn = rows.reduce((s, r) => s + (r.loans_received || 0), 0);     // Loans Received
-  const totalInKind  = rows.reduce((s, r) => s + (r.inkind       || 0), 0);       // In-Kind (separate)
-  const totalOut     = rows.reduce((s, r) => s + (r.expenditures  || 0), 0);      // Cash Expenditures
-  const totalLoansOut= rows.reduce((s, r) => s + (r.loan_payments || 0), 0);      // Loan Payments
-  const totalOR      = rows.reduce((s, r) => s + (r.other_receipts || 0), 0);     // Other Receipts
-  const totalOD      = rows.reduce((s, r) => s + (r.other_disbursements || 0), 0);// Other Disbursements
-  const count        = rows.reduce((s, r) => s + (r.count         || 0), 0);
+  // ORESTAR methodology: contributions includes in-kind (nets to zero with expenditures)
+  // expenditures excludes agent expenditures only
+  const totalIn    = rows.reduce((s, r) => s + (r.contributions || 0), 0);
+  const totalInKind = rows.reduce((s, r) => s + (r.inkind       || 0), 0);
+  const totalOut   = rows.reduce((s, r) => s + (r.expenditures  || 0), 0);
+  const totalOR    = rows.reduce((s, r) => s + (r.other_receipts || 0), 0);
+  const totalOD    = rows.reduce((s, r) => s + (r.other_disbursements || 0), 0);
+  const count      = rows.reduce((s, r) => s + (r.count         || 0), 0);
 
   // Determine beginning balance for the earliest year in the filtered rows
   let beginBal = 0;
@@ -722,9 +721,8 @@ function statsFromTimeline(rows, beginningBalances) {
     }
   }
 
-  // ORESTAR COH formula: begin + contributions + loans_in + other_receipts
-  //                       - expenditures - loan_payments - other_disbursements
-  const netFlow = totalIn + totalLoansIn + totalOR - totalOut - totalLoansOut - totalOD;
+  // ORESTAR COH formula: in-kind is on both sides (nets to zero)
+  const netFlow = totalIn + totalOR - totalOut - totalOD;
 
   return {
     totalIn:     Math.round(totalIn    * 100) / 100,
@@ -875,14 +873,12 @@ function buildCalcSummary(profile, year) {
     : timeline;
 
   // Sum transaction-based values from the (filtered) timeline
-  // Each field matches an ORESTAR account summary line item exactly
-  let cashContrib = 0, loansIn = 0, inkind = 0, cashExpend = 0, loansOut = 0, otherReceipts = 0, otherDisburse = 0;
+  // ORESTAR: contributions includes in-kind+loans, expenditures excludes agent only
+  let cashContrib = 0, inkind = 0, cashExpend = 0, otherReceipts = 0, otherDisburse = 0;
   for (const row of rows) {
     cashContrib   += row.contributions       || 0;
-    loansIn       += row.loans_received      || 0;
     inkind        += row.inkind              || 0;
     cashExpend    += row.expenditures        || 0;
-    loansOut      += row.loan_payments       || 0;
     otherReceipts += row.other_receipts      || 0;
     otherDisburse += row.other_disbursements || 0;
   }
@@ -900,8 +896,8 @@ function buildCalcSummary(profile, year) {
     beginBal = firstYear ? (beginBalances[firstYear] || 0) : 0;
   }
 
-  // Our calculated ending balance (ORESTAR formula)
-  const endingCalc = beginBal + cashContrib + loansIn + otherReceipts - cashExpend - loansOut - otherDisburse;
+  // Our calculated ending balance (ORESTAR formula — in-kind nets to zero)
+  const endingCalc = beginBal + cashContrib + otherReceipts - cashExpend - otherDisburse;
 
   // ORESTAR-reported values (for comparison / validation)
   // If a specific year is selected, use the per-year ORESTAR data
