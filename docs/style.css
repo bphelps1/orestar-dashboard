@@ -700,6 +700,24 @@ main {
   background: var(--color-accent-light);
   color: var(--color-accent);
 }
+.pulse-filer-link {
+  color: var(--color-accent);
+  text-decoration: none;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.pulse-filer-link:hover { text-decoration: underline; }
+.pulse-show-more {
+  font-size: 0.75rem;
+  color: var(--color-accent);
+  cursor: pointer;
+  padding: 2px 0;
+}
+.pulse-show-more:hover { text-decoration: underline; }
 
 /* Donor entry layout — name+amount on top row, committee count below */
 .pulse-donor-entry {

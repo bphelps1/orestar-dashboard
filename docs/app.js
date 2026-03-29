@@ -3292,9 +3292,12 @@ function pulseEntryHTML(entry, valueHTML, extra = "") {
   const partyClass = entry.party === "Democrat" ? "party-d" : entry.party === "Republican" ? "party-r" : "party-other";
   const partyBadge = entry.party ? `<span class="pulse-entry-party ${partyClass}">${entry.party.charAt(0)}</span>` : "";
   const slug = entry.slug || "";
-  return `<div class="pulse-entry" ${slug ? `data-slug="${slug}" onclick="selectFilerBySlug('${slug}')"` : ""}>
+  const nameHTML = slug
+    ? `<a href="#" class="pulse-entry-name pulse-filer-link" onclick="event.preventDefault();selectFilerBySlug('${esc(slug)}')" title="${esc(entry.name || '')}">${esc(entry.name || '')}</a>`
+    : `<span class="pulse-entry-name" title="${esc(entry.name || '')}">${esc(entry.name || '')}</span>`;
+  return `<div class="pulse-entry">
     ${partyBadge}
-    <span class="pulse-entry-name" title="${entry.name || ''}">${entry.name || ''}</span>
+    ${nameHTML}
     <span class="pulse-entry-value">${valueHTML}</span>
     ${extra}
   </div>`;
@@ -3308,16 +3311,35 @@ function renderPulseRaising(data) {
     { key: "statewide", label: "Statewide" },
     { key: "legislative", label: "Legislative" },
     { key: "local", label: "Local" },
+    { key: "committees", label: "Committees" },
   ];
   for (const tier of tiers) {
-    const entries = (data.by_office_tier[tier.key] || []).slice(0, PULSE_ROWS);
+    const entries = (data.by_office_tier[tier.key] || []);
     if (!entries.length) continue;
     html += `<div class="pulse-tier-label">${tier.label}</div>`;
-    for (const e of entries) {
-      html += pulseEntryHTML(e, "$" + Number(e.raised).toLocaleString("en-US", { maximumFractionDigits: 0 }));
+    // Show top 1, rest collapsed
+    html += pulseEntryHTML(entries[0], "$" + Number(entries[0].raised).toLocaleString("en-US", { maximumFractionDigits: 0 }));
+    if (entries.length > 1) {
+      const extraId = `pulse-raising-extra-${tier.key}`;
+      html += `<div id="${extraId}" hidden>`;
+      for (let i = 1; i < entries.length; i++) {
+        html += pulseEntryHTML(entries[i], "$" + Number(entries[i].raised).toLocaleString("en-US", { maximumFractionDigits: 0 }));
+      }
+      html += `</div>`;
+      html += `<div class="pulse-show-more" data-target="${extraId}">+${entries.length - 1} more</div>`;
     }
   }
   body.innerHTML = html || '<div class="pulse-entry-meta">No data</div>';
+
+  // Wire up show-more toggles
+  body.querySelectorAll(".pulse-show-more").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const target = document.getElementById(btn.dataset.target);
+      if (!target) return;
+      target.hidden = !target.hidden;
+      btn.textContent = target.hidden ? `+${target.children.length} more` : "show fewer";
+    });
+  });
 }
 
 function renderPulseMomentum(data) {

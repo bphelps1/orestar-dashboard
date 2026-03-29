@@ -322,6 +322,30 @@ def generate(agg_dir: Path = AGG_DIR, filers_dir: Path = FILERS_DIR) -> dict:
             "total_in": row.get("total_in", 0),
         })
 
+    # Collect metrics for non-candidate committees (PACs, party committees, etc.)
+    committee_metrics = []
+    for row in index:
+        if row.get("committee_type") == "Candidate Committee":
+            continue
+        slug = row["slug"]
+        detail = candidate_details.get(slug)
+        if not detail:
+            continue
+        timeline = detail.get("timeline", [])
+        raised_1m = sum_timeline_months(timeline, recent_1m)
+        raised_3m = sum_timeline_months(timeline, recent_3m)
+        raised_cycle = sum_timeline_months(timeline, cycle_months)
+        if raised_1m <= 0 and raised_3m <= 0 and raised_cycle <= 0:
+            continue
+        committee_metrics.append({
+            "slug": slug,
+            "name": row["name"],
+            "committee_type": row.get("committee_type", ""),
+            "raised_1m": round(raised_1m, 2),
+            "raised_3m": round(raised_3m, 2),
+            "raised_cycle": round(raised_cycle, 2),
+        })
+
     # Aggregate top donors from per-filer monthly data (full, not limited)
     print(f"Aggregating top donors from {len(all_filer_details)} filer detail files...")
     top_donors_30d = aggregate_top_donors_from_filers(all_filer_details, recent_1m)
@@ -330,7 +354,7 @@ def generate(agg_dir: Path = AGG_DIR, filers_dir: Path = FILERS_DIR) -> dict:
 
     # Build output per period
     def build_period(metric_key, growth_key, top_donors, min_raised=5000):
-        by_tier = {"statewide": [], "legislative": [], "local": []}
+        by_tier = {"statewide": [], "legislative": [], "local": [], "committees": []}
         growth_candidates = []
 
         for fm in filer_metrics:
@@ -360,7 +384,20 @@ def generate(agg_dir: Path = AGG_DIR, filers_dir: Path = FILERS_DIR) -> dict:
                     "is_new": fm[growth_key] == 999,
                 })
 
-        # Sort each tier by raised amount, take top 5
+        # Add non-candidate committees
+        for cm in committee_metrics:
+            raised = cm[metric_key]
+            if raised <= 0:
+                continue
+            by_tier["committees"].append({
+                "slug": cm["slug"],
+                "name": cm["name"],
+                "office": cm.get("committee_type", ""),
+                "party": "",
+                "raised": raised,
+            })
+
+        # Sort each tier by raised amount, take top entries
         for tier in by_tier:
             by_tier[tier].sort(key=lambda x: -x["raised"])
             by_tier[tier] = by_tier[tier][:3]
