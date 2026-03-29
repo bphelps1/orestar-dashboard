@@ -59,17 +59,34 @@ jobs:
           fi
           xvfb-run --auto-servernum python scraper/fetch_earliest_balances.py $ARGS
 
-      - name: Re-aggregate with updated beginning balances
+      - name: Check remaining filers
+        id: remaining
         if: always()
-        run: python scraper/process.py
+        run: |
+          REMAINING_FILE="data/earliest_balances_remaining.txt"
+          if [ -f "$REMAINING_FILE" ]; then
+            REMAINING=$(cat "$REMAINING_FILE")
+          else
+            REMAINING=0
+          fi
+          echo "Filers remaining: $REMAINING"
+          echo "remaining=$REMAINING" >> "$GITHUB_OUTPUT"
+
+      - name: Re-aggregate with updated beginning balances (final batch only)
+        if: always() && steps.remaining.outputs.remaining == '0'
+        run: |
+          echo "All filers scraped — running full aggregation..."
+          python scraper/process.py
 
       - name: Commit and push updated data
         if: always()
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          mkdir -p docs/data/aggregated
-          cp -r data/aggregated/. docs/data/aggregated/
+          if [ "${{ steps.remaining.outputs.remaining }}" = "0" ]; then
+            mkdir -p docs/data/aggregated
+            cp -r data/aggregated/. docs/data/aggregated/
+          fi
           git add data/ docs/data/
           git diff --cached --quiet || git commit -m "chore: update earliest balances $(date -u +%Y-%m-%d)"
           for attempt in 1 2 3 4 5; do
@@ -78,24 +95,13 @@ jobs:
             sleep $((attempt * 15))
           done
 
-      - name: Check if more filers remain and retrigger
-        if: always()
+      - name: Retrigger for next batch
+        if: always() && steps.remaining.outputs.remaining != '0'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          REMAINING_FILE="data/earliest_balances_remaining.txt"
-          if [ -f "$REMAINING_FILE" ]; then
-            REMAINING=$(cat "$REMAINING_FILE")
-            echo "Filers remaining: $REMAINING"
-            if [ "$REMAINING" -gt 0 ] 2>/dev/null; then
-              echo "Retriggering workflow for next batch..."
-              gh workflow run earliest-balances.yml \
-                -f max_filers="${{ github.event.inputs.max_filers || '200' }}" \
-                -f force="false"
-              echo "Retrigger dispatched."
-            else
-              echo "All filers scraped — no retrigger needed."
-            fi
-          else
-            echo "No remaining count file found — skipping retrigger."
-          fi
+          echo "Retriggering workflow for next batch..."
+          gh workflow run earliest-balances.yml \
+            -f max_filers="${{ github.event.inputs.max_filers || '200' }}" \
+            -f force="false"
+          echo "Retrigger dispatched."
