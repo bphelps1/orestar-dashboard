@@ -69,15 +69,37 @@ jobs:
             xvfb-run --auto-servernum python scraper/fetch.py $ARGS
           fi
 
-      - name: Process data
+      - name: Check remaining windows
+        id: remaining
         run: |
           FILER_IDS="${{ inputs.filer_ids }}"
           if [ -n "$FILER_IDS" ]; then
-            # Filer-targeted: merge only (skip aggregation — daily refresh handles it)
-            python scraper/process.py --merge-only
+            echo "remaining=filer" >> "$GITHUB_OUTPUT"
           else
-            # Full backfill: aggregate everything
+            ARGS="--mode=count-remaining --start-year=${{ inputs.start_year }} --date-field=${{ inputs.date_field }}"
+            if [ -n "${{ inputs.end_year }}" ]; then
+              ARGS="$ARGS --end-year=${{ inputs.end_year }}"
+            fi
+            remaining=$(python scraper/fetch.py $ARGS)
+            echo "Remaining unfetched windows: $remaining"
+            echo "remaining=$remaining" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Process data
+        run: |
+          FILER_IDS="${{ inputs.filer_ids }}"
+          REMAINING="${{ steps.remaining.outputs.remaining }}"
+          if [ -n "$FILER_IDS" ]; then
+            # Filer-targeted: merge only (daily refresh will aggregate)
+            python scraper/process.py --merge-only
+          elif [ "$REMAINING" = "0" ]; then
+            # Final date-range batch: full aggregation
+            echo "Final batch — running full aggregation..."
             python scraper/process.py
+          else
+            # Intermediate date-range batch: merge only
+            echo "Intermediate batch ($REMAINING windows remaining) — merge only..."
+            python scraper/process.py --merge-only
           fi
 
       - name: Commit and push backfill data
@@ -85,8 +107,8 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          FILER_IDS="${{ inputs.filer_ids }}"
-          if [ -z "$FILER_IDS" ]; then
+          REMAINING="${{ steps.remaining.outputs.remaining }}"
+          if [ "$REMAINING" = "0" ]; then
             mkdir -p docs/data/aggregated
             cp -r data/aggregated/. docs/data/aggregated/
           fi
@@ -113,13 +135,8 @@ jobs:
             echo "Filer-targeted backfill — skipping re-trigger (daily refresh will aggregate)."
             exit 0
           fi
-          ARGS="--mode=count-remaining --start-year=${{ inputs.start_year }} --date-field=${{ inputs.date_field }}"
-          if [ -n "${{ inputs.end_year }}" ]; then
-            ARGS="$ARGS --end-year=${{ inputs.end_year }}"
-          fi
-          remaining=$(python scraper/fetch.py $ARGS)
-          echo "Remaining unfetched windows: $remaining"
-          if [ "$remaining" -gt 0 ]; then
+          REMAINING="${{ steps.remaining.outputs.remaining }}"
+          if [ "$REMAINING" -gt 0 ] 2>/dev/null; then
             echo "Re-triggering backfill workflow..."
             RETRIGGER_ARGS="-f start_year=${{ inputs.start_year }} -f date_field=${{ inputs.date_field }}"
             if [ -n "${{ inputs.end_year }}" ]; then
