@@ -1931,25 +1931,18 @@ async function loadOverview() {
 }
 
 function renderOverviewGlobal() {
+  // Always compute stat cards from timeline — ensures consistency with Account Summary
   const hasDate = state.dateStart || state.dateEnd;
-  if (hasDate) {
-    const globalBeginBal = summaryData.global_beginning_balances || {};
-    const { totalIn, totalInKind, totalOut, cashOnHand, count } = statsFromTimeline(filterMonthRows(timelineData || []), globalBeginBal);
-    document.getElementById("stat-contributions").textContent = fmt$(totalIn);
-    document.getElementById("stat-inkind").textContent        = fmt$(totalInKind);
-    document.getElementById("stat-expenditures").textContent  = fmt$(totalOut);
-    document.getElementById("stat-cash-on-hand").textContent  = fmt$(cashOnHand);
-    document.getElementById("stat-transactions").textContent  = count ? fmtNum(count) : "—";
-  } else {
-    document.getElementById("stat-contributions").textContent = fmt$(summaryData.total_contributions);
-    document.getElementById("stat-inkind").textContent        = fmt$(summaryData.total_inkind || 0);
-    document.getElementById("stat-expenditures").textContent  = fmt$(summaryData.total_expenditures);
-    const coh = summaryData.global_cash_on_hand != null
-      ? summaryData.global_cash_on_hand
-      : summaryData.total_contributions - summaryData.total_expenditures;
-    document.getElementById("stat-cash-on-hand").textContent  = fmt$(coh);
-    document.getElementById("stat-transactions").textContent  = fmtNum(summaryData.total_transactions);
-  }
+  const globalBeginBal = summaryData.global_beginning_balances || {};
+  const tlRows = hasDate
+    ? filterMonthRows(timelineData || [])
+    : (timelineData || []);
+  const { totalIn, totalInKind, totalOut, cashOnHand, count } = statsFromTimeline(tlRows, globalBeginBal);
+  document.getElementById("stat-contributions").textContent = fmt$(totalIn);
+  document.getElementById("stat-inkind").textContent        = fmt$(totalInKind);
+  document.getElementById("stat-expenditures").textContent  = fmt$(totalOut);
+  document.getElementById("stat-cash-on-hand").textContent  = fmt$(cashOnHand);
+  document.getElementById("stat-transactions").textContent  = count ? fmtNum(count) : "—";
   updateCohIndicator(null);  // No single-filer indicator for global view
   const cohNote = document.getElementById("coh-note");
   if (cohNote) cohNote.textContent = "Calculated from transaction data";
@@ -2113,22 +2106,18 @@ function renderOverviewSingleFiler(profile) {
   if (partyBox) partyBox.hidden = true;
   const racesBox = document.getElementById("races-to-watch");
   if (racesBox) racesBox.hidden = true;
+  // Always compute stat cards from timeline — ensures consistency with Account Summary
   const hasDate = state.dateStart || state.dateEnd;
-  if (hasDate) {
-    const { totalIn, totalInKind, totalOut, cashOnHand, count } =
-      statsFromTimeline(filterMonthRows(profile.timeline || []), profile.beginning_balances);
-    document.getElementById("stat-contributions").textContent = fmt$(totalIn);
-    document.getElementById("stat-inkind").textContent        = fmt$(totalInKind);
-    document.getElementById("stat-expenditures").textContent  = fmt$(totalOut);
-    document.getElementById("stat-cash-on-hand").textContent  = fmt$(cashOnHand);
-    document.getElementById("stat-transactions").textContent  = count ? fmtNum(count) : "—";
-  } else {
-    document.getElementById("stat-contributions").textContent = fmt$(profile.total_in);
-    document.getElementById("stat-inkind").textContent        = fmt$(profile.total_inkind || 0);
-    document.getElementById("stat-expenditures").textContent  = fmt$(profile.total_out);
-    document.getElementById("stat-cash-on-hand").textContent  = fmt$(profile.cash_on_hand);
-    document.getElementById("stat-transactions").textContent  = fmtNum(profile.tran_count);
-  }
+  const tlRows = hasDate
+    ? filterMonthRows(profile.timeline || [])
+    : (profile.timeline || []);
+  const { totalIn, totalInKind, totalOut, cashOnHand, count } =
+    statsFromTimeline(tlRows, profile.beginning_balances);
+  document.getElementById("stat-contributions").textContent = fmt$(totalIn);
+  document.getElementById("stat-inkind").textContent        = fmt$(totalInKind);
+  document.getElementById("stat-expenditures").textContent  = fmt$(totalOut);
+  document.getElementById("stat-cash-on-hand").textContent  = fmt$(cashOnHand);
+  document.getElementById("stat-transactions").textContent  = count ? fmtNum(count) : "—";
   updateCohIndicator(profile);
   const cohNote = document.getElementById("coh-note");
   if (cohNote) cohNote.textContent = "Calculated from transaction data";
