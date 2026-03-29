@@ -334,7 +334,42 @@ def load_excel_files(raw_dir: Path) -> pd.DataFrame:
             # ORESTAR does not include a transaction type column in the export.
             _valid_types = {"C", "E", "O", "OA", "OD", "OR"}
             _prefix = f.stem.split("_")[0].upper()
-            df["tran_type"] = _prefix if _prefix in _valid_types else ""
+            if _prefix in _valid_types:
+                df["tran_type"] = _prefix
+            else:
+                # Filer-targeted downloads have mixed types — infer from sub_type
+                _SUB_TYPE_TO_TRAN_TYPE = {
+                    "Cash Contribution": "C", "In-Kind Contribution": "C",
+                    "In-Kind/Forgiven Personal Expenditures": "C",
+                    "In-Kind/Forgiven Account Payable": "C",
+                    "Loan Received (Non-Exempt)": "C", "Pledge of Cash": "C",
+                    "Pledge of In-Kind": "C", "Pledge of Loan": "C",
+                    "Cash Expenditure": "E", "Account Payable": "E",
+                    "Expenditure Made by an Agent": "E",
+                    "Personal Expenditure for Reimbursement": "E",
+                    "Loan Payment (Non-Exempt)": "E",
+                    "Miscellaneous Other Receipt": "OR", "Refunds and Rebates": "OR",
+                    "Lost or Returned Check": "OR", "Interest/Investment Income": "OR",
+                    "Items Sold at Fair Market Value": "OR",
+                    "Loan Received (Exempt)": "OR",
+                    "Account Payable Rescinded": "O", "Cash Balance Adjustment": "O",
+                    "Loan Forgiven (Non-Exempt)": "O",
+                    "Personal Expenditure Balance Adjustment": "O",
+                    "Uncollectible Pledge of Cash": "O", "Uncollectible Pledge of In-Kind": "O",
+                    "Miscellaneous Account Receivable": "OA",
+                    "Unexpended Agent Balance": "OA",
+                    "Miscellaneous Other Disbursement": "OD",
+                    "Return or Refund of Contribution": "OD",
+                    "Nonpartisan Activity": "OD", "Loan Payment (Exempt)": "OD",
+                }
+                st_col = "sub_type" if "sub_type" in df.columns else "sub type"
+                if st_col in df.columns:
+                    df["tran_type"] = df[st_col].map(_SUB_TYPE_TO_TRAN_TYPE).fillna("")
+                    inferred = (df["tran_type"] != "").sum()
+                    log.info("Inferred tran_type from sub_type for %d/%d rows in %s",
+                             inferred, len(df), f.name)
+                else:
+                    df["tran_type"] = ""
             frames.append(df)
         except Exception as exc:
             log.warning("Failed to read %s: %s", f.name, exc)
