@@ -260,3 +260,338 @@ function initSearch() {
     renderPendingPairs(input.value.trim());
   });
 }
+
+// ── Tab switching ─────────────────────────────────────────────────────
+document.querySelectorAll(".admin-tab-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".admin-tab-btn").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".admin-tab").forEach(t => t.hidden = true);
+    btn.classList.add("active");
+    document.getElementById(btn.dataset.adminTab).hidden = false;
+    if (btn.dataset.adminTab === "tab-merges") loadMergeManager();
+  });
+});
+
+// ── Merge Manager ─────────────────────────────────────────────────────
+let allDonorNames = new Set();
+let supabaseDecisionRows = [];   // full rows from donor_review_decisions
+
+function buildDonorNameSet() {
+  // Collect all unique donor names from the review queue
+  reviewQueue.forEach(item => {
+    allDonorNames.add(item.a);
+    allDonorNames.add(item.b);
+  });
+  // Also add names from entity_map
+  for (const [raw, canonical] of Object.entries(entityMap)) {
+    allDonorNames.add(raw);
+    allDonorNames.add(canonical);
+  }
+}
+
+async function loadMergeManager() {
+  // Build donor name set for autocomplete (if not already built)
+  if (!allDonorNames.size) buildDonorNameSet();
+
+  // Reload full decision rows from Supabase for detailed info
+  try {
+    const sb = await getSupabase();
+    const { data } = await sb.from("donor_review_decisions").select("*");
+    supabaseDecisionRows = data || [];
+  } catch (e) {
+    console.warn("Could not load decisions for merge manager:", e.message);
+  }
+
+  // Combine active merges from both sources
+  const merges = [];
+
+  // 1. entity_map.json merges
+  for (const [raw, canonical] of Object.entries(entityMap)) {
+    if (raw !== canonical) {
+      merges.push({
+        pairKey: pairKey(raw, canonical),
+        rawName: raw,
+        canonicalName: canonical,
+        source: "entity_map",
+        score: null,
+      });
+    }
+  }
+
+  // 2. Supabase admin merges
+  supabaseDecisionRows.forEach(row => {
+    if (row.decision === "merged") {
+      merges.push({
+        pairKey: row.pair_key,
+        rawName: row.merged_name || row.pair_key,
+        canonicalName: row.kept_name || "—",
+        source: "admin",
+        score: row.score,
+      });
+    }
+  });
+
+  renderActiveMerges(merges, "");
+  renderRejectedPairs();
+  initMergeSearch(merges);
+  initMergeCreator();
+}
+
+// ── Active Merges ─────────────────────────────────────────────────────
+let _cachedMerges = [];
+
+function initMergeSearch(merges) {
+  _cachedMerges = merges;
+  const input = document.getElementById("merge-search");
+  if (!input) return;
+  input.addEventListener("input", () => {
+    renderActiveMerges(_cachedMerges, input.value.trim());
+  });
+}
+
+function renderActiveMerges(merges, searchQuery) {
+  const container = document.getElementById("merge-list");
+
+  let filtered = merges;
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    filtered = merges.filter(m =>
+      m.rawName.toLowerCase().includes(q) ||
+      m.canonicalName.toLowerCase().includes(q)
+    );
+  }
+
+  if (!filtered.length) {
+    container.innerHTML = `<p class="empty-msg">No active merges found.</p>`;
+    return;
+  }
+
+  const rows = filtered.map(m => {
+    const sourceBadge = m.source === "entity_map"
+      ? `<span class="merge-source-badge badge-gray">entity_map</span>`
+      : `<span class="merge-source-badge badge-blue">admin</span>`;
+    const scoreCell = m.score != null ? m.score : "—";
+    const editBtn = m.source === "admin"
+      ? `<button class="btn-small" onclick="editMerge('${esc(m.pairKey)}')">Edit</button>`
+      : "";
+    const splitBtn = `<button class="btn-small" onclick="splitMerge('${esc(m.pairKey)}', '${esc(m.source)}')">Split</button>`;
+
+    return `<tr>
+      <td>${esc(m.rawName)}</td>
+      <td class="merge-arrow-cell">→</td>
+      <td>${esc(m.canonicalName)}</td>
+      <td>${sourceBadge}</td>
+      <td>${scoreCell}</td>
+      <td class="merge-actions">${editBtn} ${splitBtn}</td>
+    </tr>`;
+  }).join("");
+
+  container.innerHTML = `
+    <table class="merge-table">
+      <thead>
+        <tr>
+          <th>Raw Name</th>
+          <th></th>
+          <th>Canonical Name</th>
+          <th>Source</th>
+          <th>Score</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+// ── Edit Merge ────────────────────────────────────────────────────────
+async function editMerge(pk) {
+  const row = supabaseDecisionRows.find(r => r.pair_key === pk && r.decision === "merged");
+  if (!row) return;
+
+  const newName = prompt("Edit canonical name:", row.kept_name);
+  if (newName === null || newName.trim() === "" || newName.trim() === row.kept_name) return;
+
+  try {
+    const sb = await getSupabase();
+    await sb.from("donor_review_decisions").upsert({
+      pair_key: pk,
+      decision: "merged",
+      kept_name: newName.trim(),
+      merged_name: row.merged_name,
+      score: row.score,
+      decided_at: new Date().toISOString(),
+    }, { onConflict: "pair_key" });
+
+    // Update local state
+    decisions.set(pk, "merged");
+  } catch (e) {
+    console.warn("Could not update merge:", e.message);
+    alert("Error updating merge: " + e.message);
+    return;
+  }
+
+  await loadMergeManager();
+}
+
+// ── Split Merge ───────────────────────────────────────────────────────
+async function splitMerge(pk, source) {
+  if (source === "entity_map") {
+    alert("This merge is in entity_map.json \u2014 edit the file directly to remove it.");
+    return;
+  }
+
+  if (!confirm("Split this merge? The pair will return to pending review.")) return;
+
+  try {
+    const sb = await getSupabase();
+    await sb.from("donor_review_decisions").delete().eq("pair_key", pk);
+    decisions.delete(pk);
+  } catch (e) {
+    console.warn("Could not delete decision:", e.message);
+    alert("Error splitting merge: " + e.message);
+    return;
+  }
+
+  await loadMergeManager();
+  renderPendingPairs(document.getElementById("review-search").value);
+  renderMergeLog();
+}
+
+// ── Manual Merge Creator ──────────────────────────────────────────────
+let _mergeCreatorInitialized = false;
+
+function initMergeCreator() {
+  if (_mergeCreatorInitialized) return;
+  _mergeCreatorInitialized = true;
+
+  const inputA = document.getElementById("merge-donor-a");
+  const inputB = document.getElementById("merge-donor-b");
+  const suggestA = document.getElementById("merge-suggest-a");
+  const suggestB = document.getElementById("merge-suggest-b");
+  const createBtn = document.getElementById("merge-create-btn");
+
+  function updateCreateBtn() {
+    createBtn.disabled = !(inputA.value.trim() && inputB.value.trim());
+  }
+
+  function setupAutocomplete(input, suggestEl) {
+    input.addEventListener("input", () => {
+      updateCreateBtn();
+      const q = input.value.trim().toLowerCase();
+      if (q.length < 2) { suggestEl.hidden = true; return; }
+
+      const matches = [];
+      for (const name of allDonorNames) {
+        if (name.toLowerCase().includes(q)) {
+          matches.push(name);
+          if (matches.length >= 10) break;
+        }
+      }
+
+      if (!matches.length) { suggestEl.hidden = true; return; }
+
+      suggestEl.innerHTML = matches.map(m =>
+        `<div class="merge-suggest-item" data-name="${esc(m)}">${esc(m)}</div>`
+      ).join("");
+      suggestEl.hidden = false;
+    });
+
+    suggestEl.addEventListener("click", (e) => {
+      const item = e.target.closest(".merge-suggest-item");
+      if (!item) return;
+      input.value = item.dataset.name;
+      suggestEl.hidden = true;
+      updateCreateBtn();
+    });
+
+    // Hide suggestions on blur (with delay so click can register)
+    input.addEventListener("blur", () => {
+      setTimeout(() => { suggestEl.hidden = true; }, 200);
+    });
+  }
+
+  setupAutocomplete(inputA, suggestA);
+  setupAutocomplete(inputB, suggestB);
+
+  createBtn.addEventListener("click", createManualMerge);
+}
+
+async function createManualMerge() {
+  const inputA = document.getElementById("merge-donor-a");
+  const inputB = document.getElementById("merge-donor-b");
+  const donorA = inputA.value.trim();
+  const canonicalName = inputB.value.trim();
+
+  if (!donorA || !canonicalName) return;
+
+  const pk = pairKey(donorA, canonicalName);
+
+  try {
+    const sb = await getSupabase();
+    await sb.from("donor_review_decisions").upsert({
+      pair_key: pk,
+      decision: "merged",
+      kept_name: canonicalName,
+      merged_name: donorA,
+      score: 100,
+      decided_at: new Date().toISOString(),
+    }, { onConflict: "pair_key" });
+
+    decisions.set(pk, "merged");
+  } catch (e) {
+    console.warn("Could not create manual merge:", e.message);
+    alert("Error creating merge: " + e.message);
+    return;
+  }
+
+  // Clear inputs
+  inputA.value = "";
+  inputB.value = "";
+  document.getElementById("merge-create-btn").disabled = true;
+
+  await loadMergeManager();
+}
+
+// ── Rejected Pairs ────────────────────────────────────────────────────
+function renderRejectedPairs() {
+  const container = document.getElementById("rejected-list");
+
+  const rejected = supabaseDecisionRows.filter(r => r.decision === "rejected");
+
+  if (!rejected.length) {
+    container.innerHTML = `<p class="empty-msg">No rejected pairs.</p>`;
+    return;
+  }
+
+  container.innerHTML = rejected.map(row => {
+    const names = row.pair_key.split("|||");
+    const display = names.length === 2
+      ? `${esc(names[0])} / ${esc(names[1])}`
+      : esc(row.pair_key);
+    return `
+      <div class="merge-entry">
+        <div class="merge-info">
+          <div class="merge-names">${display}</div>
+        </div>
+        <button class="btn-small" onclick="reconsiderPair('${esc(row.pair_key)}')">Reconsider</button>
+      </div>
+    `;
+  }).join("");
+}
+
+async function reconsiderPair(pk) {
+  if (!confirm("Remove this rejection? The pair will return to pending review.")) return;
+
+  try {
+    const sb = await getSupabase();
+    await sb.from("donor_review_decisions").delete().eq("pair_key", pk);
+    decisions.delete(pk);
+  } catch (e) {
+    console.warn("Could not delete rejection:", e.message);
+    alert("Error: " + e.message);
+    return;
+  }
+
+  renderRejectedPairs();
+  renderPendingPairs(document.getElementById("review-search").value);
+}

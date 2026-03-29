@@ -58,3 +58,30 @@ async function signOut() {
   await sb.auth.signOut();
   window.location.reload();
 }
+
+/** Get the current user's role from user_roles table. Returns null if not logged in or no role. */
+async function getUserRole() {
+  const session = await getSession();
+  if (!session) return null;
+  try {
+    const sb = await getSupabase();
+    const { data } = await sb.from("user_roles")
+      .select("role")
+      .eq("user_id", session.user.id)
+      .single();
+    return data?.role || null;
+  } catch (e) {
+    return null; // table may not exist yet
+  }
+}
+
+/** Check if the current user has a specific role. */
+async function hasRole(role) {
+  return (await getUserRole()) === role;
+}
+
+/** Check if the current user has admin or reviewer access. */
+async function isAdminOrReviewer() {
+  const role = await getUserRole();
+  return role === "admin" || role === "reviewer";
+}

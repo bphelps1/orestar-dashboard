@@ -353,6 +353,8 @@ input[type="date"]:focus {
   transition: opacity 0.15s;
 }
 .tab-link:hover { opacity: 1; text-decoration: none; }
+.tab-admin { opacity: 0.45; font-size: 0.78rem; }
+.tab-admin:hover { opacity: 0.85; }
 
 
 /* ════════════════════════════════════════════════════════════════════════════

@@ -46,34 +46,78 @@
     <button class="btn-small" id="sign-out-btn">Sign Out</button>
   </div>
 
-  <!-- Pending merges from review_queue.json -->
-  <section class="admin-section">
-    <h2>Pending Duplicate Pairs</h2>
-    <p class="section-desc">Probable duplicates from fuzzy matching (score 80–95). Click merge to combine, or reject to dismiss.</p>
-    <div class="review-controls">
-      <input type="search" id="review-search" class="table-search" placeholder="Filter pairs…" />
-      <span id="review-count" class="review-count"></span>
-    </div>
-    <div id="pending-list" class="cluster-list"></div>
-    <p id="pending-empty" class="empty-msg" hidden>No pending pairs.</p>
-  </section>
+  <div class="admin-tabs">
+    <button class="admin-tab-btn active" data-admin-tab="tab-pending">Pending Review</button>
+    <button class="admin-tab-btn" data-admin-tab="tab-merges">Merge Manager</button>
+  </div>
 
-  <!-- Merge history -->
-  <section class="admin-section">
-    <h2>Merge History</h2>
-    <p class="section-desc">Previously merged donors. Merges can be undone.</p>
-    <div id="merge-log" class="merge-log"></div>
-    <p id="log-empty" class="empty-msg" hidden>No merge history yet.</p>
-  </section>
+  <!-- Tab: Pending Review (existing content) -->
+  <div id="tab-pending" class="admin-tab active">
 
-  <!-- Manual search + merge -->
-  <section class="admin-section">
-    <h2>Manual Donor Search</h2>
-    <div class="search-box" style="max-width:400px">
-      <input type="text" id="donor-search" placeholder="Search donor name…" />
+    <!-- Pending merges from review_queue.json -->
+    <section class="admin-section">
+      <h2>Pending Duplicate Pairs</h2>
+      <p class="section-desc">Probable duplicates from fuzzy matching (score 80–95). Click merge to combine, or reject to dismiss.</p>
+      <div class="review-controls">
+        <input type="search" id="review-search" class="table-search" placeholder="Filter pairs…" />
+        <span id="review-count" class="review-count"></span>
+      </div>
+      <div id="pending-list" class="cluster-list"></div>
+      <p id="pending-empty" class="empty-msg" hidden>No pending pairs.</p>
+    </section>
+
+    <!-- Merge history -->
+    <section class="admin-section">
+      <h2>Merge History</h2>
+      <p class="section-desc">Previously merged donors. Merges can be undone.</p>
+      <div id="merge-log" class="merge-log"></div>
+      <p id="log-empty" class="empty-msg" hidden>No merge history yet.</p>
+    </section>
+
+    <!-- Manual search + merge -->
+    <section class="admin-section">
+      <h2>Manual Donor Search</h2>
+      <div class="search-box" style="max-width:400px">
+        <input type="text" id="donor-search" placeholder="Search donor name…" />
+      </div>
+      <div id="donor-search-results" class="donor-search-results"></div>
+    </section>
+
+  </div>
+
+  <!-- Tab: Merge Manager -->
+  <div id="tab-merges" class="admin-tab" hidden>
+
+    <div class="merge-section">
+      <h3>Active Merges</h3>
+      <input type="search" id="merge-search" class="table-search" placeholder="Search merges…" />
+      <div id="merge-list"></div>
     </div>
-    <div id="donor-search-results" class="donor-search-results"></div>
-  </section>
+
+    <div class="merge-section">
+      <h3>Create Manual Merge</h3>
+      <div class="merge-creator">
+        <div class="merge-input-group">
+          <label>Donor A</label>
+          <input type="text" id="merge-donor-a" placeholder="Search donor name…" autocomplete="off" />
+          <div id="merge-suggest-a" class="merge-suggestions" hidden></div>
+        </div>
+        <span class="merge-arrow">→</span>
+        <div class="merge-input-group">
+          <label>Keep as (canonical name)</label>
+          <input type="text" id="merge-donor-b" placeholder="Search or type canonical name…" autocomplete="off" />
+          <div id="merge-suggest-b" class="merge-suggestions" hidden></div>
+        </div>
+        <button id="merge-create-btn" class="btn-primary" disabled>Merge</button>
+      </div>
+    </div>
+
+    <div class="merge-section">
+      <h3>Rejected Pairs</h3>
+      <div id="rejected-list"></div>
+    </div>
+
+  </div>
 
 </main>
 
