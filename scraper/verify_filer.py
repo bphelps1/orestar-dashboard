@@ -170,18 +170,23 @@ def navigate_to_filer_search(page, filer_id: str) -> bool:
     cfa_link = page.locator('a:has-text("Campaign Finance Activity")')
     if cfa_link.count() == 0:
         cfa_link = page.locator(f'a[href*="cneSearchFilerCommitteeId={filer_id}"]')
-    if cfa_link.count() == 0:
-        log.warning("No 'Campaign Finance Activity' link found for filer %s", filer_id)
-        log.debug("Page URL: %s", page.url)
-        return False
-
-    cfa_link.first.click()
-    try:
-        page.wait_for_load_state("networkidle", timeout=30_000)
-    except PlaywrightTimeout:
-        log.warning("Timeout waiting for Campaign Finance Activity page")
-        return False
-    time.sleep(2)
+    if cfa_link.count() > 0:
+        cfa_link.first.click()
+        try:
+            page.wait_for_load_state("networkidle", timeout=30_000)
+        except PlaywrightTimeout:
+            log.warning("Timeout waiting for Campaign Finance Activity page")
+        time.sleep(2)
+    else:
+        # Fallback: navigate directly to the filer-scoped search page
+        log.info("No 'Campaign Finance Activity' link — navigating directly to cneSearch for filer %s", filer_id)
+        direct_url = f"{BASE_URL}/cneSearch.do?cneSearchButtonName=search&cneSearchFilerCommitteeId={filer_id}"
+        page.goto(direct_url, timeout=60_000)
+        try:
+            page.wait_for_load_state("networkidle", timeout=30_000)
+        except PlaywrightTimeout:
+            pass
+        time.sleep(2)
 
     if "cneSearch" not in page.url and "TransactionSearch" not in page.url:
         log.warning("Expected cneSearch page, got: %s", page.url)
@@ -194,6 +199,12 @@ def navigate_to_filer_search(page, filer_id: str) -> bool:
 def _return_to_filer_search(page, filer_id: str) -> bool:
     """Return to the filer-scoped search form."""
     if "cneSearch" in page.url:
+        # Try JS resetSearch() first (matches the page's own button)
+        has_reset_fn = page.evaluate("typeof resetSearch === 'function'")
+        if has_reset_fn:
+            page.evaluate("resetSearch()")
+            page.wait_for_timeout(500)
+            return True
         reset = page.locator('input[type="button"][value="Reset"]')
         if reset.count() > 0:
             reset.first.click()
@@ -215,23 +226,36 @@ def _submit_filer_search(page, filer_id: str) -> tuple[bool, int]:
     """
     _return_to_filer_search(page, filer_id)
 
-    search_btn = page.locator('input[type="submit"][value="Submit"]')
-    if search_btn.count() == 0:
-        search_btn = page.locator('input[name="search"]')
-    if search_btn.count() == 0:
-        search_btn = page.locator('input[type="submit"][value="Search"]')
-    if search_btn.count() == 0:
-        log.warning("No search button on filer search form")
-        return False, -1
+    # Check if we're already on a results page (some filer pages show
+    # results immediately after navigation)
+    existing_count = _parse_record_count(page)
+    if existing_count > 0:
+        log.info("Already on results page with %d records for filer %s", existing_count, filer_id)
+        return True, existing_count
 
-    search_btn.first.click()
-    try:
-        page.wait_for_url(RESULTS_URL_PATTERN, timeout=30_000)
-    except PlaywrightTimeout:
-        if "Results" not in page.url and "results" not in page.url.lower():
-            log.warning("Timed out waiting for results")
+    # The cneSearch page uses JavaScript doNewSearch() instead of a
+    # standard HTML submit button. Try that first, then fall back to
+    # looking for submit buttons.
+    has_js_search = page.evaluate("typeof doNewSearch === 'function'")
+    if has_js_search:
+        log.debug("Using doNewSearch() JavaScript function")
+        page.evaluate("doNewSearch()")
+    else:
+        search_btn = page.locator('input[type="submit"][value="Submit"]')
+        if search_btn.count() == 0:
+            search_btn = page.locator('input[name="search"]')
+        if search_btn.count() == 0:
+            search_btn = page.locator('input[type="submit"][value="Search"]')
+        if search_btn.count() == 0:
+            log.warning("No search button or doNewSearch() on filer search form")
             return False, -1
-    time.sleep(1)
+        search_btn.first.click()
+
+    try:
+        page.wait_for_load_state("networkidle", timeout=30_000)
+    except PlaywrightTimeout:
+        pass
+    time.sleep(2)
 
     # Parse expected record count from page header
     expected = _parse_record_count(page)
