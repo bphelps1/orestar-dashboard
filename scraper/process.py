@@ -643,19 +643,21 @@ def aggregate(df: pd.DataFrame) -> None:
     # ── Filer-ID-based name normalization ───────────────────────────────────
     # All transactions for a given filer ID adopt the committee name from the
     # most recent transaction with that ID, so renames are reflected everywhere.
+    # Uses the raw "filer" column (always populated) to build the map, since
+    # backfilled rows may have blank filer_canonical values.
     if "filer id" in df.columns:
-        _fc = "filer_canonical" if "filer_canonical" in df.columns else "filer"
         _fid = df["filer id"].fillna("").astype(str).str.strip()
         _has_id = _fid.ne("")
         _id_map = (
             df.loc[_has_id]
             .assign(_fid_tmp=_fid[_has_id])
             .sort_values("filed_date")
-            .groupby("_fid_tmp")[_fc]
+            .groupby("_fid_tmp")["filer"]
             .last()
             .to_dict()
         )
         _mapped = _fid.map(_id_map)
+        _fc = "filer_canonical" if "filer_canonical" in df.columns else "filer"
         df["filer_canonical"] = _mapped.where(_mapped.notna(), df.get(_fc, ""))
         log.info(
             "Filer-ID normalization applied: %d filer IDs → %d unique canonical names",
