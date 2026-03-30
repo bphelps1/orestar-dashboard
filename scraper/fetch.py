@@ -592,9 +592,17 @@ def download_filer_window(
             if result1 is None:
                 log.warning("First half failed for filer %s %s→%s — skipping second half (will retry next run)",
                             filer_id, start, mid)
-                return None
+                raise SessionExpiredError(
+                    f"Split window failed for filer {filer_id} {start}→{mid} — incomplete download"
+                )
             time.sleep(REQUEST_DELAY)
-            download_filer_window(page, context, filer_id, mid + timedelta(days=1), end, raw_dir)
+            result2 = download_filer_window(page, context, filer_id, mid + timedelta(days=1), end, raw_dir)
+            if result2 is None:
+                log.warning("Second half failed for filer %s %s→%s — incomplete download",
+                            filer_id, mid + timedelta(days=1), end)
+                raise SessionExpiredError(
+                    f"Split window failed for filer {filer_id} {mid+timedelta(days=1)}→{end} — incomplete download"
+                )
             return None
 
         _return_to_search(page)
