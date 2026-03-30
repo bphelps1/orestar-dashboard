@@ -107,14 +107,6 @@ jobs:
               exit 0
             fi
             echo "Auto-resolved filer IDs: $FILER_IDS"
-
-            # Track these filer IDs so next run skips them
-            TRACKING_FILE="data/backfilled_filers.txt"
-            touch "$TRACKING_FILE"
-            for fid in $FILER_IDS; do
-              grep -qx "$fid" "$TRACKING_FILE" || echo "$fid" >> "$TRACKING_FILE"
-            done
-
             echo "resolved=$FILER_IDS" >> "$GITHUB_OUTPUT"
             echo "is_auto=true" >> "$GITHUB_OUTPUT"
           else
@@ -136,6 +128,22 @@ jobs:
             fi
             xvfb-run --auto-servernum python scraper/fetch.py $ARGS
           fi
+
+      - name: Track successfully backfilled filers (auto mode)
+        if: steps.resolve.outputs.is_auto == 'true' && steps.resolve.outputs.resolved != ''
+        run: |
+          # Only mark filers as done if their data file exists in _raw
+          TRACKING_FILE="data/backfilled_filers.txt"
+          touch "$TRACKING_FILE"
+          for fid in ${{ steps.resolve.outputs.resolved }}; do
+            # Check if any file for this filer was downloaded
+            if ls data/_raw/filer${fid}_* 1>/dev/null 2>&1; then
+              grep -qx "$fid" "$TRACKING_FILE" || echo "$fid" >> "$TRACKING_FILE"
+              echo "  ✓ Tracked filer $fid"
+            else
+              echo "  ✗ Filer $fid had no downloaded data — will retry next run"
+            fi
+          done
 
       - name: Check remaining windows
         id: remaining
