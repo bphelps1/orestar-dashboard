@@ -33,6 +33,10 @@ permissions:
   contents: write
   actions: write
 
+concurrency:
+  group: data-pipeline
+  cancel-in-progress: false
+
 jobs:
   backfill:
     runs-on: ubuntu-latest

@@ -19,6 +19,10 @@ permissions:
   contents: write
   actions: write          # needed to retrigger itself
 
+concurrency:
+  group: data-pipeline
+  cancel-in-progress: false
+
 jobs:
   scrape:
     runs-on: ubuntu-latest
