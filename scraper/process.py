@@ -1821,9 +1821,16 @@ if __name__ == "__main__":
                 _save_transactions(df)
             else:
                 log.warning("No filed_date column — cannot split by year")
-            # Clean up raw files
+            # Clean up raw files — keep filer-targeted files so incomplete
+            # downloads can resume on the next run (the fetch skips existing files)
+            cleaned = 0
+            kept = 0
             for f in RAW_DIR.glob("*.xls*"):
-                f.unlink()
-            log.info("Merge complete. Raw files cleaned up.")
+                if f.name.startswith("filer"):
+                    kept += 1
+                else:
+                    f.unlink()
+                    cleaned += 1
+            log.info("Merge complete. Cleaned %d raw files, kept %d filer-targeted files for resume.", cleaned, kept)
     else:
         process()
