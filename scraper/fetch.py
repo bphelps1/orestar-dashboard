@@ -617,10 +617,16 @@ def download_filer_window(
 
 
 def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
-    """Fetch all transactions for specific filers across all years."""
+    """Fetch all transactions for specific filers across all years.
+
+    Writes data/incomplete_backfills.txt with filer IDs that had errors
+    (partial downloads due to rate-limiting, split failures, etc.).
+    The auto-backfill system prioritizes these on the next run.
+    """
     end_date = date.today()
     start_date = date(start_year, 1, 1)
     RAW_DIR.mkdir(parents=True, exist_ok=True)
+    incomplete_filers: list[str] = []
 
     log.info("Backfilling %d filers from %s to %s", len(filer_ids), start_date, end_date)
 
@@ -631,9 +637,11 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
             log.info("=== Backfilling filer %s ===", fid)
             # Count files before to detect if anything was downloaded
             files_before = set(RAW_DIR.glob(f"filer{fid}_*"))
+            had_error = False
             try:
                 download_filer_window(page, context, fid, start_date, end_date, RAW_DIR)
             except SessionExpiredError:
+                had_error = True
                 log.warning("Session expired during filer %s — restarting browser", fid)
                 try:
                     browser.close()
@@ -643,9 +651,11 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
                 # Retry once
                 try:
                     download_filer_window(page, context, fid, start_date, end_date, RAW_DIR)
+                    had_error = False  # retry succeeded
                 except Exception as exc:
                     log.error("Failed filer %s after restart: %s", fid, exc)
             except Exception as exc:
+                had_error = True
                 log.error("Failed filer %s: %s", fid, exc)
 
             files_after = set(RAW_DIR.glob(f"filer{fid}_*"))
@@ -653,6 +663,10 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
                 consecutive_failures = 0
             else:
                 consecutive_failures += 1
+
+            if had_error:
+                incomplete_filers.append(fid)
+
             if consecutive_failures >= 2:
                 log.warning(
                     "Rate-limited: %d consecutive failures — stopping early. "
@@ -661,6 +675,18 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
                 )
                 break
         browser.close()
+
+    # Write incomplete filers so auto-backfill can prioritize them
+    incomplete_path = DATA_DIR / "incomplete_backfills.txt"
+    if incomplete_filers:
+        log.info("Incomplete filers (will retry next run): %s", " ".join(incomplete_filers))
+        # Append to existing file (don't overwrite — accumulates across runs)
+        existing = set()
+        if incomplete_path.exists():
+            existing = set(incomplete_path.read_text().split())
+        existing.update(incomplete_filers)
+        incomplete_path.write_text("\n".join(sorted(existing)) + "\n")
+    log.info("Filer backfill complete. Raw files in: %s", RAW_DIR)
 
     log.info("Filer backfill complete. Raw files in: %s", RAW_DIR)
 

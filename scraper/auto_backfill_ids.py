@@ -13,6 +13,7 @@ from pathlib import Path
 FILERS_DIR = Path("data/aggregated/filers")
 INDEX_FILE = Path("data/aggregated/filer_index.json")
 TRACKING_FILE = Path("data/backfilled_filers.txt")
+INCOMPLETE_FILE = Path("data/incomplete_backfills.txt")
 OUTPUT_FILE = Path("/tmp/auto_backfill_ids.txt")
 BATCH_SIZE = 25
 
@@ -34,6 +35,16 @@ if TRACKING_FILE.exists():
     already_done = set(TRACKING_FILE.read_text().split())
     print(f"Already backfilled: {len(already_done)} filers")
 
+# Incomplete filers from previous runs get priority — they had partial
+# downloads due to rate-limiting and need to be retried
+incomplete = set()
+if INCOMPLETE_FILE.exists():
+    incomplete = set(INCOMPLETE_FILE.read_text().split())
+    # Remove them from already_done so they get retried
+    already_done -= incomplete
+    if incomplete:
+        print(f"Incomplete filers to retry: {len(incomplete)}")
+
 filers = []
 for f in FILERS_DIR.glob("*.json"):
     with open(f) as fh:
@@ -51,16 +62,28 @@ for f in FILERS_DIR.glob("*.json"):
         max_yearly = max(abs(v.get("discrepancy", 0)) for v in yearly.values())
         disc = max(disc, max_yearly)
     if disc > 0.01:
-        filers.append((disc, fid, d.get("name", "")))
+        # Boost priority for incomplete filers so they're retried first
+        priority = disc + (1e12 if fid in incomplete else 0)
+        filers.append((priority, disc, fid, d.get("name", "")))
 
 filers.sort(reverse=True)
 batch = filers[:BATCH_SIZE]
 
 if batch:
     print(f"Found {len(filers)} filers with discrepancies, selecting top {len(batch)}:")
-    for disc, fid, name in batch:
-        print(f"  {fid}: ${disc:,.2f} — {name}")
-    OUTPUT_FILE.write_text(" ".join(fid for _, fid, _ in batch))
+    for priority, disc, fid, name in batch:
+        retry = " (RETRY)" if fid in incomplete else ""
+        print(f"  {fid}: ${disc:,.2f} — {name}{retry}")
+    OUTPUT_FILE.write_text(" ".join(fid for _, _, fid, _ in batch))
+    # Clear incomplete filers that are being retried this batch
+    retried = incomplete & {fid for _, _, fid, _ in batch}
+    if retried and INCOMPLETE_FILE.exists():
+        remaining_incomplete = incomplete - retried
+        if remaining_incomplete:
+            INCOMPLETE_FILE.write_text("\n".join(sorted(remaining_incomplete)) + "\n")
+        else:
+            INCOMPLETE_FILE.unlink()
+        print(f"Cleared {len(retried)} filers from incomplete list")
 else:
     print("No filers with unresolved discrepancies.")
     # Don't write the file — caller checks for its existence
