@@ -11,13 +11,23 @@ import sys
 from pathlib import Path
 
 FILERS_DIR = Path("data/aggregated/filers")
+INDEX_FILE = Path("data/aggregated/filer_index.json")
 TRACKING_FILE = Path("data/backfilled_filers.txt")
 OUTPUT_FILE = Path("/tmp/auto_backfill_ids.txt")
 BATCH_SIZE = 25
 
 print(f"Working directory: {Path.cwd()}")
 print(f"Filers dir exists: {FILERS_DIR.exists()}")
-print(f"Filers dir file count: {len(list(FILERS_DIR.glob('*.json'))) if FILERS_DIR.exists() else 0}")
+print(f"Index file exists: {INDEX_FILE.exists()}")
+
+# Build slug -> filer_id mapping from the index
+slug_to_fid = {}
+if INDEX_FILE.exists():
+    with open(INDEX_FILE) as f:
+        for entry in json.load(f):
+            if entry.get("filer_id") and entry.get("slug"):
+                slug_to_fid[entry["slug"]] = str(entry["filer_id"])
+print(f"Filer IDs in index: {len(slug_to_fid)}")
 
 already_done = set()
 if TRACKING_FILE.exists():
@@ -28,10 +38,20 @@ filers = []
 for f in FILERS_DIR.glob("*.json"):
     with open(f) as fh:
         d = json.load(fh)
+    slug = d.get("slug", f.stem)
+    fid = slug_to_fid.get(slug)
+    if not fid or fid in already_done:
+        continue
+    # Use the largest signal: either the single orestar_discrepancy or
+    # the max yearly discrepancy (which catches multi-year gaps that
+    # the single-year orestar_discrepancy might miss)
     disc = abs(d.get("orestar_discrepancy", 0))
-    fid = d.get("filer_id")
-    if disc > 0.01 and fid and str(fid) not in already_done:
-        filers.append((disc, str(fid), d.get("name", "")))
+    yearly = d.get("yearly_discrepancies", {})
+    if yearly:
+        max_yearly = max(abs(v.get("discrepancy", 0)) for v in yearly.values())
+        disc = max(disc, max_yearly)
+    if disc > 0.01:
+        filers.append((disc, fid, d.get("name", "")))
 
 filers.sort(reverse=True)
 batch = filers[:BATCH_SIZE]
