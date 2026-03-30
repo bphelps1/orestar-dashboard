@@ -588,7 +588,11 @@ def download_filer_window(
                          filer_id, start, end, mid)
             filename.unlink(missing_ok=True)
             _return_to_search(page)
-            download_filer_window(page, context, filer_id, start, mid, raw_dir)
+            result1 = download_filer_window(page, context, filer_id, start, mid, raw_dir)
+            if result1 is None:
+                log.warning("First half failed for filer %s %s→%s — skipping second half (will retry next run)",
+                            filer_id, start, mid)
+                return None
             time.sleep(REQUEST_DELAY)
             download_filer_window(page, context, filer_id, mid + timedelta(days=1), end, raw_dir)
             return None
