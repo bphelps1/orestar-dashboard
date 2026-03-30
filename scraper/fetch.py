@@ -685,7 +685,7 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
         browser.close()
 
     # Write incomplete filers so auto-backfill can prioritize them
-    incomplete_path = DATA_DIR / "incomplete_backfills.txt"
+    incomplete_path = RAW_DIR.parent / "incomplete_backfills.txt"
     if incomplete_filers:
         log.info("Incomplete filers (will retry next run): %s", " ".join(incomplete_filers))
         # Append to existing file (don't overwrite — accumulates across runs)
