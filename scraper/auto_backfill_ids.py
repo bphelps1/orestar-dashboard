@@ -15,7 +15,7 @@ INDEX_FILE = Path("data/aggregated/filer_index.json")
 TRACKING_FILE = Path("data/backfilled_filers.txt")
 INCOMPLETE_FILE = Path("data/incomplete_backfills.txt")
 OUTPUT_FILE = Path("/tmp/auto_backfill_ids.txt")
-BATCH_SIZE = 25
+BATCH_SIZE = 10
 
 print(f"Working directory: {Path.cwd()}")
 print(f"Filers dir exists: {FILERS_DIR.exists()}")
