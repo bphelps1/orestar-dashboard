@@ -203,8 +203,11 @@ def download_week(
     date_field: str = "filed",
 ) -> Path | None:
     """
-    Fill the ORESTAR search form for one week + transaction type,
-    submit, then download the Excel export.
+    Fill the ORESTAR search form for one week, submit, then download
+    the Excel export.
+
+    If tran_type is "ALL", no type filter is applied (downloads all types
+    in one request). Otherwise, filters to the specific transaction type.
 
     Returns the path to the saved .xlsx file, or None on failure.
     """
@@ -218,9 +221,10 @@ def download_week(
         _return_to_search(page)
 
         # ── Fill the form ────────────────────────────────────────────────────
-        # Transaction type
-        page.select_option('select[name="cneSearchTranType"]', tran_type)
-        page.wait_for_timeout(600)  # brief wait for any dynamic field updates
+        # Transaction type (skip for ALL — leave default which returns everything)
+        if tran_type != "ALL":
+            page.select_option('select[name="cneSearchTranType"]', tran_type)
+            page.wait_for_timeout(600)  # brief wait for any dynamic field updates
 
         # Date range (MM/DD/YYYY) — filed date or transaction date depending on mode
         if date_field == "tran":
@@ -369,11 +373,11 @@ def _save_fetched(fetched: set, log_file: Path = FETCHED_LOG) -> None:
 def _fetch_range(start: date, end: date, date_field: str = "filed") -> None:
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     windows = list(week_windows(start, end))
-    tasks   = [(tt, ws, we) for tt in TRAN_TYPES for ws, we in windows]
+    tasks   = [("ALL", ws, we) for ws, we in windows]
     total   = len(tasks)
     log.info(
-        "Fetching %d windows × %d types = %d downloads (date_field=%s)",
-        len(windows), len(TRAN_TYPES), total, date_field,
+        "Fetching %d windows (all types, date_field=%s)",
+        total, date_field,
     )
 
     # Windows recorded here are skipped on every run — they have already been
@@ -675,7 +679,7 @@ def count_remaining(start_year: int = 2017, end_year: int | None = None,
     end   = date(end_year, 12, 31) if end_year else date.today()
     end   = min(end, date.today())
     windows = list(week_windows(start, end))
-    tasks = [(tt, str(ws), str(we)) for tt in TRAN_TYPES for ws, we in windows]
+    tasks = [("ALL", str(ws), str(we)) for ws, we in windows]
     log_file = FETCHED_LOG_TRN if date_field == "tran" else FETCHED_LOG
     fetched = _load_fetched(log_file)
     remaining = sum(1 for key in tasks if key not in fetched)
