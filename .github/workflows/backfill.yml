@@ -110,7 +110,7 @@ jobs:
           fi
 
       - name: Track successfully backfilled filers (auto mode)
-        if: always() && steps.resolve.outputs.is_auto == 'true' && steps.resolve.outputs.resolved != ''
+        if: "!cancelled() && steps.resolve.outputs.is_auto == 'true' && steps.resolve.outputs.resolved != ''"
         run: |
           # Only mark filers as done if their data was downloaded AND they're
           # not in incomplete_backfills.txt (which means they had errors)
@@ -168,7 +168,7 @@ jobs:
           fi
 
       - name: Commit and push backfill data
-        if: always() && steps.resolve.outputs.resolved != ''
+        if: "!cancelled() && steps.resolve.outputs.resolved != ''"
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -194,7 +194,7 @@ jobs:
           done
 
       - name: Re-trigger if backfill incomplete
-        if: always()
+        if: "!cancelled()"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
