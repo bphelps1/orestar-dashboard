@@ -106,7 +106,7 @@ jobs:
           fi
 
       - name: Track successfully backfilled filers (auto mode)
-        if: steps.resolve.outputs.is_auto == 'true' && steps.resolve.outputs.resolved != ''
+        if: always() && steps.resolve.outputs.is_auto == 'true' && steps.resolve.outputs.resolved != ''
         run: |
           # Only mark filers as done if their data file exists in _raw
           TRACKING_FILE="data/backfilled_filers.txt"
@@ -183,7 +183,7 @@ jobs:
           done
 
       - name: Re-trigger if backfill incomplete
-        if: success()
+        if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
