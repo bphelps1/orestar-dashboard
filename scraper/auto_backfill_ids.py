@@ -15,6 +15,10 @@ TRACKING_FILE = Path("data/backfilled_filers.txt")
 OUTPUT_FILE = Path("/tmp/auto_backfill_ids.txt")
 BATCH_SIZE = 25
 
+print(f"Working directory: {Path.cwd()}")
+print(f"Filers dir exists: {FILERS_DIR.exists()}")
+print(f"Filers dir file count: {len(list(FILERS_DIR.glob('*.json'))) if FILERS_DIR.exists() else 0}")
+
 already_done = set()
 if TRACKING_FILE.exists():
     already_done = set(TRACKING_FILE.read_text().split())
