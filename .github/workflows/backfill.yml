@@ -19,10 +19,15 @@ on:
         default: "tran"
         type: string
       filer_ids:
-        description: "Space-separated filer committee IDs to backfill (bypasses date-range mode)"
+        description: "Space-separated filer IDs, 'auto' to backfill all discrepancies, or blank for date-range mode"
         required: false
         default: ""
         type: string
+      reset_auto:
+        description: "Reset auto-backfill tracking (clears the list of already-backfilled filers)"
+        required: false
+        default: "false"
+        type: boolean
 
 permissions:
   contents: write
@@ -31,7 +36,7 @@ permissions:
 jobs:
   backfill:
     runs-on: ubuntu-latest
-    timeout-minutes: 300   # ~954 windows × ~10s each ≈ 2.5-3 hours
+    timeout-minutes: 300
 
     steps:
       - name: Check out repository
@@ -55,9 +60,72 @@ jobs:
       - name: Install Xvfb (virtual display for headed browser)
         run: sudo apt-get install -y xvfb
 
-      - name: Backfill ORESTAR data
+      - name: Resolve filer IDs (auto mode)
+        id: resolve
         run: |
           FILER_IDS="${{ inputs.filer_ids }}"
+          if [ "${{ inputs.reset_auto }}" = "true" ]; then
+            echo "Resetting auto-backfill tracking file..."
+            rm -f data/backfilled_filers.txt
+          fi
+          if [ "$FILER_IDS" = "auto" ]; then
+            echo "Auto mode: finding filers with discrepancies..."
+            FILER_IDS=$(python3 << 'PYEOF'
+          import json, sys
+          from pathlib import Path
+
+          TRACKING_FILE = Path("data/backfilled_filers.txt")
+          already_done = set()
+          if TRACKING_FILE.exists():
+              already_done = set(TRACKING_FILE.read_text().split())
+
+          filers = []
+          for f in Path("data/aggregated/filers").glob("*.json"):
+              with open(f) as fh:
+                  d = json.load(fh)
+              disc = abs(d.get("orestar_discrepancy", 0))
+              fid = d.get("filer_id")
+              if disc > 0.01 and fid and str(fid) not in already_done:
+                  filers.append((disc, str(fid), d.get("name", "")))
+
+          filers.sort(reverse=True)
+          batch = filers[:25]
+
+          if batch:
+              for disc, fid, name in batch:
+                  print(f"  {fid}: ${disc:,.2f} — {name}", file=sys.stderr)
+              print(f"  ({len(filers) - len(batch)} more remaining)", file=sys.stderr)
+              print(" ".join(fid for _, fid, _ in batch))
+          else:
+              print("No filers with unresolved discrepancies.", file=sys.stderr)
+          PYEOF
+          )
+            if [ -z "$FILER_IDS" ]; then
+              echo "All discrepancies backfilled."
+              echo "resolved=" >> "$GITHUB_OUTPUT"
+              echo "is_auto=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "Auto-resolved filer IDs: $FILER_IDS"
+
+            # Track these filer IDs so next run skips them
+            TRACKING_FILE="data/backfilled_filers.txt"
+            touch "$TRACKING_FILE"
+            for fid in $FILER_IDS; do
+              grep -qx "$fid" "$TRACKING_FILE" || echo "$fid" >> "$TRACKING_FILE"
+            done
+
+            echo "resolved=$FILER_IDS" >> "$GITHUB_OUTPUT"
+            echo "is_auto=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "resolved=$FILER_IDS" >> "$GITHUB_OUTPUT"
+            echo "is_auto=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Backfill ORESTAR data
+        if: steps.resolve.outputs.resolved != ''
+        run: |
+          FILER_IDS="${{ steps.resolve.outputs.resolved }}"
           if [ -n "$FILER_IDS" ]; then
             echo "Filer-targeted backfill: $FILER_IDS"
             xvfb-run --auto-servernum python scraper/fetch.py --filer-ids $FILER_IDS --start-year=${{ inputs.start_year }}
@@ -71,8 +139,9 @@ jobs:
 
       - name: Check remaining windows
         id: remaining
+        if: steps.resolve.outputs.resolved != ''
         run: |
-          FILER_IDS="${{ inputs.filer_ids }}"
+          FILER_IDS="${{ steps.resolve.outputs.resolved }}"
           if [ -n "$FILER_IDS" ]; then
             echo "remaining=filer" >> "$GITHUB_OUTPUT"
           else
@@ -86,8 +155,9 @@ jobs:
           fi
 
       - name: Process data
+        if: steps.resolve.outputs.resolved != ''
         run: |
-          FILER_IDS="${{ inputs.filer_ids }}"
+          FILER_IDS="${{ steps.resolve.outputs.resolved }}"
           REMAINING="${{ steps.remaining.outputs.remaining }}"
           if [ -n "$FILER_IDS" ]; then
             # Filer-targeted: merge only (daily refresh will aggregate)
@@ -103,7 +173,7 @@ jobs:
           fi
 
       - name: Commit and push backfill data
-        if: always()
+        if: always() && steps.resolve.outputs.resolved != ''
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -113,8 +183,11 @@ jobs:
             cp -r data/aggregated/. docs/data/aggregated/
           fi
           git add data/ docs/data/
-          FILER_IDS="${{ inputs.filer_ids }}"
-          if [ -n "$FILER_IDS" ]; then
+          FILER_IDS="${{ steps.resolve.outputs.resolved }}"
+          IS_AUTO="${{ steps.resolve.outputs.is_auto }}"
+          if [ "$IS_AUTO" = "true" ]; then
+            git diff --cached --quiet || git commit -m "chore: auto-backfill filers $FILER_IDS"
+          elif [ -n "$FILER_IDS" ]; then
             git diff --cached --quiet || git commit -m "chore: backfill filers $FILER_IDS"
           else
             git diff --cached --quiet || git commit -m "chore: backfill ${{ inputs.date_field }}-date ${{ inputs.start_year }}–${{ inputs.end_year || 'now' }}"
@@ -130,11 +203,27 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          FILER_IDS="${{ inputs.filer_ids }}"
-          if [ -n "$FILER_IDS" ]; then
-            echo "Filer-targeted backfill — skipping re-trigger (daily refresh will aggregate)."
+          IS_AUTO="${{ steps.resolve.outputs.is_auto }}"
+          FILER_IDS="${{ steps.resolve.outputs.resolved }}"
+
+          # Auto mode: re-trigger if there are more filers to process
+          if [ "$IS_AUTO" = "true" ]; then
+            if [ -z "$FILER_IDS" ]; then
+              echo "Auto backfill complete — all discrepancies addressed."
+              exit 0
+            fi
+            echo "Re-triggering auto backfill for next batch..."
+            gh workflow run backfill.yml --ref main -f filer_ids=auto
             exit 0
           fi
+
+          # Manual filer-targeted: done (daily refresh will aggregate)
+          if [ -n "$FILER_IDS" ]; then
+            echo "Filer-targeted backfill complete."
+            exit 0
+          fi
+
+          # Date-range mode: re-trigger if windows remain
           REMAINING="${{ steps.remaining.outputs.remaining }}"
           if [ "$REMAINING" -gt 0 ] 2>/dev/null; then
             echo "Re-triggering backfill workflow..."
