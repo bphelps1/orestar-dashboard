@@ -129,7 +129,7 @@ function renderPendingPairs(filter = "") {
   listEl.innerHTML = shown.map((item, i) => {
     const key = pairKey(item.a, item.b);
     return `
-      <div class="cluster-card" data-pair-key="${esc(key)}">
+      <div class="cluster-card" data-pair-key="${esc(key)}" data-pair-idx="${i}">
         <div class="pair-score">Score: ${item.score}</div>
         <div class="cluster-names">
           <div class="pair-name">
@@ -140,12 +140,22 @@ function renderPendingPairs(filter = "") {
           </div>
         </div>
         <div class="cluster-actions">
-          <button class="btn-primary" onclick="mergePair(${i}, '${esc(key)}')">Merge (keep selected)</button>
-          <button class="btn-small" onclick="rejectPair('${esc(key)}')">Not duplicates</button>
+          <button class="btn-primary btn-merge">Merge (keep selected)</button>
+          <button class="btn-small btn-reject">Not duplicates</button>
         </div>
       </div>
     `;
   }).join("");
+
+  // Event delegation — avoids inline onclick with quotes in donor names
+  listEl.querySelectorAll(".btn-merge").forEach(btn => {
+    const card = btn.closest(".cluster-card");
+    btn.addEventListener("click", () => mergePair(+card.dataset.pairIdx, card.dataset.pairKey));
+  });
+  listEl.querySelectorAll(".btn-reject").forEach(btn => {
+    const card = btn.closest(".cluster-card");
+    btn.addEventListener("click", () => rejectPair(card.dataset.pairKey));
+  });
 
   if (pending.length > 100) {
     listEl.insertAdjacentHTML("beforeend",
@@ -228,14 +238,19 @@ function renderMergeLog() {
   logEl.innerHTML = merged.map(item => {
     const key = pairKey(item.a, item.b);
     return `
-      <div class="merge-entry">
+      <div class="merge-entry" data-pair-key="${esc(key)}">
         <div class="merge-info">
           <div class="merge-names">"${esc(item.a)}" ↔ "${esc(item.b)}" (score: ${item.score})</div>
         </div>
-        <button class="btn-small" onclick="undoDecision('${esc(key)}')">Undo</button>
+        <button class="btn-small btn-undo">Undo</button>
       </div>
     `;
   }).join("");
+
+  logEl.querySelectorAll(".btn-undo").forEach(btn => {
+    const entry = btn.closest(".merge-entry");
+    btn.addEventListener("click", () => undoDecision(entry.dataset.pairKey));
+  });
 }
 
 async function undoDecision(key) {
@@ -375,11 +390,11 @@ function renderActiveMerges(merges, searchQuery) {
       : `<span class="merge-source-badge badge-blue">admin</span>`;
     const scoreCell = m.score != null ? m.score : "—";
     const editBtn = m.source === "admin"
-      ? `<button class="btn-small" onclick="editMerge('${esc(m.pairKey)}')">Edit</button>`
+      ? `<button class="btn-small btn-edit">Edit</button>`
       : "";
-    const splitBtn = `<button class="btn-small" onclick="splitMerge('${esc(m.pairKey)}', '${esc(m.source)}')">Split</button>`;
+    const splitBtn = `<button class="btn-small btn-split">Split</button>`;
 
-    return `<tr>
+    return `<tr data-pair-key="${esc(m.pairKey)}" data-source="${esc(m.source)}">
       <td>${esc(m.rawName)}</td>
       <td class="merge-arrow-cell">→</td>
       <td>${esc(m.canonicalName)}</td>
@@ -404,6 +419,15 @@ function renderActiveMerges(merges, searchQuery) {
       <tbody>${rows}</tbody>
     </table>
   `;
+
+  container.querySelectorAll(".btn-edit").forEach(btn => {
+    const row = btn.closest("tr");
+    btn.addEventListener("click", () => editMerge(row.dataset.pairKey));
+  });
+  container.querySelectorAll(".btn-split").forEach(btn => {
+    const row = btn.closest("tr");
+    btn.addEventListener("click", () => splitMerge(row.dataset.pairKey, row.dataset.source));
+  });
 }
 
 // ── Edit Merge ────────────────────────────────────────────────────────
@@ -572,14 +596,19 @@ function renderRejectedPairs() {
       ? `${esc(names[0])} / ${esc(names[1])}`
       : esc(row.pair_key);
     return `
-      <div class="merge-entry">
+      <div class="merge-entry" data-pair-key="${esc(row.pair_key)}">
         <div class="merge-info">
           <div class="merge-names">${display}</div>
         </div>
-        <button class="btn-small" onclick="reconsiderPair('${esc(row.pair_key)}')">Reconsider</button>
+        <button class="btn-small btn-reconsider">Reconsider</button>
       </div>
     `;
   }).join("");
+
+  container.querySelectorAll(".btn-reconsider").forEach(btn => {
+    const entry = btn.closest(".merge-entry");
+    btn.addEventListener("click", () => reconsiderPair(entry.dataset.pairKey));
+  });
 }
 
 async function reconsiderPair(pk) {
