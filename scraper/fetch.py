@@ -629,9 +629,10 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
         consecutive_failures = 0
         for fid in filer_ids:
             log.info("=== Backfilling filer %s ===", fid)
+            # Count files before to detect if anything was downloaded
+            files_before = set(RAW_DIR.glob(f"filer{fid}_*"))
             try:
                 download_filer_window(page, context, fid, start_date, end_date, RAW_DIR)
-                consecutive_failures = 0
             except SessionExpiredError:
                 log.warning("Session expired during filer %s — restarting browser", fid)
                 try:
@@ -642,12 +643,15 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
                 # Retry once
                 try:
                     download_filer_window(page, context, fid, start_date, end_date, RAW_DIR)
-                    consecutive_failures = 0
                 except Exception as exc:
                     log.error("Failed filer %s after restart: %s", fid, exc)
-                    consecutive_failures += 1
             except Exception as exc:
                 log.error("Failed filer %s: %s", fid, exc)
+
+            files_after = set(RAW_DIR.glob(f"filer{fid}_*"))
+            if files_after - files_before:
+                consecutive_failures = 0
+            else:
                 consecutive_failures += 1
             if consecutive_failures >= 2:
                 log.warning(
