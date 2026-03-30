@@ -70,36 +70,12 @@ jobs:
           fi
           if [ "$FILER_IDS" = "auto" ]; then
             echo "Auto mode: finding filers with discrepancies..."
-            FILER_IDS=$(python3 << 'PYEOF'
-          import json, sys
-          from pathlib import Path
-
-          TRACKING_FILE = Path("data/backfilled_filers.txt")
-          already_done = set()
-          if TRACKING_FILE.exists():
-              already_done = set(TRACKING_FILE.read_text().split())
-
-          filers = []
-          for f in Path("data/aggregated/filers").glob("*.json"):
-              with open(f) as fh:
-                  d = json.load(fh)
-              disc = abs(d.get("orestar_discrepancy", 0))
-              fid = d.get("filer_id")
-              if disc > 0.01 and fid and str(fid) not in already_done:
-                  filers.append((disc, str(fid), d.get("name", "")))
-
-          filers.sort(reverse=True)
-          batch = filers[:25]
-
-          if batch:
-              for disc, fid, name in batch:
-                  print(f"  {fid}: ${disc:,.2f} — {name}", file=sys.stderr)
-              print(f"  ({len(filers) - len(batch)} more remaining)", file=sys.stderr)
-              print(" ".join(fid for _, fid, _ in batch))
-          else:
-              print("No filers with unresolved discrepancies.", file=sys.stderr)
-          PYEOF
-          )
+            python3 scraper/auto_backfill_ids.py
+            if [ -f /tmp/auto_backfill_ids.txt ]; then
+              FILER_IDS=$(cat /tmp/auto_backfill_ids.txt)
+            else
+              FILER_IDS=""
+            fi
             if [ -z "$FILER_IDS" ]; then
               echo "All discrepancies backfilled."
               echo "resolved=" >> "$GITHUB_OUTPUT"
