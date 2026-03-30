@@ -622,10 +622,12 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
 
     with sync_playwright() as p:
         browser, context, page = setup_browser(p)
+        consecutive_failures = 0
         for fid in filer_ids:
             log.info("=== Backfilling filer %s ===", fid)
             try:
                 download_filer_window(page, context, fid, start_date, end_date, RAW_DIR)
+                consecutive_failures = 0
             except SessionExpiredError:
                 log.warning("Session expired during filer %s — restarting browser", fid)
                 try:
@@ -636,10 +638,20 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
                 # Retry once
                 try:
                     download_filer_window(page, context, fid, start_date, end_date, RAW_DIR)
+                    consecutive_failures = 0
                 except Exception as exc:
                     log.error("Failed filer %s after restart: %s", fid, exc)
+                    consecutive_failures += 1
             except Exception as exc:
                 log.error("Failed filer %s: %s", fid, exc)
+                consecutive_failures += 1
+            if consecutive_failures >= 2:
+                log.warning(
+                    "Rate-limited: %d consecutive failures — stopping early. "
+                    "Remaining filers will be retried on the next run.",
+                    consecutive_failures,
+                )
+                break
         browser.close()
 
     log.info("Filer backfill complete. Raw files in: %s", RAW_DIR)
