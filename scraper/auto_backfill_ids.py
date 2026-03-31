@@ -39,16 +39,26 @@ if TRACKING_FILE.exists():
     already_done = set(TRACKING_FILE.read_text().split())
     print(f"Already backfilled: {len(already_done)} filers")
 
-# Incomplete filers from previous runs — remove from done so they get retried
-incomplete = set()
+# Incomplete filers from previous runs — remove from done so they get retried.
+# Format: "fid" or "fid:count". Filers with 3+ retries are skipped for now
+# (they'll be retried after all other filers are processed).
+MAX_RETRIES = 3
+incomplete = {}  # fid -> retry count
 if INCOMPLETE_FILE.exists():
     for line in INCOMPLETE_FILE.read_text().strip().split("\n"):
-        fid_str = line.split(":")[0].strip() if ":" in line else line.strip()
-        if fid_str:
-            incomplete.add(fid_str)
-    already_done -= incomplete
-    if incomplete:
-        print(f"Incomplete filers to retry: {len(incomplete)}")
+        if ":" in line:
+            fid_str, cnt = line.split(":", 1)
+            fid_str = fid_str.strip()
+            incomplete[fid_str] = int(cnt)
+        elif line.strip():
+            incomplete[line.strip()] = 1
+    retryable = {fid for fid, cnt in incomplete.items() if cnt < MAX_RETRIES}
+    deferred = {fid for fid, cnt in incomplete.items() if cnt >= MAX_RETRIES}
+    already_done -= retryable
+    if retryable:
+        print(f"Incomplete filers to retry: {len(retryable)}")
+    if deferred:
+        print(f"Deferred filers (>{MAX_RETRIES} retries, skipping for now): {len(deferred)} — {sorted(deferred)}")
 
 filers = []
 for f in FILERS_DIR.glob("*.json"):
@@ -75,12 +85,16 @@ if batch:
         retry = " (RETRY)" if fid in incomplete else ""
         print(f"  {fid}: ${disc:,.2f} — {name}{retry}")
     OUTPUT_FILE.write_text(" ".join(fid for _, fid, _ in batch))
-    # Clear incomplete filers that are being retried this batch
-    retried = incomplete & {fid for _, fid, _ in batch}
+    # Clear retryable incomplete filers that are being retried this batch.
+    # Deferred filers (>MAX_RETRIES) stay in the file with their counts.
+    batch_fids = {fid for _, fid, _ in batch}
+    retried = set(incomplete.keys()) & batch_fids
     if retried and INCOMPLETE_FILE.exists():
-        remaining_incomplete = incomplete - retried
-        if remaining_incomplete:
-            INCOMPLETE_FILE.write_text("\n".join(sorted(remaining_incomplete)) + "\n")
+        remaining = {fid: cnt for fid, cnt in incomplete.items() if fid not in retried}
+        if remaining:
+            INCOMPLETE_FILE.write_text(
+                "\n".join(f"{fid}:{cnt}" for fid, cnt in sorted(remaining.items())) + "\n"
+            )
         else:
             INCOMPLETE_FILE.unlink()
         print(f"Cleared {len(retried)} filers from incomplete list")

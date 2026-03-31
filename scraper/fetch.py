@@ -720,20 +720,26 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
                 break
         browser.close()
 
-    # Write incomplete filers so auto-backfill retries them
+    # Write incomplete filers with retry counts so auto-backfill can defer
+    # filers that keep failing (e.g. huge filers that always get rate-limited).
+    # Format: "filer_id:count" per line.
     incomplete_path = RAW_DIR.parent / "incomplete_backfills.txt"
     if incomplete_filers:
         log.info("Incomplete filers (will retry next run): %s", " ".join(incomplete_filers))
-        existing = set()
+        existing: dict[str, int] = {}
         if incomplete_path.exists():
             for line in incomplete_path.read_text().strip().split("\n"):
-                fid_str = line.split(":")[0].strip() if ":" in line else line.strip()
-                if fid_str:
-                    existing.add(fid_str)
-        existing.update(incomplete_filers)
-        incomplete_path.write_text("\n".join(sorted(existing)) + "\n")
-    log.info("Filer backfill complete. Raw files in: %s", RAW_DIR)
-
+                if ":" in line:
+                    fid_str, cnt = line.split(":", 1)
+                    existing[fid_str.strip()] = int(cnt)
+                elif line.strip():
+                    existing[line.strip()] = 1
+        for fid in incomplete_filers:
+            existing[fid] = existing.get(fid, 0) + 1
+            log.info("  Filer %s: retry count now %d", fid, existing[fid])
+        incomplete_path.write_text(
+            "\n".join(f"{fid}:{cnt}" for fid, cnt in sorted(existing.items())) + "\n"
+        )
     log.info("Filer backfill complete. Raw files in: %s", RAW_DIR)
 
 
