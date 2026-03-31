@@ -512,18 +512,23 @@ def download_filer_window(
                 mid = start + timedelta(days=span_days // 2)
                 log.info("Resuming split for filer %s %s→%s at %s (cap file exists)",
                          filer_id, start, end, mid)
-                result1 = download_filer_window(page, context, filer_id, start, mid, raw_dir)
-                if result1 is None:
+                # Note: recursive calls may return None on successful splits
+                # (cap file → split → all leaves exist). Only treat as failure
+                # if no files exist for the sub-window after the call.
+                download_filer_window(page, context, filer_id, start, mid, raw_dir)
+                half1_files = list(raw_dir.glob(f"filer{filer_id}_{start.isoformat()}_*.xlsx"))
+                if not half1_files:
                     raise SessionExpiredError(
                         f"Split window failed for filer {filer_id} {start}→{mid} — incomplete download"
                     )
                 time.sleep(REQUEST_DELAY)
-                result2 = download_filer_window(page, context, filer_id, mid + timedelta(days=1), end, raw_dir)
-                if result2 is None:
+                download_filer_window(page, context, filer_id, mid + timedelta(days=1), end, raw_dir)
+                half2_files = list(raw_dir.glob(f"filer{filer_id}_{mid + timedelta(days=1):%Y-%m-%d}_*.xlsx"))
+                if not half2_files:
                     raise SessionExpiredError(
                         f"Split window failed for filer {filer_id} {mid+timedelta(days=1)}→{end} — incomplete download"
                     )
-                return None
+                return filename  # return the cap file path to signal success
 
     try:
         _return_to_search(page)
@@ -607,16 +612,18 @@ def download_filer_window(
                          filer_id, start, end, mid)
             # Keep the cap file on disk so resume logic can skip re-downloading
             _return_to_search(page)
-            result1 = download_filer_window(page, context, filer_id, start, mid, raw_dir)
-            if result1 is None:
-                log.warning("First half failed for filer %s %s→%s — skipping second half (will retry next run)",
+            download_filer_window(page, context, filer_id, start, mid, raw_dir)
+            half1_files = list(raw_dir.glob(f"filer{filer_id}_{start.isoformat()}_*.xlsx"))
+            if not half1_files:
+                log.warning("First half failed for filer %s %s→%s — skipping second half",
                             filer_id, start, mid)
                 raise SessionExpiredError(
                     f"Split window failed for filer {filer_id} {start}→{mid} — incomplete download"
                 )
             time.sleep(REQUEST_DELAY)
-            result2 = download_filer_window(page, context, filer_id, mid + timedelta(days=1), end, raw_dir)
-            if result2 is None:
+            download_filer_window(page, context, filer_id, mid + timedelta(days=1), end, raw_dir)
+            half2_files = list(raw_dir.glob(f"filer{filer_id}_{mid + timedelta(days=1):%Y-%m-%d}_*.xlsx"))
+            if not half2_files:
                 log.warning("Second half failed for filer %s %s→%s — incomplete download",
                             filer_id, mid + timedelta(days=1), end)
                 raise SessionExpiredError(
