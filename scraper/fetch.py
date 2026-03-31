@@ -502,7 +502,7 @@ def download_filer_window(
     filename = raw_dir / f"filer{filer_id}_{start.isoformat()}_{end.isoformat()}.xlsx"
     if filename.exists():
         rows = _validate_download(filename)
-        if rows > 0 and rows < ORESTAR_ROW_CAP:
+        if rows >= 0 and rows < ORESTAR_ROW_CAP:
             log.debug("Already downloaded: %s (%d rows)", filename.name, rows)
             return filename
         if rows >= ORESTAR_ROW_CAP:
