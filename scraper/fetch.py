@@ -644,54 +644,71 @@ def download_filer_window(
 
 
 def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
-    """Fetch all transactions for specific filers across all years.
+    """Fetch all transactions for specific filers, one year at a time.
 
-    Writes data/incomplete_backfills.txt with filer IDs that had errors
-    (partial downloads due to rate-limiting, split failures, etc.).
-    The auto-backfill system prioritizes these on the next run.
+    Instead of downloading the full 2006-2026 range and recursively splitting,
+    breaks each filer into year-by-year requests. Each year is small enough to
+    usually succeed in one request. If a year fails, the next run retries just
+    that year — previously downloaded years are skipped (files exist on disk).
+
+    Writes data/incomplete_backfills.txt with filer IDs that had incomplete years.
     """
-    end_date = date.today()
-    start_date = date(start_year, 1, 1)
+    current_year = date.today().year
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     incomplete_filers: list[str] = []
 
-    log.info("Backfilling %d filers from %s to %s", len(filer_ids), start_date, end_date)
+    log.info("Backfilling %d filers year-by-year from %d to %d", len(filer_ids), start_year, current_year)
 
     with sync_playwright() as p:
         browser, context, page = setup_browser(p)
         consecutive_failures = 0
         for fid in filer_ids:
             log.info("=== Backfilling filer %s ===", fid)
-            # Count files before to detect if anything was downloaded
-            files_before = set(RAW_DIR.glob(f"filer{fid}_*"))
-            had_error = False
-            try:
-                download_filer_window(page, context, fid, start_date, end_date, RAW_DIR)
-            except SessionExpiredError:
-                had_error = True
-                log.warning("Session expired during filer %s — restarting browser", fid)
+            filer_had_error = False
+            for year in range(start_year, current_year + 1):
+                yr_start = date(year, 1, 1)
+                yr_end = date(year, 12, 31) if year < current_year else date.today()
                 try:
-                    browser.close()
-                except Exception:
-                    pass
-                browser, context, page = setup_browser(p)
-                # Retry once
-                try:
-                    download_filer_window(page, context, fid, start_date, end_date, RAW_DIR)
-                    had_error = False  # retry succeeded
+                    result = download_filer_window(page, context, fid, yr_start, yr_end, RAW_DIR)
+                    if result is not None:
+                        consecutive_failures = 0
+                except SessionExpiredError:
+                    filer_had_error = True
+                    log.warning("Session expired during filer %s year %d — restarting browser", fid, year)
+                    try:
+                        browser.close()
+                    except Exception:
+                        pass
+                    browser, context, page = setup_browser(p)
+                    # Retry this year once with fresh session
+                    try:
+                        result = download_filer_window(page, context, fid, yr_start, yr_end, RAW_DIR)
+                        if result is not None:
+                            consecutive_failures = 0
+                            continue
+                    except Exception as exc:
+                        log.error("Failed filer %s year %d after restart: %s", fid, year, exc)
+                    consecutive_failures += 1
+                    if consecutive_failures >= 2:
+                        log.warning("Rate-limited — stopping filer %s at year %d", fid, year)
+                        break
                 except Exception as exc:
-                    log.error("Failed filer %s after restart: %s", fid, exc)
-            except Exception as exc:
-                had_error = True
-                log.error("Failed filer %s: %s", fid, exc)
-
-            files_after = set(RAW_DIR.glob(f"filer{fid}_*"))
-            if files_after - files_before:
-                consecutive_failures = 0
+                    filer_had_error = True
+                    log.error("Failed filer %s year %d: %s", fid, year, exc)
+                    consecutive_failures += 1
+                    if consecutive_failures >= 2:
+                        log.warning("Rate-limited — stopping filer %s at year %d", fid, year)
+                        break
             else:
-                consecutive_failures += 1
+                # All years completed without breaking — filer is done
+                if not filer_had_error:
+                    log.info("Filer %s: all years downloaded successfully", fid)
+                continue
 
-            if had_error:
+            # Broke out of year loop — filer is incomplete
+            filer_had_error = True
+
+            if filer_had_error:
                 incomplete_filers.append(fid)
 
             if consecutive_failures >= 2:
@@ -703,14 +720,16 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
                 break
         browser.close()
 
-    # Write incomplete filers so auto-backfill can prioritize them
+    # Write incomplete filers so auto-backfill retries them
     incomplete_path = RAW_DIR.parent / "incomplete_backfills.txt"
     if incomplete_filers:
         log.info("Incomplete filers (will retry next run): %s", " ".join(incomplete_filers))
-        # Append to existing file (don't overwrite — accumulates across runs)
         existing = set()
         if incomplete_path.exists():
-            existing = set(incomplete_path.read_text().split())
+            for line in incomplete_path.read_text().strip().split("\n"):
+                fid_str = line.split(":")[0].strip() if ":" in line else line.strip()
+                if fid_str:
+                    existing.add(fid_str)
         existing.update(incomplete_filers)
         incomplete_path.write_text("\n".join(sorted(existing)) + "\n")
     log.info("Filer backfill complete. Raw files in: %s", RAW_DIR)

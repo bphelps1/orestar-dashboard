@@ -112,24 +112,17 @@ jobs:
       - name: Track successfully backfilled filers (auto mode)
         if: "!cancelled() && steps.resolve.outputs.is_auto == 'true' && steps.resolve.outputs.resolved != ''"
         run: |
-          # Only mark filers as done if their data was downloaded AND they're
-          # not in incomplete_backfills.txt (which means they had errors)
+          # Mark filers as done ONLY if they're not in incomplete_backfills.txt
           TRACKING_FILE="data/backfilled_filers.txt"
           INCOMPLETE_FILE="data/incomplete_backfills.txt"
           touch "$TRACKING_FILE"
           for fid in ${{ steps.resolve.outputs.resolved }}; do
-            # Check if this filer had errors (incomplete download)
-            if [ -f "$INCOMPLETE_FILE" ] && grep -qx "$fid" "$INCOMPLETE_FILE"; then
-              echo "  ⚠ Filer $fid had errors — NOT marking as done (will retry)"
+            if [ -f "$INCOMPLETE_FILE" ] && grep -q "^${fid}\b" "$INCOMPLETE_FILE"; then
+              echo "  ⚠ Filer $fid incomplete — will retry"
               continue
             fi
-            # Check if any file for this filer was downloaded
-            if ls data/_raw/filer${fid}_* 1>/dev/null 2>&1; then
-              grep -qx "$fid" "$TRACKING_FILE" || echo "$fid" >> "$TRACKING_FILE"
-              echo "  ✓ Tracked filer $fid"
-            else
-              echo "  ✗ Filer $fid had no downloaded data — will retry next run"
-            fi
+            grep -qx "$fid" "$TRACKING_FILE" || echo "$fid" >> "$TRACKING_FILE"
+            echo "  ✓ Tracked filer $fid"
           done
 
       - name: Check remaining windows
