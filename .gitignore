@@ -1,6 +1,6 @@
 # Raw Excel downloads — never committed (except filer-targeted files
 # which are kept across runs so incomplete downloads can resume)
-data/_raw/
+data/_raw/*
 !data/_raw/filer*.xlsx
 
 # Verification scratch data (per-filer ORESTAR downloads + diff reports)
