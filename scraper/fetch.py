@@ -505,6 +505,25 @@ def download_filer_window(
         if rows > 0 and rows < ORESTAR_ROW_CAP:
             log.debug("Already downloaded: %s (%d rows)", filename.name, rows)
             return filename
+        if rows >= ORESTAR_ROW_CAP:
+            # Previously hit the cap — skip download, go straight to split
+            span_days = (end - start).days
+            if span_days > 1:
+                mid = start + timedelta(days=span_days // 2)
+                log.info("Resuming split for filer %s %s→%s at %s (cap file exists)",
+                         filer_id, start, end, mid)
+                result1 = download_filer_window(page, context, filer_id, start, mid, raw_dir)
+                if result1 is None:
+                    raise SessionExpiredError(
+                        f"Split window failed for filer {filer_id} {start}→{mid} — incomplete download"
+                    )
+                time.sleep(REQUEST_DELAY)
+                result2 = download_filer_window(page, context, filer_id, mid + timedelta(days=1), end, raw_dir)
+                if result2 is None:
+                    raise SessionExpiredError(
+                        f"Split window failed for filer {filer_id} {mid+timedelta(days=1)}→{end} — incomplete download"
+                    )
+                return None
 
     try:
         _return_to_search(page)
@@ -586,7 +605,7 @@ def download_filer_window(
             mid = start + timedelta(days=span_days // 2)
             log.warning("Row cap hit for filer %s %s→%s — splitting at %s",
                          filer_id, start, end, mid)
-            filename.unlink(missing_ok=True)
+            # Keep the cap file on disk so resume logic can skip re-downloading
             _return_to_search(page)
             result1 = download_filer_window(page, context, filer_id, start, mid, raw_dir)
             if result1 is None:

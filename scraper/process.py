@@ -325,6 +325,11 @@ def load_excel_files(raw_dir: Path) -> pd.DataFrame:
                 log.warning("Skipping %s — appears to be an HTML page, not Excel", f.name)
                 continue
             df = pd.read_excel(f, engine=engine, dtype=str)
+            # Skip cap files (4999 rows) — these are truncated parent windows
+            # whose data is covered by their sub-window split files
+            if len(df) >= 4999 and f.name.startswith("filer"):
+                log.debug("Skipping cap file %s (%d rows — covered by split sub-windows)", f.name, len(df))
+                continue
             # Normalize column names
             df.columns = [c.strip().lower() for c in df.columns]
             # Rename to internal names
