@@ -591,13 +591,17 @@ def process() -> None:
     # ── 9. Aggregate JSON files ───────────────────────────────────────────────
     aggregate(df)
 
-    # ── 10. Delete raw Excel files ────────────────────────────────────────────
+    # ── 10. Delete raw Excel files (keep filer-targeted for backfill resume) ──
     deleted = 0
+    kept = 0
     for f in RAW_DIR.glob("*.xlsx"):
-        f.unlink()
-        deleted += 1
-    if deleted:
-        log.info("Deleted %d raw Excel files from %s", deleted, RAW_DIR)
+        if f.name.startswith("filer"):
+            kept += 1
+        else:
+            f.unlink()
+            deleted += 1
+    if deleted or kept:
+        log.info("Deleted %d raw Excel files, kept %d filer-targeted files", deleted, kept)
 
 
 # ---------------------------------------------------------------------------
