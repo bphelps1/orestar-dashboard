@@ -676,8 +676,11 @@ def aggregate(df: pd.DataFrame) -> None:
     ttype = df["tran_type"].str.strip().str.upper()
     contributions   = df[ttype == "C"]
     expenditures    = df[ttype == "E"]
-    other_receipts  = df[ttype.isin({"OR", "O", "OA"})]   # Other Receipt, Other, Other AR
-    other_disburse  = df[ttype == "OD"]                    # Other Disbursement
+    other_receipts  = df[ttype == "OR"]                    # Other Receipt only (matches ORESTAR "Other Receipts" line)
+    other_disburse  = df[ttype == "OD"]                    # Other Disbursement only (matches ORESTAR "Other Disbursements" line)
+    # Note: types O (Account Payable Rescinded, Cash Balance Adjustment, Loan Forgiven)
+    # and OA (Unexpended Agent Balance, Misc Account Receivable) are non-cash accounting
+    # entries that ORESTAR does NOT include in its Other Receipts or COH calculation.
 
     # Separate cash contributions from in-kind.
     # IMPORTANT: Use exact "In-Kind Contribution" match only. Other sub_types containing
