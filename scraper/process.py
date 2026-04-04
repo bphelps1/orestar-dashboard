@@ -1272,9 +1272,23 @@ def aggregate_filers(
 
         sorted_years = sorted(yearly_nets.keys())
 
-        # Look up earliest beginning balance from the Playwright-scraped cache
+        # Look up earliest beginning balance from the Playwright-scraped cache.
+        # Only use it if the scraped year is at or before the first year with
+        # transactions. If the scraped "earliest year" is AFTER our first
+        # transaction year, the scraper returned the current-year balance
+        # (not the actual earliest), so the beginning balance should be $0.
         earliest_info = _name_to_earliest.get(name)
-        first_year_begin = earliest_info["beginning_balance"] if earliest_info else 0.0
+        first_txn_year = int(sorted_years[0]) if sorted_years else 9999
+        first_year_begin = 0.0
+        if earliest_info:
+            scraped_year = earliest_info.get("earliest_year", 9999)
+            if scraped_year <= first_txn_year:
+                first_year_begin = earliest_info["beginning_balance"]
+            else:
+                log.debug(
+                    "Ignoring earliest balance for %s: scraped year %d > first txn year %d",
+                    name, scraped_year, first_txn_year,
+                )
 
         # Roll forward: beginning balance for each year, then cash on hand
         running = first_year_begin
