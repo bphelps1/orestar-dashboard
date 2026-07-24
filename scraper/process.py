@@ -24,6 +24,8 @@ from pathlib import Path
 import pandas as pd
 from rapidfuzz import fuzz, process as rfuzz_process
 
+import supabase_sync
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-8s  %(message)s",
@@ -534,6 +536,7 @@ def process() -> None:
         # filed on different dates (hence fetched in different weekly windows).
         # ORESTAR's Account Summary counts only the latest version, so we must
         # drop the originals to avoid double-counting.
+        superseded_ids: set[str] = set()
         _orig_col = "original id" if "original id" in df.columns else None
         _status_col = "tran status" if "tran status" in df.columns else None
         if _orig_col and _status_col and "tran_id" in df.columns:
@@ -587,6 +590,17 @@ def process() -> None:
         # ── 8. Write updated per-year transaction files ───────────────────────
         df["filed_date"] = df["filed_date"].astype(str)
         _save_transactions(df)
+
+        # ── 8b. Sync the changed window to Postgres ───────────────────────────
+        # Upsert only the freshly-fetched rows (their canonical values were
+        # computed on the merged df above), and drop any superseded originals.
+        try:
+            _new_ids = set(new_df["tran_id"].astype(str).str.strip())
+            _changed = df[df["tran_id"].astype(str).str.strip().isin(_new_ids)]
+            supabase_sync.upsert_transactions(_changed)
+            supabase_sync.delete_transactions(superseded_ids)
+        except Exception as e:
+            log.warning("transaction sync failed: %s", e)
 
     # ── 9. Aggregate JSON files ───────────────────────────────────────────────
     aggregate(df)
@@ -1201,6 +1215,7 @@ def aggregate_filers(
             log.debug("Removed stale filer file: %s", stale.name)
 
     index_rows = []
+    _filer_detail_rows: list[dict] = []  # accumulated for one bulk upsert to Supabase
     _global_beginning_balances: dict[str, float] = {}  # year → sum of per-filer beginning balances
     log.info("Generating per-filer detail files for %d filers…", len(all_filer_names))
 
@@ -1578,6 +1593,10 @@ def aggregate_filers(
             else:
                 _leadership_tier = 3
 
+        _filer_detail_rows.append(
+            {"slug": slug, "name": name, "filer_id": _fid_for_index, "detail": detail}
+        )
+
         index_rows.append({
             "slug": slug, "name": name,
             "filer_id": _fid_for_index,
@@ -1599,6 +1618,11 @@ def aggregate_filers(
     # Sort index by total_in descending
     index_rows.sort(key=lambda r: r["total_in"], reverse=True)
     _write_json("filer_index.json", index_rows)
+    # Mirror per-filer detail blobs into Postgres (filer_detail table).
+    try:
+        supabase_sync.bulk_upsert_filer_detail(_filer_detail_rows)
+    except Exception as e:
+        log.warning("filer_detail sync failed: %s", e)
     log.info(
         "Wrote filer_index.json (%d filers) and %d filer detail files",
         len(index_rows), len(index_rows),
@@ -1815,15 +1839,47 @@ def _write_json(filename: str, data) -> None:
     with open(path, "w") as f:
         json.dump(data, f, separators=(",", ":"), default=str)
     log.info("Wrote %s (%d bytes)", filename, path.stat().st_size)
+    # Mirror the aggregate blob into Postgres (dashboard_cache) so the frontend
+    # reads it from Supabase instead of this file. No-ops without credentials.
+    try:
+        supabase_sync.upsert_dashboard_cache(filename.removesuffix(".json"), data)
+    except Exception as e:  # never let a sync hiccup break the file pipeline
+        log.warning("dashboard_cache sync for %s failed: %s", filename, e)
 
 
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
+def _build_combined_csv() -> Path:
+    """Concatenate all per-year shards into one gzip CSV for the full download.
+    Streams shard-by-shard to bound memory."""
+    out = DATA_DIR / "transactions_full.csv.gz"
+    shards = sorted(TRANS_DIR.glob("txn_*.csv.gz"))
+    with gzip.open(out, "wt", newline="") as w:
+        for i, shard in enumerate(shards):
+            with gzip.open(shard, "rt") as r:
+                header = r.readline()
+                if i == 0:
+                    w.write(header)
+                shutil.copyfileobj(r, w)
+    log.info("Built combined full CSV %s (%d shards)", out.name, len(shards))
+    return out
+
+
 if __name__ == "__main__":
     import sys
-    if "--merge-only" in sys.argv:
+    if "--supabase-full-load" in sys.argv:
+        # One-time / periodic: load every transaction shard into Postgres and
+        # publish the combined full-dataset CSV to Storage. Run once after the
+        # migrations are applied, then rely on the daily incremental sync.
+        log.info("Supabase full load: reloading all transaction shards…")
+        supabase_sync.full_reload_transactions(TRANS_DIR)
+        try:
+            supabase_sync.upload_full_csv(_build_combined_csv())
+        except Exception as e:
+            log.warning("full CSV upload failed: %s", e)
+    elif "--merge-only" in sys.argv:
         # Just merge raw Excel into txn_YYYY.csv.gz — skip aggregation.
         # Used by filer-targeted backfill to save time; the daily refresh
         # will run the full aggregation later.

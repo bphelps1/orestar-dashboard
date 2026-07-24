@@ -46,16 +46,22 @@ jobs:
       - name: Fetch last 14 days from ORESTAR
         run: xvfb-run --auto-servernum python scraper/fetch.py --mode=incremental --days=14
 
-      - name: Process and aggregate data
+      - name: Process and aggregate data (also syncs to Supabase)
         run: python scraper/process.py
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_STORAGE_BUCKET: exports
 
       - name: Commit and push updated data
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          mkdir -p docs/data/aggregated
-          cp -r data/aggregated/. docs/data/aggregated/
-          git add data/ docs/data/
+          # The dashboard reads aggregates from Supabase now, so we no longer
+          # publish the JSON tree to docs/. We still version the per-year
+          # transaction shards and scraper state files under data/.
+          git add data/
           git diff --cached --quiet || git commit -m "chore: daily data refresh $(date -u +%Y-%m-%d)"
           for attempt in 1 2 3 4 5; do
             git pull --rebase -X ours && git push && break
