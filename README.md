@@ -1,100 +1,154 @@
 # Oregon Campaign Finance Dashboard
 
-A self-maintaining, daily-refreshing dashboard of Oregon campaign finance data (cash contributions and expenditures, 2006–present), built on top of Oregon's [ORESTAR](https://secure.sos.state.or.us/orestar/) public records system.
+A self-maintaining, daily-refreshing dashboard and **research platform** for Oregon campaign finance data (2006–present), built on Oregon's [ORESTAR](https://secure.sos.state.or.us/orestar/) public records system.
 
-**Live dashboard:** `https://bphelps1.github.io/orestar-dashboard/`
+**Live site:** https://orestar-dashboard.vercel.app
+
+Every transaction is queryable: filter ~3 million records by committee, donor, date, amount, and contributor type; download exactly what you filtered; or run your own read-only SQL.
 
 ---
 
 ## Features
 
 - **Daily automatic updates** via GitHub Actions (no manual work required)
-- **Historical data** back to 2017 (load once via the Backfill workflow)
-- **5 dashboard tabs:** Overview, Donors, Recipients, Timeline, Search
+- **~3 million transactions**, 2006–present, live-queryable in Postgres
+- **Dashboard tabs:** Overview, Donors, Recipients, Transactions
+- **Explore tab:** filter/sort/paginate the full dataset, download filtered CSV, run read-only SQL
+- **Recommend tab:** donor-targeting suggestions for a committee
 - **Fuzzy name deduplication** with a manual correction override file
-- **Free hosting** on GitHub Pages — no server, no database, no ongoing cost
 
 ---
 
-## One-Time Setup (15 minutes)
-
-### 1. Create the repository
-
-1. Go to [github.com/new](https://github.com/new)
-2. Name it `orestar-dashboard`
-3. Set visibility to **Public** (required for free GitHub Pages)
-4. Click **Create repository**
-
-### 2. Upload the project files
-
-Either:
-- Use the GitHub web UI to upload files, **or**
-- Clone locally and push:
-  ```bash
-  git clone https://github.com/<your-username>/orestar-dashboard.git
-  cd orestar-dashboard
-  # copy these project files in, then:
-  git add .
-  git commit -m "Initial commit"
-  git push
-  ```
-
-### 3. Enable GitHub Pages
-
-1. Go to your repo → **Settings** → **Pages**
-2. Under **Source**, select: `Deploy from a branch`
-3. Branch: `main`, Folder: `/docs`
-4. Click **Save**
-
-Your dashboard will be live at: `https://<your-username>.github.io/orestar-dashboard/`
-(It may take 1–2 minutes to first appear.)
-
-### 4. Load historical data (one-time)
-
-1. Go to your repo → **Actions** tab
-2. Click **Historical Backfill (one-time)** in the left sidebar
-3. Click **Run workflow** → set start year to `2017` → click **Run workflow**
-4. The job takes ~30–60 minutes; when done, refresh your dashboard
-
-### 5. Done!
-
-Daily updates run automatically at 8am PST every day. No further action needed.
-
----
-
-## How It Works
+## Architecture
 
 ```
 [GitHub Actions: daily cron at 8am PST]
         ↓
-[scraper/fetch.py: downloads Excel exports from ORESTAR (last 14 days)]
+[scraper/fetch.py]  downloads Excel exports from ORESTAR (last 14 days)
         ↓
-[scraper/process.py: cleans, deduplicates, aggregates → JSON files]
+[scraper/process.py]  cleans, deduplicates, aggregates
         ↓
-[git commit → GitHub Pages → live dashboard]
+[Supabase Postgres]  ─ transactions      (~3M rows, the queryable table)
+                     ─ dashboard_cache   (aggregate blobs as jsonb)
+                     ─ filer_detail      (one jsonb row per committee)
+        ↓
+[docs/ on Vercel]  dashboard + Explore query live from Postgres
 ```
 
-### Data Pipeline Details
+The browser reads **directly from Postgres** via Supabase's API — there are no static data files to serve. Two distinct paths:
 
-**fetch.py** uses Python `requests` (no browser needed) to:
-1. Establish a session with ORESTAR
-2. POST search queries (by 7-day windows, to stay under ORESTAR's 5,000-record limit)
-3. Download Excel exports for Contributions (C) and Expenditures (E), Cash (CA) subtype
+- **Dashboard tabs** read pre-computed aggregate blobs from `dashboard_cache` / `filer_detail`. These are computed in Python because they blend transactions with ORESTAR account summaries, cash balances, and filer metadata — logic that doesn't reduce to a single SQL view.
+- **Explore + SQL box** query the `transactions` table live, so any filter combination works without pre-computation.
 
-**process.py**:
-1. Reads all Excel files, deduplicates by ORESTAR transaction ID
-2. Normalizes contributor/committee names
-3. Fuzzy-deduplicates names (>95% match = auto-merge; 85–95% = flagged for review)
-4. Applies manual overrides from `scraper/entity_map.json`
-5. Aggregates to JSON files in `data/aggregated/`
-6. Updates `data/transactions.csv.gz`
-7. Deletes raw Excel files (never committed to the repo)
+### Why the aggregates aren't SQL views
+
+`summary`, `filer_index`, and the per-filer detail blobs incorporate `data/orestar_yearly_summaries.json`, `data/orestar_cash_balances.json`, and `data/filer_metadata.json` (party, office, cash-on-hand reconciliation). Reimplementing that in SQL would duplicate several hundred lines of carefully-tuned, ORESTAR-matching logic in `scraper/process.py`. Instead Python stays the source of truth and writes its results into jsonb tables, which are still queryable like any other table.
+
+---
+
+## Repository Structure
+
+```
+orestar-dashboard/
+├── .github/workflows/
+│   ├── daily-refresh.yml     # daily at 8am PST — scrape, aggregate, sync to Supabase
+│   ├── backfill.yml          # manual historical pull
+│   └── supabase-load.yml     # one-off full reload of the transactions table
+├── scraper/
+│   ├── fetch.py              # downloads Excel exports from ORESTAR
+│   ├── process.py            # cleans, deduplicates, aggregates, syncs
+│   ├── supabase_sync.py      # COPY/upsert into Postgres, jsonb upserts, CSV upload
+│   ├── db_admin.py           # apply migrations / seed aggregates / verify
+│   └── entity_map.json       # manual name correction overrides
+├── supabase/
+│   ├── migrations/           # 004 transactions, 005 aggregate tables, 006 SQL role
+│   └── functions/sql-query/  # read-only SQL endpoint for the Explore page
+├── data/
+│   ├── transactions/         # per-year source shards (txn_YYYY.csv.gz)
+│   └── aggregated/           # aggregate JSON, mirrored into Postgres
+└── docs/                     # site root (deployed by Vercel)
+    ├── index.html, app.js    # dashboard
+    ├── explore.html/.js      # filter + download + SQL
+    └── lib/
+        ├── supabase.js       # client + auth
+        └── data.js           # dashboard data access layer
+```
+
+> **Note:** `data/transactions.csv` in the repo root is only the 2017 slice, kept for convenience. The real dataset is the per-year shards in `data/transactions/`.
+
+---
+
+## Setup
+
+### 1. Supabase
+
+Create a project, then apply the schema and load the data:
+
+```bash
+export SUPABASE_DB_URL="postgresql://postgres.<ref>:<password>@<host>:5432/postgres"
+
+python scraper/db_admin.py apply             # migrations 004-006
+python scraper/db_admin.py seed-aggregates   # dashboard_cache + filer_detail
+python scraper/process.py --supabase-full-load   # load all transaction shards
+python scraper/db_admin.py verify
+```
+
+The full load moves ~1.1 GB and takes 10–15 minutes. **Run it from GitHub Actions** (the *Supabase Full Load* workflow) rather than a laptop — it needs a stable connection.
+
+Set the publishable URL/key in `docs/lib/supabase.js`, and add `SUPABASE_DB_URL`, `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY` as GitHub repository secrets so the daily workflow can sync.
+
+### 2. The SQL box (optional)
+
+The Explore page's SQL panel runs on an Edge Function backed by a locked-down Postgres role:
+
+```sql
+alter role public_query password '<a-strong-secret>';
+```
+
+```bash
+supabase functions deploy sql-query
+supabase secrets set QUERY_DB_URL="postgresql://public_query.<ref>:<secret>@<host>:5432/postgres"
+```
+
+The role can only `SELECT` from the `query.transactions` view — no access to `auth.*`, admin tables, or base tables — and is read-only with a statement timeout. The function additionally rejects anything that isn't a single `SELECT` and caps results at 5,000 rows.
+
+### 3. Hosting
+
+Deployed on Vercel with `docs/` as the output directory. `vercel.json` defines the `/explore`, `/recommend`, and `/admin/*` routes — these rewrites are required, so the site will not work correctly on GitHub Pages.
+
+### 4. Historical backfill
+
+Run the **Historical Backfill** workflow from the Actions tab. It processes in batches and re-triggers itself until every window is fetched.
+
+---
+
+## Local Development
+
+```bash
+pip install -r scraper/requirements.txt
+
+# Credentials (gitignored) — needed for anything that touches the database
+cat > .env <<'EOF'
+SUPABASE_DB_URL=postgresql://postgres.<ref>:<password>@<host>:5432/postgres
+SUPABASE_URL=https://<ref>.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
+EOF
+
+python scraper/fetch.py --mode=test --days=7   # test ORESTAR connectivity
+python scraper/process.py                      # process + sync to Supabase
+
+python -m http.server 8000 --directory docs    # then open http://localhost:8000/
+```
+
+The frontend reads from Supabase over the network, so the local server only serves HTML/JS — you'll see live production data. Opening `docs/index.html` via `file://` won't work; use the server.
+
+If your network drops large payloads, set `SUPABASE_COPY_CHUNK=500` to make the loader use smaller COPY batches.
 
 ---
 
 ## Correcting Name Variations
 
-When the same donor appears under multiple spellings, you can fix it permanently:
+When one donor appears under multiple spellings:
 
 1. Open `scraper/entity_map.json`
 2. Add entries like:
@@ -106,74 +160,36 @@ When the same donor appears under multiple spellings, you can fix it permanently
    ```
 3. Commit and push — corrections apply on the next daily run
 
-Uncertain matches (85–95% fuzzy confidence) are written to `data/review_queue.json` for your inspection.
+Uncertain matches (80–95% fuzzy confidence) are written to `data/review_queue.json`, and there's a reviewer UI at `/admin/donors` for accepting or rejecting them.
 
 ---
 
-## Repository Structure
+## Data Notes & Limitations
 
-```
-orestar-dashboard/
-├── .github/workflows/
-│   ├── daily-refresh.yml    # runs daily at 8am PST automatically
-│   └── backfill.yml         # manual one-time historical pull
-├── scraper/
-│   ├── fetch.py             # downloads Excel exports from ORESTAR
-│   ├── process.py           # cleans, deduplicates, aggregates
-│   ├── entity_map.json      # manual name correction overrides
-│   └── requirements.txt     # Python dependencies
-├── data/
-│   ├── transactions.csv.gz  # all processed transactions
-│   └── aggregated/          # JSON files consumed by dashboard
-├── docs/                    # GitHub Pages root
-│   ├── index.html
-│   ├── style.css
-│   └── app.js
-└── README.md
-```
+- **Coverage.** Contributions (1.9M), expenditures (971k), other receipts (149k), and other disbursements (17k) — including in-kind contributions, personal expenditure reimbursements, and items sold at fair market value. Records run from 2006 to present (a handful of earlier filings exist).
+- **Contributor type lives in `book_type`.** ORESTAR's transaction export leaves `contributor_type_label`, `party`, and `office` blank on every row — party and office are committee-level metadata, available in `filer_index`, not per transaction. Filter on `book_type` (Individual, Business Entity, Political Committee, Labor Organization, …).
+- **The API caps every response at 1,000 rows.** Anything needing a complete result set must paginate; the Explore download does this automatically and assembles the full CSV client-side.
+- **5,000-record limit per ORESTAR export.** The scraper uses short date windows to stay under it and logs a warning when a window comes close.
+- **ORESTAR is session-based.** No API key required, but its URL structure could change; check the Actions logs if the daily workflow starts failing.
+- **Amendments.** When a transaction is amended, ORESTAR issues a new row referencing the original; the pipeline drops superseded originals so totals aren't double-counted.
 
 ---
 
-## Local Development
+## Cost
 
-```bash
-# Install dependencies
-pip install -r scraper/requirements.txt
-
-# Test connectivity (short date range)
-python scraper/fetch.py --mode=test --days=7
-
-# Process and generate JSON files
-python scraper/process.py
-
-# Open dashboard in browser
-open docs/index.html
-```
-
-**Note:** `docs/index.html` loads data from `../data/aggregated/`. When opening directly from the filesystem (via `file://`), some browsers block the fetch calls. Use a local server instead:
-
-```bash
-# Python 3
-python -m http.server 8000 --directory .
-# Then open: http://localhost:8000/docs/
-```
-
----
-
-## Limitations & Notes
-
-- **5,000-record limit per ORESTAR export.** The scraper uses 7-day windows to stay well under this. Weeks with unusually high activity (e.g., major election weeks) could theoretically exceed this; the scraper will log a warning if the returned row count is near the limit.
-- **ORESTAR session-based.** No API key is required, but ORESTAR's URL structure or session handling could change. If the daily workflow starts failing, check the Actions logs.
-- **GitHub Actions free tier.** Public repos have unlimited Actions minutes. The daily job takes ~5–10 minutes.
-- **Data coverage.** Only cash (CA subtype) contributions and expenditures are included. In-kind contributions and loans are not currently pulled.
+| | |
+|---|---|
+| Supabase Pro | ~$25/mo — the ~3 GB database exceeds the free tier's 500 MB |
+| Vercel | Free tier (static hosting) |
+| GitHub Actions | Free for public repos |
 
 ---
 
 ## Future Improvements
 
-- Extend historical data back to 2007
+- Saved/shareable queries and permalinks for Explore filter states
+- Single-file full-dataset download (needs the Supabase Storage upload limit raised above ~150 MB)
 - Candidate-level drill-down pages
-- Full-text search across all records (requires backend: Datasette or Cloudflare D1)
 - Email/Slack alerts for large contributions
 
 ---
