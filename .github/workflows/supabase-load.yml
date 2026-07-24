@@ -18,12 +18,14 @@ concurrency:
 jobs:
   load:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       SUPABASE_STORAGE_BUCKET: exports
+      # Large COPY chunks on CI's clean network (local flaky runs override to 500)
+      SUPABASE_COPY_CHUNK: "50000"
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

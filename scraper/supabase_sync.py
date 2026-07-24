@@ -176,7 +176,11 @@ def _prepare_frame(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-COPY_CHUNK_ROWS = 500  # small COPY payloads survive flaky/inspected TLS links
+# COPY payload size per round-trip. Large default for clean networks (CI);
+# override to a small value (e.g. 500) on flaky/inspected TLS links where big
+# payloads get dropped: export SUPABASE_COPY_CHUNK=500
+_load_dotenv()
+COPY_CHUNK_ROWS = int(os.environ.get("SUPABASE_COPY_CHUNK", "25000"))
 
 
 def _copy_frame(cur, table: str, frame: pd.DataFrame) -> None:
@@ -277,11 +281,16 @@ def full_reload_transactions(shard_dir: Path) -> None:
         log.warning("No transaction shards found in %s", shard_dir)
         return
 
+    # Drop the trigram GIN indexes for the load: maintaining them per-row during
+    # a 3M-row bulk COPY is the dominant cost. We rebuild them once at the end,
+    # which is far faster. (Definitions mirror migration 004.)
     with _connect() as conn:
         conn.autocommit = True
         with conn.cursor() as cur:
+            cur.execute("DROP INDEX IF EXISTS idx_txn_payee_trgm")
+            cur.execute("DROP INDEX IF EXISTS idx_txn_filer_trgm")
             cur.execute("TRUNCATE transactions")
-    log.info("Supabase: truncated transactions, loading %d shards…", len(shards))
+    log.info("Supabase: dropped trigram indexes, truncated, loading %d shards…", len(shards))
 
     total = 0
     for shard in shards:
@@ -291,9 +300,14 @@ def full_reload_transactions(shard_dir: Path) -> None:
         total += _load_frame_chunked(frame)
         log.info("Supabase: loaded %s (%d rows, %d total)", shard.name, len(frame), total)
 
+    log.info("Supabase: rebuilding trigram indexes + analyzing…")
     with _connect() as conn:
         conn.autocommit = True
         with conn.cursor() as cur:
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_txn_payee_trgm "
+                        "ON transactions USING gin (contributor_payee_canonical gin_trgm_ops)")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_txn_filer_trgm "
+                        "ON transactions USING gin (filer_canonical gin_trgm_ops)")
             cur.execute("ANALYZE transactions")
     log.info("Supabase: full reload complete — %d transactions", total)
 
