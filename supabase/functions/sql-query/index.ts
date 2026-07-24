@@ -3,7 +3,9 @@
 // Security is layered:
 //   1. This function connects as the `public_query` Postgres role (secret
 //      QUERY_DB_URL), which can SELECT only from the `query.transactions` view
-//      and is forced read-only with a 5s statement timeout (migration 006).
+//      and is forced read-only (migration 006). A 25s statement timeout is set
+//      per-transaction below, since the pooler doesn't reliably propagate the
+//      role-level GUC.
 //   2. Belt-and-suspenders in code: reject anything that isn't a single SELECT
 //      /WITH statement, and wrap it in an outer LIMIT so a bare `select *`
 //      can't stream millions of rows to the browser.
@@ -18,11 +20,16 @@ const MAX_ROWS = 5000;
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, content-type, apikey",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-api-version",
 };
 
 function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
+  // Postgres int8/numeric come back as BigInt, which JSON.stringify throws on —
+  // count(*) and sum() would otherwise fail. Serialize them as strings.
+  const text = JSON.stringify(body, (_k, v) =>
+    typeof v === "bigint" ? v.toString() : v
+  );
+  return new Response(text, {
     status,
     headers: { ...CORS, "Content-Type": "application/json" },
   });
@@ -65,8 +72,13 @@ Deno.serve(async (req) => {
   const client = new Client(dsn);
   try {
     await client.connect();
-    // Read-only transaction; role already enforces this + a statement timeout.
-    await client.queryArray("BEGIN; SET TRANSACTION READ ONLY");
+    // Read-only transaction with an explicit statement timeout. We set it here
+    // rather than rely on the public_query role's ALTER ROLE SET, because
+    // Supabase's connection pooler doesn't reliably propagate role-level GUCs
+    // to pooled connections. SET LOCAL scopes it to this transaction.
+    await client.queryArray(
+      "BEGIN; SET TRANSACTION READ ONLY; SET LOCAL statement_timeout = 25000",
+    );
     const wrapped = `SELECT * FROM (${clean}) AS q LIMIT ${MAX_ROWS + 1}`;
     const result = await client.queryObject(wrapped);
     await client.queryArray("COMMIT");
