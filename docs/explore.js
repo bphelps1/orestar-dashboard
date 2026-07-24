@@ -116,18 +116,53 @@ function renderTable(rows) {
 }
 
 // ── Downloads ───────────────────────────────────────────────────────────────
+// The API caps any single response at 1,000 rows, so a one-shot download would
+// silently truncate (a committee can have 20k+ transactions). We page through
+// with .range() and assemble the CSV here, so researchers get the complete
+// filtered set without weakening the server-side cap.
+const DOWNLOAD_CHUNK = 1000;
+const DOWNLOAD_MAX_ROWS = 100000;   // beyond this, point them at the full dataset
+
 async function downloadFiltered() {
   showError("xp-error", "");
-  $("xp-status").textContent = "Preparing CSV…";
+  const btn = $("btn-download");
+  btn.disabled = true;
   try {
     const sb = await getSupabase();
-    const { data, error } = await applyFilters(sb.from("transactions").select("*"), readFilters()).csv();
-    if (error) throw new Error(error.message);
-    triggerDownload(data, "text/csv", "orestar_filtered.csv");
-    $("xp-status").textContent = "CSV downloaded (capped at the server row limit).";
+    const filters = readFilters();
+    let rows = [];
+    let truncated = false;
+
+    for (let offset = 0; ; offset += DOWNLOAD_CHUNK) {
+      $("xp-status").textContent = `Preparing CSV… ${rows.length.toLocaleString()} rows`;
+      const { data, error } = await applyFilters(sb.from("transactions").select("*"), filters)
+        // Stable key so paging can't skip or repeat rows between requests.
+        .order("tran_id", { ascending: true })
+        .range(offset, offset + DOWNLOAD_CHUNK - 1);
+      if (error) throw new Error(error.message);
+      rows = rows.concat(data);
+      if (data.length < DOWNLOAD_CHUNK) break;
+      if (rows.length >= DOWNLOAD_MAX_ROWS) { truncated = true; break; }
+    }
+
+    if (!rows.length) {
+      $("xp-status").textContent = "No rows match these filters — nothing to download.";
+      return;
+    }
+
+    const cols = Object.keys(rows[0]);
+    const csv = [cols.map(csvCell).join(",")]
+      .concat(rows.map(r => cols.map(c => csvCell(r[c])).join(",")))
+      .join("\n");
+    triggerDownload(csv, "text/csv", "orestar_filtered.csv");
+    $("xp-status").textContent = truncated
+      ? `Downloaded first ${rows.length.toLocaleString()} rows — narrow the filters, or use the full dataset.`
+      : `Downloaded ${rows.length.toLocaleString()} rows.`;
   } catch (e) {
     $("xp-status").textContent = "";
     showError("xp-error", e.message);
+  } finally {
+    btn.disabled = false;
   }
 }
 
