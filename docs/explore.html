@@ -83,11 +83,7 @@
     </div>
     <div class="xp-field">
       <label for="f-ctype">Contributor type</label>
-      <input type="text" id="f-ctype" placeholder="e.g. Individual" />
-    </div>
-    <div class="xp-field">
-      <label for="f-party">Party</label>
-      <input type="text" id="f-party" placeholder="e.g. Democrat" />
+      <input type="text" id="f-ctype" placeholder="e.g. Individual, Business Entity" />
     </div>
     <div class="xp-field">
       <label for="f-date-start">From date</label>
@@ -136,8 +132,9 @@
     <p class="xp-note">
       Read-only. Query the <code>transactions</code> table (friendly column names:
       <code>filer</code>, <code>contributor_payee</code>, <code>contributor_type</code>,
-      <code>amount</code>, <code>tran_date</code>, <code>tran_type</code>, <code>party</code>, …).
-      One <code>SELECT</code> statement, 5-second limit, up to 5,000 rows returned.
+      <code>amount</code>, <code>tran_date</code>, <code>tran_type</code>,
+      <code>city</code>, <code>state</code>, <code>employer</code>, <code>occupation</code>, …).
+      One <code>SELECT</code> statement, 25-second limit, up to 5,000 rows returned.
     </p>
     <textarea id="sql-input">select filer, sum(amount) as total
 from transactions

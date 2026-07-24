@@ -13,16 +13,21 @@ const STORAGE_BUCKET = "exports";
 const FULL_CSV_OBJECT = "transactions.csv.gz";
 
 // Columns shown in the browse table (subset of the full row).
+// NOTE: contributor type lives in `book_type` on transaction rows.
+// `contributor_type_label`, `party`, and `office` are empty in ORESTAR's
+// transaction export (party/office are filer-level metadata), so they are
+// deliberately not offered as filters or columns here.
 const COLS = [
   { key: "tran_date",                   label: "Date" },
   { key: "tran_type",                   label: "Type" },
   { key: "amount",                      label: "Amount", num: true },
   { key: "filer_canonical",             label: "Committee" },
   { key: "contributor_payee_canonical", label: "Donor / Payee" },
-  { key: "contributor_type_label",      label: "Contributor type" },
-  { key: "party",                       label: "Party" },
+  { key: "book_type",                   label: "Contributor type" },
   { key: "city",                        label: "City" },
   { key: "state",                       label: "State" },
+  { key: "employer",                    label: "Employer" },
+  { key: "occupation",                  label: "Occupation" },
   { key: "purpose",                     label: "Purpose" },
 ];
 const SELECT_COLS = COLS.map(c => c.key).join(",") + ",tran_id";
@@ -42,7 +47,6 @@ function readFilters() {
     payee: $("f-payee").value.trim(),
     type: $("f-type").value,
     ctype: $("f-ctype").value.trim(),
-    party: $("f-party").value.trim(),
     dateStart: $("f-date-start").value,
     dateEnd: $("f-date-end").value,
     amtMin: $("f-amt-min").value,
@@ -55,8 +59,7 @@ function applyFilters(q, f) {
   if (f.filer)     q = q.ilike("filer_canonical", `%${f.filer}%`);
   if (f.payee)     q = q.ilike("contributor_payee_canonical", `%${f.payee}%`);
   if (f.type)      q = q.eq("tran_type", f.type);
-  if (f.ctype)     q = q.ilike("contributor_type_label", `%${f.ctype}%`);
-  if (f.party)     q = q.ilike("party", `%${f.party}%`);
+  if (f.ctype)     q = q.ilike("book_type", `%${f.ctype}%`);
   if (f.dateStart) q = q.gte("tran_date", f.dateStart);
   if (f.dateEnd)   q = q.lte("tran_date", f.dateEnd);
   if (f.amtMin !== "") q = q.gte("amount", Number(f.amtMin));
@@ -191,7 +194,7 @@ function csvCell(v) {
 
 // ── Init ────────────────────────────────────────────────────────────────────
 function resetFilters() {
-  ["f-filer", "f-payee", "f-ctype", "f-party", "f-date-start", "f-date-end", "f-amt-min", "f-amt-max"]
+  ["f-filer", "f-payee", "f-ctype", "f-date-start", "f-date-end", "f-amt-min", "f-amt-max"]
     .forEach(id => { $(id).value = ""; });
   $("f-type").value = "";
   page = 0; sortCol = "tran_date"; sortDir = false;
@@ -206,7 +209,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("btn-sql-csv").onclick = downloadSQLCsv;
   $("pg-prev").onclick = () => { if (page > 0) { page--; runSearch(); } };
   $("pg-next").onclick = () => { if (lastPageCount === PAGE_SIZE) { page++; runSearch(); } };
-  ["f-filer", "f-payee", "f-ctype", "f-party"].forEach(id =>
+  ["f-filer", "f-payee", "f-ctype"].forEach(id =>
     $(id).addEventListener("keydown", e => { if (e.key === "Enter") { page = 0; runSearch(); } }));
   wireFullDownload();
   runSearch();

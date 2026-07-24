@@ -24,13 +24,17 @@ create schema if not exists query;
 -- Projection researchers query. It exposes the full transactions dataset with
 -- friendly column names; being a (definer) view, it runs with the owner's
 -- rights so `public_query` needs no privileges on public.transactions itself.
+-- NOTE: contributor type is carried in `book_type` on transaction rows.
+-- ORESTAR's transaction export leaves `contributor_type_label`, `party`, and
+-- `office` empty (party/office are filer-level metadata), so those are not
+-- exposed here — they would only ever return NULL and mislead researchers.
 create or replace view query.transactions as
   select
     tran_id, tran_date, filed_date, tran_type, sub_type, amount, aggregate_amount,
     filer_canonical      as filer,
     contributor_payee_canonical as contributor_payee,
-    contributor_type_label as contributor_type,
-    party, office, purpose, book_type,
+    book_type           as contributor_type,
+    purpose,
     employer, occupation, city, state, zip, county, country,
     filer_id, contributor_payee_committee_id,
     filer               as filer_raw,
@@ -49,7 +53,10 @@ end
 $$;
 
 -- Session hardening applied on every connection as this role.
-alter role public_query set statement_timeout = '5000ms';
+-- 30s backstop; the sql-query Edge Function also sets its own per-transaction
+-- statement_timeout (25s), since the pooler doesn't reliably propagate this
+-- role-level GUC to pooled connections.
+alter role public_query set statement_timeout = '30s';
 alter role public_query set default_transaction_read_only = on;
 alter role public_query set search_path = query;
 alter role public_query set idle_in_transaction_session_timeout = '10000ms';
