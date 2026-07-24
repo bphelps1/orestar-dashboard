@@ -146,7 +146,14 @@ def _connect():
     # TLS + TCP keepalives keep long bulk-load connections from being dropped.
     params.update(sslmode="require", keepalives=1, keepalives_idle=30,
                   keepalives_interval=10, keepalives_count=5)
-    return psycopg2.connect(**params)
+    conn = psycopg2.connect(**params)
+    # Supabase enforces a 2-min statement_timeout by default, which cancels
+    # building a GIN trigram index over 3M rows. This is a trusted maintenance
+    # connection (service role), so disable the per-statement timeout.
+    with conn.cursor() as cur:
+        cur.execute("SET statement_timeout = 0")
+    conn.commit()
+    return conn
 
 
 # ── DataFrame → COPY-ready CSV ───────────────────────────────────────────────
