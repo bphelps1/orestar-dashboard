@@ -1266,7 +1266,7 @@ function esc(s) {
 
 function loadFilerProfile(slug) {
   if (!filerCache[slug]) {
-    filerCache[slug] = fetchJSON(`${DATA}/filers/${slug}.json`);
+    filerCache[slug] = DL.getFilerDetail(slug);
   }
   return filerCache[slug];
 }
@@ -1451,7 +1451,7 @@ function makeLineChart(containerId, labels, datasets) {
 async function ensureDonorFilerMap() {
   if (donorFilerMap !== null) return;
   try {
-    donorFilerMap = await fetchJSON(`${DATA}/donor_filer_map.json`);
+    donorFilerMap = await DL.getBlob("donor_filer_map");
   } catch {
     donorFilerMap = {};
   }
@@ -1910,12 +1910,12 @@ function initFilerSelector() {
 async function loadOverview() {
   if (!summaryData) {
     [summaryData, byTypeDataGlobal] = await Promise.all([
-      fetchJSON(`${DATA}/summary.json`),
-      fetchJSON(`${DATA}/by_contributor_type.json`),
+      DL.getBlob("summary"),
+      DL.getBlob("by_contributor_type"),
     ]);
   }
   if (!timelineData) {
-    timelineData = await fetchJSON(`${DATA}/timeline.json`);
+    timelineData = await DL.getBlob("timeline");
   }
 
   document.getElementById("last-updated").textContent = summaryData.last_updated
@@ -2502,7 +2502,7 @@ function renderOverviewMultiFiler(profiles) {
 
 async function loadDonors() {
   if (!donorsData) {
-    donorsData = await fetchJSON(`${DATA}/top_donors.json`);
+    donorsData = await DL.getBlob("top_donors");
   }
   await ensureDonorFilerMap();
 
@@ -2817,7 +2817,7 @@ function renderDonors(year) {
 
 async function loadRecipients() {
   if (!recipientsData) {
-    recipientsData = await fetchJSON(`${DATA}/top_recipients.json`);
+    recipientsData = await DL.getBlob("top_recipients");
   }
 
   const chartTitle = document.getElementById("recipients-chart-title");
@@ -2898,7 +2898,7 @@ function renderRecipients(year) {
 
 async function loadTimeline() {
   if (!timelineData) {
-    timelineData = await fetchJSON(`${DATA}/timeline.json`);
+    timelineData = await DL.getBlob("timeline");
   }
 
   const n = state.selectedFilers.length;
@@ -3030,7 +3030,7 @@ function renderTimelineMultiFiler(profiles) {
 
 async function loadSearch() {
   if (!allRecent.length) {
-    allRecent = await fetchJSON(`${DATA}/recent_transactions.json`);
+    allRecent = await DL.getBlob("recent_transactions");
     fuseIndex = new Fuse(allRecent, {
       keys: ["contributor_payee", "filer", "amount", "purpose"],
       threshold: 0.35,
@@ -3112,7 +3112,7 @@ function renderSearchResults(rows) {
 // ── Party Fundraising ───────────────────────────────────────────────────
 async function loadPartyFundraising() {
   try {
-    const data = await fetchJSON(`${DATA}/by_party_type.json`);
+    const data = await DL.getBlob("by_party_type");
     if (!data || !data.by_year) return;
     const box = document.getElementById("party-fundraising-box");
     if (!box) return;
@@ -3317,9 +3317,7 @@ const PULSE_ROWS = 3;
 
 async function loadCampaignPulse() {
   try {
-    const resp = await fetch(`${DATA}/activity_snapshot.json`);
-    if (!resp.ok) return;
-    activitySnapshot = await resp.json();
+    activitySnapshot = await DL.getBlob("activity_snapshot");
     await ensureDonorFilerMap();
     const el = document.getElementById("campaign-pulse");
     if (el) { el.hidden = false; renderPulsePeriod(pulseCurrentPeriod); }
@@ -3501,7 +3499,7 @@ const loaders = {
 
 (async function init() {
   try {
-    filerIndex = await fetchJSON(`${DATA}/filer_index.json`);
+    filerIndex = await DL.getBlob("filer_index");
   } catch (e) {
     filerIndex = [];
   }

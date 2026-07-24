@@ -3,6 +3,7 @@
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/:path*" },
     { "source": "/recommend", "destination": "/recommend.html" },
+    { "source": "/explore", "destination": "/explore.html" },
     { "source": "/admin/:path*", "destination": "/admin/:path*.html" }
   ],
   "headers": [

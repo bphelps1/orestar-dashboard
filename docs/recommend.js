@@ -85,7 +85,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 async function initApp() {
   showStatus("Loading filer data…", "loading");
 
-  filerIndex = await fetchJSON(`${DATA}/filer_index.json`);
+  filerIndex = await DL.getBlob("filer_index");
   filerFuse = new Fuse(filerIndex, {
     keys: ["name"],
     threshold: 0.3,
@@ -199,7 +199,7 @@ function initCycleSelector() {
 
 async function loadFilerProfile(slug) {
   if (!filerCache[slug]) {
-    filerCache[slug] = fetchJSON(`${DATA}/filers/${slug}.json`);
+    filerCache[slug] = DL.getFilerDetail(slug);
   }
   return filerCache[slug];
 }

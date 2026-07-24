@@ -144,6 +144,11 @@ jobs:
 
       - name: Process data
         if: steps.resolve.outputs.resolved != ''
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_STORAGE_BUCKET: exports
         run: |
           FILER_IDS="${{ steps.resolve.outputs.resolved }}"
           REMAINING="${{ steps.remaining.outputs.remaining }}"
@@ -154,6 +159,9 @@ jobs:
             # Final date-range batch: full aggregation
             echo "Final batch — running full aggregation..."
             python scraper/process.py
+            # After the last batch is merged, reload the full transactions
+            # table so Postgres exactly mirrors the year shards.
+            python scraper/process.py --supabase-full-load
           else
             # Intermediate date-range batch: merge only
             echo "Intermediate batch ($REMAINING windows remaining) — merge only..."
@@ -165,12 +173,8 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          REMAINING="${{ steps.remaining.outputs.remaining }}"
-          if [ "$REMAINING" = "0" ]; then
-            mkdir -p docs/data/aggregated
-            cp -r data/aggregated/. docs/data/aggregated/
-          fi
-          git add data/ docs/data/
+          # Dashboard reads aggregates from Supabase now — only version data/.
+          git add data/
           FILER_IDS="${{ steps.resolve.outputs.resolved }}"
           IS_AUTO="${{ steps.resolve.outputs.is_auto }}"
           if [ "$IS_AUTO" = "true" ]; then

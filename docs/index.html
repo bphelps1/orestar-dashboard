@@ -12,6 +12,7 @@
   <!-- Supabase (for role-based admin access check) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="lib/supabase.js"></script>
+  <script src="lib/data.js"></script>
 </head>
 <body>
 
@@ -61,6 +62,7 @@
     <button class="tab-btn"        data-tab="donors"      role="tab">Donors</button>
     <button class="tab-btn"        data-tab="recipients"  role="tab">Recipients</button>
     <button class="tab-btn"        data-tab="search"      role="tab">Transactions</button>
+    <a class="tab-btn tab-link" href="/explore">Explore</a>
     <a class="tab-btn tab-link" href="/recommend">Recommend</a>
     <a class="tab-btn tab-link tab-admin" id="admin-link" href="/admin/donors" hidden>Admin</a>
   </div>
