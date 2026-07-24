@@ -1185,9 +1185,6 @@ let byTypeDataGlobal = null;
 let donorsData       = null;
 let recipientsData   = null;
 let timelineData     = null;
-let fuseIndex        = null;
-let allRecent        = [];
-
 let donorFilerMap    = null; // donor_name_lower → {slug, name, confidence} | {candidates, confidence:"ambiguous"}
 
 let selectedDonorTypeGroup = null;
@@ -3026,89 +3023,6 @@ function renderTimelineMultiFiler(profiles) {
   makeLineChart("chart-timeline", months, datasets);
 }
 
-// ── Search ────────────────────────────────────────────────────────────────────
-
-async function loadSearch() {
-  if (!allRecent.length) {
-    allRecent = await DL.getBlob("recent_transactions");
-    fuseIndex = new Fuse(allRecent, {
-      keys: ["contributor_payee", "filer", "amount", "purpose"],
-      threshold: 0.35,
-      includeScore: false,
-    });
-  }
-
-  const input   = document.getElementById("search-input");
-  const typeEl  = document.getElementById("search-type");
-  const clearEl = document.getElementById("search-clear");
-
-  if (!input._listenerAttached) {
-    input.addEventListener("input", applySearchFilters);
-    typeEl.addEventListener("change", applySearchFilters);
-    clearEl.addEventListener("click", () => {
-      input.value = "";
-      typeEl.value = "";
-      applySearchFilters();
-    });
-    input._listenerAttached = true;
-  }
-
-  applySearchFilters();
-}
-
-function applySearchFilters() {
-  const input  = document.getElementById("search-input");
-  const typeEl = document.getElementById("search-type");
-  const q      = input ? input.value.trim() : "";
-  const type   = typeEl ? typeEl.value : "";
-
-  let results = q && fuseIndex
-    ? fuseIndex.search(q).map(r => r.item)
-    : [...allRecent];
-
-  if (type) {
-    results = results.filter(r => (r.tran_type || "").trim().toUpperCase() === type);
-  }
-
-  // Filer filter
-  if (state.selectedFilers.length > 0) {
-    const selectedNames = new Set(state.selectedFilers.map(f => f.name.toLowerCase()));
-    results = results.filter(r => selectedNames.has((r.filer || "").toLowerCase()));
-  }
-
-  // Date range filter
-  if (state.dateStart) {
-    results = results.filter(r => r.filed_date && r.filed_date >= state.dateStart);
-  }
-  if (state.dateEnd) {
-    results = results.filter(r => r.filed_date && r.filed_date <= state.dateEnd);
-  }
-
-  document.getElementById("search-count").textContent = fmtNum(results.length);
-  renderSearchResults(results);
-}
-
-function renderSearchResults(rows) {
-  const tbody = document.querySelector("#table-search tbody");
-  if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#718096;padding:24px">No transactions found.</td></tr>';
-    return;
-  }
-
-  tbody.innerHTML = rows.slice(0, 2000).map(r => {
-    const type  = (r.tran_type || "").trim().toUpperCase();
-    const badge = `<span class="badge badge-${type}">${type === "C" ? "Contribution" : type === "E" ? "Expenditure" : type}</span>`;
-    return `<tr>
-      <td>${r.filed_date || "—"}</td>
-      <td>${badge}</td>
-      <td>${esc(r.contributor_payee || "")}</td>
-      <td>${esc(r.filer || "")}</td>
-      <td class="num">${fmt$(r.amount)}</td>
-      <td>${esc(r.purpose || "")}</td>
-    </tr>`;
-  }).join("");
-}
-
 // ── Party Fundraising ───────────────────────────────────────────────────
 async function loadPartyFundraising() {
   try {
@@ -3492,7 +3406,6 @@ const loaders = {
   overview:   loadOverview,
   donors:     loadDonors,
   recipients: loadRecipients,
-  search:     loadSearch,
 };
 
 // ── Init ──────────────────────────────────────────────────────────────────────

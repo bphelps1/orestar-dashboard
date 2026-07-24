@@ -9,8 +9,6 @@
 "use strict";
 
 const PAGE_SIZE = 100;
-const STORAGE_BUCKET = "exports";
-const FULL_CSV_OBJECT = "transactions.csv.gz";
 
 // Columns shown in the browse table (subset of the full row).
 // NOTE: contributor type lives in `book_type` on transaction rows.
@@ -121,7 +119,7 @@ function renderTable(rows) {
 // with .range() and assemble the CSV here, so researchers get the complete
 // filtered set without weakening the server-side cap.
 const DOWNLOAD_CHUNK = 1000;
-const DOWNLOAD_MAX_ROWS = 100000;   // beyond this, point them at the full dataset
+const DOWNLOAD_MAX_ROWS = 100000;   // ceiling so a browser can't hang on a huge export
 
 async function downloadFiltered() {
   showError("xp-error", "");
@@ -156,7 +154,7 @@ async function downloadFiltered() {
       .join("\n");
     triggerDownload(csv, "text/csv", "orestar_filtered.csv");
     $("xp-status").textContent = truncated
-      ? `Downloaded first ${rows.length.toLocaleString()} rows — narrow the filters, or use the full dataset.`
+      ? `Downloaded first ${rows.length.toLocaleString()} rows — narrow the filters to get the rest.`
       : `Downloaded ${rows.length.toLocaleString()} rows.`;
   } catch (e) {
     $("xp-status").textContent = "";
@@ -172,12 +170,6 @@ function triggerDownload(text, mime, filename) {
   a.href = url; a.download = filename;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-async function wireFullDownload() {
-  const sb = await getSupabase();
-  const { data } = sb.storage.from(STORAGE_BUCKET).getPublicUrl(FULL_CSV_OBJECT);
-  if (data?.publicUrl) $("btn-download-all").href = data.publicUrl;
 }
 
 // ── SQL box ─────────────────────────────────────────────────────────────────
@@ -246,6 +238,5 @@ document.addEventListener("DOMContentLoaded", () => {
   $("pg-next").onclick = () => { if (lastPageCount === PAGE_SIZE) { page++; runSearch(); } };
   ["f-filer", "f-payee", "f-ctype"].forEach(id =>
     $(id).addEventListener("keydown", e => { if (e.key === "Enter") { page = 0; runSearch(); } }));
-  wireFullDownload();
   runSearch();
 });

@@ -61,7 +61,6 @@
     <button class="tab-btn active" data-tab="overview"    role="tab" aria-selected="true">Overview</button>
     <button class="tab-btn"        data-tab="donors"      role="tab">Donors</button>
     <button class="tab-btn"        data-tab="recipients"  role="tab">Recipients</button>
-    <button class="tab-btn"        data-tab="search"      role="tab">Transactions</button>
     <a class="tab-btn tab-link" href="/explore">Explore</a>
     <a class="tab-btn tab-link" href="/recommend">Recommend</a>
     <a class="tab-btn tab-link tab-admin" id="admin-link" href="/admin/donors" hidden>Admin</a>
@@ -250,47 +249,6 @@
     </div>
   </section>
 
-  <!-- ══════════════════════════ SEARCH ══════════════════════════ -->
-  <section id="tab-search" class="tab-panel" hidden>
-    <div class="explorer-header">
-      <div class="explorer-search">
-        <input
-          type="search"
-          id="search-input"
-          placeholder="Search by name, committee, or amount…"
-          aria-label="Search transactions"
-        />
-      </div>
-      <div class="explorer-controls">
-        <select id="search-type" aria-label="Transaction type">
-          <option value="">All types</option>
-          <option value="C">Contributions</option>
-          <option value="E">Expenditures</option>
-        </select>
-        <button id="search-clear" class="explorer-clear">Clear</button>
-      </div>
-    </div>
-
-    <p class="explorer-count">
-      <span id="search-count">0</span> results
-    </p>
-
-    <div class="table-wrapper">
-      <table id="table-search" class="data-table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Type</th>
-            <th>Donor / Payee</th>
-            <th>Committee</th>
-            <th class="num">Amount ($)</th>
-            <th>Purpose</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </section>
 
 </main>
 
