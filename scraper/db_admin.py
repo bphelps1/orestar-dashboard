@@ -24,6 +24,7 @@ MIGRATIONS = [
     "007_donors.sql",
     "008_donor_profile.sql",
     "009_donor_merge_overrides.sql",
+    "010_search_transactions.sql",
 ]
 
 
