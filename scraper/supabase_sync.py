@@ -160,8 +160,13 @@ def _connect(attempts: int = 6):
             break
         except psycopg2.OperationalError as e:
             msg = str(e)
-            transient = ("ECHECKOUTTIMEOUT" in msg or "authentication did not complete" in msg
-                         or "too many clients" in msg or "timeout expired" in msg)
+            transient = ("ECHECKOUTTIMEOUT" in msg              # pooler slots exhausted
+                         or "authentication did not complete" in msg
+                         or "too many clients" in msg
+                         or "timeout expired" in msg
+                         or "SSL connection has been closed" in msg   # dropped mid-handshake
+                         or "server closed the connection" in msg
+                         or "Connection refused" in msg)
             last = e
             if not transient or attempt == attempts:
                 raise
