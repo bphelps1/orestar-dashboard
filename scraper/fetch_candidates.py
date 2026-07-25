@@ -51,8 +51,20 @@ AJAX_WAIT = 3_000            # ms — dependent dropdown population
 RESULTS_WAIT = 10_000        # ms — search submit
 
 CHAMBERS = {"SR": "house", "SS": "senate"}
+# Statewide offices have no district — their `Candidate Office` is just the
+# office name ("Governor"). Superintendent of Public Instruction is
+# deliberately not included.
+STATEWIDE_OFFICES = {
+    "GOV": "Governor",
+    "SOS": "Secretary of State",
+    "AG": "Attorney General",
+    "TR": "State Treasurer",
+    "BOLI": "Commissioner of the Bureau of Labor and Industries",
+}
+ALL_OFFICES = list(CHAMBERS) + list(STATEWIDE_OFFICES)
 FILING_NOMINATED = "NOM"
 DISTRICT_PAT = re.compile(r"(\d+)\w*\s+District", re.I)
+FORM_ATTEMPTS = 3
 
 logging.basicConfig(
     level=logging.INFO,
@@ -118,6 +130,30 @@ def elections_for_year(page, year: str) -> list[tuple[str, str]]:
     return [(v, t) for v, t in opts]
 
 
+def available_offices(page, year: str, election_id: str) -> set[str]:
+    """Office codes ORESTAR offers for this election.
+
+    The dropdown lists only offices actually on that ballot. Oregon's statewide
+    offices are staggered: Governor is up in 2026, while Secretary of State,
+    Attorney General and Treasurer were elected in 2024 and don't return until
+    2028 — so they are simply absent from the 2026 list. Querying them anyway
+    just times out against an option that doesn't exist, which previously looked
+    like scraper flakiness. Enumerating instead keeps this correct in any cycle
+    without a code change.
+    """
+    page.goto(SEARCH_URL, timeout=90_000)
+    page.wait_for_timeout(PAGE_RENDER_WAIT)
+    page.select_option("select[name=cfyearActive]", year, timeout=20_000)
+    page.wait_for_timeout(AJAX_WAIT)
+    page.select_option("select[name=cfElection]", election_id, timeout=20_000)
+    page.wait_for_timeout(AJAX_WAIT)
+    codes = page.evaluate(
+        """() => [...document.querySelector('select[name=cfOffice]').options]
+                   .map(o => (o.value || '').trim()).filter(Boolean)"""
+    )
+    return set(codes)
+
+
 def _download_export(page) -> list[list[str]]:
     """Click Export and parse the workbook — returns rows as lists of strings.
 
@@ -163,8 +199,28 @@ def _download_export(page) -> list[list[str]]:
     return df
 
 
-def scrape_chamber(page, year: str, election_id: str, office: str) -> list[dict]:
-    """Ballot candidates for one chamber, for a given election.
+def _run_search(page, year: str, election_id: str, office: str) -> None:
+    """Drive the search form once: year -> election -> office -> submit.
+
+    Retried by the caller: running several searches back to back destabilises
+    the form and `select_option` starts timing out roughly every other query.
+    Reloading the page and re-selecting clears it.
+    """
+    page.goto(SEARCH_URL, timeout=90_000)          # fresh form per query
+    page.wait_for_timeout(PAGE_RENDER_WAIT)
+    page.select_option("select[name=cfyearActive]", year, timeout=20_000)
+    page.wait_for_timeout(AJAX_WAIT)
+    page.select_option("select[name=cfElection]", election_id, timeout=20_000)
+    page.wait_for_timeout(AJAX_WAIT)
+    page.select_option("select[name=cfOffice]", office, timeout=20_000)
+    page.wait_for_timeout(AJAX_WAIT)
+    # The named submit button is swapped out by the AJAX re-renders.
+    page.evaluate("() => document.forms[0].submit()")
+    page.wait_for_timeout(RESULTS_WAIT)
+
+
+def scrape_office(page, year: str, election_id: str, office: str) -> list[dict]:
+    """Ballot candidates for one office (a chamber or a statewide office).
 
     Deliberately does NOT filter by filing type at the query level. "Nominated"
     only exists after a primary is decided — 2026 Primary filings are all method
@@ -172,17 +228,21 @@ def scrape_chamber(page, year: str, election_id: str, office: str) -> list[dict]
     pre-primary phase. Instead we take everything and let the caller prefer
     nominees when they exist.
     """
-    page.goto(SEARCH_URL, timeout=90_000)          # fresh form per query
-    page.wait_for_timeout(PAGE_RENDER_WAIT)
-    page.select_option("select[name=cfyearActive]", year)
-    page.wait_for_timeout(AJAX_WAIT)
-    page.select_option("select[name=cfElection]", election_id)
-    page.wait_for_timeout(AJAX_WAIT)
-    page.select_option("select[name=cfOffice]", office)
-    page.wait_for_timeout(AJAX_WAIT)
-    # The named submit button is swapped out by the AJAX re-renders.
-    page.evaluate("() => document.forms[0].submit()")
-    page.wait_for_timeout(RESULTS_WAIT)
+    is_statewide = office in STATEWIDE_OFFICES
+
+    last_err = None
+    for attempt in range(1, FORM_ATTEMPTS + 1):
+        try:
+            _run_search(page, year, election_id, office)
+            last_err = None
+            break
+        except Exception as e:                      # noqa: BLE001 - retry any form flakiness
+            last_err = e
+            log.warning("  %s: form attempt %d/%d failed (%s)", office, attempt,
+                        FORM_ATTEMPTS, str(e).split("\n")[0][:70])
+            page.wait_for_timeout(3_000 * attempt)
+    if last_err is not None:
+        raise last_err
 
     # The HTML table caps at "Maximum of 50 records ... in a page", which
     # silently truncated the roster (Emerson Levy and 8 others were lost). The
@@ -210,7 +270,7 @@ def scrape_chamber(page, year: str, election_id: str, office: str) -> list[dict]
 
     # A candidate can be cross-nominated (Emerson Levy appears as both
     # Nominated/Democrat and Minor Party/Independent). Collapse to one entry
-    # per person per district, keeping every party they appear under.
+    # per person per race, keeping every party they appear under.
     merged: dict[tuple, dict] = {}
     for _, r in df.iterrows():
         ballot = str(r[c_name]).strip()
@@ -220,11 +280,22 @@ def scrape_chamber(page, year: str, election_id: str, office: str) -> list[dict]
             continue
         if ftype.lower() == "write in":     # not on the printed ballot
             continue
-        m = DISTRICT_PAT.search(office_txt)
-        if not m:
-            log.warning("No district parsed from %r (%s) — skipped", office_txt, ballot)
-            continue
-        key = (ballot.lower(), int(m.group(1)))
+
+        if is_statewide:
+            # No district: the race IS the office.
+            district = None
+            race_key = STATEWIDE_OFFICES[office]
+            chamber = "statewide"
+        else:
+            m = DISTRICT_PAT.search(office_txt)
+            if not m:
+                log.warning("No district parsed from %r (%s) — skipped", office_txt, ballot)
+                continue
+            district = int(m.group(1))
+            race_key = district
+            chamber = CHAMBERS[office]
+
+        key = (ballot.lower(), race_key)
         party = str(r[c_party]).strip() if c_party else ""
         if key in merged:
             if party and party not in merged[key]["parties"]:
@@ -234,8 +305,9 @@ def scrape_chamber(page, year: str, election_id: str, office: str) -> list[dict]
             "ballot_name": ballot,
             "party": party,
             "parties": [party] if party else [],
-            "chamber": CHAMBERS[office],
-            "district": int(m.group(1)),
+            "chamber": chamber,
+            "district": district,
+            "office": STATEWIDE_OFFICES[office] if is_statewide else CHAMBERS[office],
             "office_district": office_txt,   # matches filer_index.office_district
             "election": str(r[col("Election Txt") or c_off]).strip(),
             "filing_method": ftype,
@@ -263,9 +335,27 @@ def scrape(year: str | None = None, election_id: str | None = None) -> dict:
 
             for eid, label in tries:
                 log.info("Trying election %s (%s)", label, eid)
+                # Only query offices this ballot actually has — see
+                # available_offices(). Statewide offices are staggered across
+                # cycles, so a missing one is correct, not an error.
+                offered = available_offices(page, year, eid)
+                to_scrape = [o for o in ALL_OFFICES if o in offered]
+                skipped = [o for o in ALL_OFFICES if o not in offered]
+                if skipped:
+                    log.info("  not on this ballot (skipped): %s",
+                             [STATEWIDE_OFFICES.get(o, o) for o in skipped])
+
                 candidates, per_chamber = [], {}
-                for office in CHAMBERS:
-                    rows = scrape_chamber(page, year, eid, office)
+                for office in to_scrape:
+                    try:
+                        rows = scrape_office(page, year, eid, office)
+                    except Exception as e:          # noqa: BLE001
+                        if office in CHAMBERS:
+                            raise                   # a chamber failing is fatal
+                        log.warning("  %s: giving up after retries (%s) — continuing",
+                                    office, str(e).split("\n")[0][:60])
+                        per_chamber[office] = 0
+                        continue
                     # Everything filed for this election is on its ballot:
                     # "Nominated" (major-party nominees) AND "Minor Party".
                     # Filtering to Nominated alone would drop minor-party
@@ -302,11 +392,18 @@ def main() -> int:
 
     data = scrape(args.year, args.election_id)
 
-    # Guard: a chamber returning zero is a scrape failure, not an empty ballot.
-    missing = [o for o, n in data["counts"].items() if n == 0]
+    # A CHAMBER returning zero is a scrape failure — the legislature always has
+    # a ballot. A STATEWIDE office legitimately can be zero (not every office is
+    # up every cycle), so it only warns.
+    missing = [o for o, n in data["counts"].items() if n == 0 and o in CHAMBERS]
     if missing:
         log.error("Chamber(s) returned zero candidates: %s — not writing output", missing)
         return 1
+    empty_statewide = [o for o, n in data["counts"].items()
+                       if n == 0 and o in STATEWIDE_OFFICES]
+    if empty_statewide:
+        log.warning("No candidates for statewide office(s): %s (not on this ballot?)",
+                    [STATEWIDE_OFFICES[o] for o in empty_statewide])
 
     Path(args.out).write_text(json.dumps(data, indent=2))
     log.info("Wrote %s — %s, %d candidates (%s)", args.out, data["election"],
