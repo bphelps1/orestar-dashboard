@@ -516,8 +516,19 @@ def write_back(conn, df, assign, donors, aliases):
     log.info("  %s donors, %s aliases", f"{len(drows):,}", f"{len(arows):,}")
 
     log.info("Write-back: stamping transactions.donor_id…")
-    cur.execute("""create temp table _dmap (raw_name text, addr text, zip text,
-                   donor_id text) on commit drop""")
+    # Updating ~2.8M rows while donor_id is indexed forces an index write per
+    # row and blew past the CI timeout. Drop the index first so Postgres can do
+    # HOT updates (no index maintenance at all), batch by tran_id so each
+    # transaction stays small, then rebuild the index once. Same drop/rebuild
+    # pattern the bulk transaction load uses.
+    cur.execute("drop index if exists idx_txn_donor_id")
+    cur.execute("drop table if exists _dmap")
+    # UNLOGGED + real (not temp) so it survives the per-batch commits below
+    # and skips WAL for the staging write.
+    cur.execute("""create unlogged table _dmap (raw_name text, addr text, zip text,
+                   donor_id text)""")
+    conn.commit()
+
     mbuf = io.StringIO()
     mdf = pd.DataFrame({
         "raw_name": df["raw_name"], "addr": df["addr"], "zip": df["zip"],
@@ -530,16 +541,38 @@ def write_back(conn, df, assign, donors, aliases):
     cur.copy_expert(
         "copy _dmap from stdin with (format csv, header true,"
         " force_not_null (raw_name, addr, zip))", mbuf)
-    cur.execute("create index on _dmap (raw_name, addr, zip)")
+    cur.execute("create index _dmap_key on _dmap (raw_name, addr, zip)")
+    cur.execute("analyze _dmap")
+    conn.commit()
+
     # committee-id rows are authoritative regardless of name/address
     cur.execute("""update transactions set donor_id = 'c' || contributor_payee_committee_id
                    where coalesce(contributor_payee_committee_id,'') <> ''""")
-    cur.execute("""update transactions t set donor_id = m.donor_id
-                   from _dmap m
-                   where coalesce(t.contributor_payee_committee_id,'') = ''
-                     and t.contributor_payee = m.raw_name
-                     and coalesce(t.addr_line1,'') = m.addr
-                     and coalesce(t.zip,'') = m.zip""")
+    conn.commit()
+    log.info("  committee-id rows stamped (%s)", f"{cur.rowcount:,}")
+
+    cur.execute("select min(tran_id), max(tran_id) from transactions")
+    lo, hi = cur.fetchone()
+    BATCH = 250_000
+    done = 0
+    start = lo
+    while start <= hi:
+        end = start + BATCH
+        cur.execute("""update transactions t set donor_id = m.donor_id
+                       from _dmap m
+                       where t.tran_id >= %s and t.tran_id < %s
+                         and t.donor_id is null
+                         and t.contributor_payee = m.raw_name
+                         and coalesce(t.addr_line1,'') = m.addr
+                         and coalesce(t.zip,'') = m.zip""", (start, end))
+        done += cur.rowcount
+        conn.commit()
+        log.info("  stamped %s rows (tran_id < %s)", f"{done:,}", f"{end:,}")
+        start = end
+
+    log.info("Write-back: rebuilding donor_id index…")
+    cur.execute("create index idx_txn_donor_id on transactions (donor_id)")
+    cur.execute("drop table if exists _dmap")
     conn.commit()
 
     log.info("Write-back: donor aggregates…")
