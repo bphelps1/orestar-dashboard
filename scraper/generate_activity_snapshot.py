@@ -183,15 +183,109 @@ def build_races(filer_metrics: list[dict], index: list[dict]) -> list[dict]:
     return statewide + other
 
 
+CANDIDATE_FILINGS = ROOT / "data" / "candidate_filings.json"
+
+
+def _cand_key(name: str) -> str:
+    """Normalize a personal name for matching: lowercase, strip punctuation,
+    drop single-letter middle initials ('Kevin L Mannix' ~ 'Kevin Mannix')."""
+    import re as _re
+    s = _re.sub(r"[^a-z ]", " ", (name or "").lower())
+    return " ".join(t for t in s.split() if len(t) > 1)
+
+
+def build_legislative_map_from_filings(filings: dict, filer_metrics: list[dict],
+                                       index: list[dict]) -> dict:
+    """Race-map data driven by the ORESTAR candidate FILING record.
+
+    The roster is who is actually on the ballot; committees supply only the
+    money. Committees self-report "Election/Office" on their Statement of
+    Organization and update it inconsistently — Emerson Levy's committee still
+    says "2024 General Election" while she is nominated for HD 53 in 2026 — so
+    that field must not decide who appears in a race.
+
+    Candidates with no committee are kept with raised_cycle 0: "nominated but
+    not fundraising" is real information, and dropping them would recreate the
+    incomplete picture this replaced.
+    """
+    from rapidfuzz import fuzz
+
+    metric_by_slug = {fm["slug"]: fm for fm in filer_metrics}
+    # candidate committees grouped by their office_district string
+    by_district: dict[str, list] = defaultdict(list)
+    for row in index:
+        if row.get("committee_type") != "Candidate Committee":
+            continue
+        od = (row.get("office_district") or "").strip()
+        if od:
+            by_district[od].append(row)
+
+    out = {"house": {}, "senate": {}, "cycle_start": "2025-01",
+           "election": filings.get("election", ""),
+           "scraped": filings.get("scraped", "")}
+    stats = {"exact": 0, "fuzzy": 0, "none": 0}
+
+    for cand in filings.get("candidates", []):
+        chamber = cand["chamber"]
+        district = str(cand["district"])
+        key = _cand_key(cand["ballot_name"])
+
+        # Match within the same district only — a tiny pool, so fuzzy is safe.
+        best, score, method = None, 0, "none"
+        for row in by_district.get(cand.get("office_district", ""), []):
+            cn = _cand_key(row.get("candidate_name"))
+            if not cn:
+                continue
+            if cn == key:
+                best, score, method = row, 100, "exact"
+                break
+            # Surname must agree. Without this, partial/token matching links
+            # people who merely share a first name — "Michael Summers" was
+            # matched to "Michael Sipe for State Representative", which would
+            # show one candidate's money under another's name.
+            if cn.split()[-1] != key.split()[-1]:
+                continue
+            sc = fuzz.token_sort_ratio(key, cn)
+            if sc > score:
+                best, score = row, sc
+        if method != "exact":
+            method = "fuzzy" if (best and score >= 80) else "none"
+            if method == "none":
+                best = None
+        stats[method] += 1
+
+        fm = metric_by_slug.get(best.get("slug", ""), {}) if best else {}
+        entry = out[chamber].setdefault(district, {
+            "district": int(district), "total_raised": 0.0, "candidates": []})
+        row_out = {
+            "slug": best.get("slug") if best else None,
+            "name": best.get("name") if best else None,       # committee name
+            "candidate_name": cand["ballot_name"],
+            "party": cand.get("party", ""),
+            "election": cand.get("election", ""),
+            "raised_cycle": round(fm.get("raised_cycle", 0), 2) if best else 0.0,
+            "cash_on_hand": best.get("cash_on_hand", 0) if best else 0,
+            "match_method": method,
+        }
+        entry["candidates"].append(row_out)
+        entry["total_raised"] = round(entry["total_raised"] + row_out["raised_cycle"], 2)
+
+    for chamber in ("house", "senate"):
+        for entry in out[chamber].values():
+            entry["candidates"].sort(key=lambda c: -c["raised_cycle"])
+    out["match_stats"] = stats
+    out["matched_count"] = stats["exact"] + stats["fuzzy"]
+    print(f"  Legislative map: {len(filings.get('candidates', []))} filed candidates — "
+          f"{stats['exact']} exact, {stats['fuzzy']} fuzzy, {stats['none']} without a committee")
+    return out
+
+
 def build_legislative_map(filer_metrics: list[dict], index: list[dict]) -> dict:
-    """Race-map data: current-cycle candidates per legislative district.
+    """Fallback race-map builder, used only when candidate_filings.json is absent.
 
-    {"house": {"27": {"district": 27, "total_raised": X, "candidates": [...]}, …},
-     "senate": {...}, "cycle_start": "2025-01"}
-
-    Same strict election gate as build_races (ORESTAR election field must be
-    this year or next), but includes single-candidate districts — the map
-    shows everyone in the field, not only contested races.
+    Gates on the committee's self-reported election field, which is exactly the
+    unreliable signal the filing-driven builder above replaces — kept so a
+    missing/failed scrape degrades instead of blanking the map.
     """
     import re as _re
     metric_by_slug = {fm["slug"]: fm for fm in filer_metrics}
@@ -520,7 +614,17 @@ def generate(agg_dir: Path = AGG_DIR, filers_dir: Path = FILERS_DIR) -> dict:
     }
 
     snapshot["races"] = build_races(filer_metrics, index)
-    snapshot["legislative_map"] = build_legislative_map(filer_metrics, index)
+
+    # Prefer the ORESTAR candidate filing roster; fall back to the committee's
+    # self-reported election only if the scrape output is missing.
+    if CANDIDATE_FILINGS.exists():
+        filings = json.loads(CANDIDATE_FILINGS.read_text())
+        snapshot["legislative_map"] = build_legislative_map_from_filings(
+            filings, filer_metrics, index)
+    else:
+        print("  WARNING: no candidate_filings.json — falling back to "
+              "committee-reported elections (roster may be incomplete)")
+        snapshot["legislative_map"] = build_legislative_map(filer_metrics, index)
 
     return snapshot
 
