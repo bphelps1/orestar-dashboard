@@ -34,6 +34,12 @@
     .rc-party.D { background: #3182ce; } .rc-party.R { background: #e53e3e; }
     .rc-party.other { background: #718096; }
     .rc-empty { color: #718096; font-size: .88rem; }
+    #rc-statewide-list { display: grid; gap: 1rem; align-content: start; }
+    .rc-sw-card { border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem 1.1rem; }
+    .rc-sw-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+    .rc-sw-office { font-size: 1.05rem; font-weight: 700; }
+    .rc-sw-total { color: #718096; font-size: .85rem; white-space: nowrap; }
+    .rc-sw-sub { color: #718096; font-size: .78rem; margin-top: 2px; }
     .rc-cand-nocmte { opacity: .72; }
     .rc-no-cmte-name { color: #4a5568; }
     .rc-no-cmte { color: #a0aec0; font-style: italic; }
@@ -63,12 +69,14 @@
     <div class="rc-toggle">
       <button id="rc-house" class="active">House (60)</button>
       <button id="rc-senate">Senate (30)</button>
+      <button id="rc-statewide" hidden>Statewide</button>
     </div>
     <span class="rc-hint">Districts shaded by total raised this cycle. Click a district for its candidates. Gray = no declared candidates yet.</span>
   </div>
   <div class="rc-error" id="rc-error" hidden></div>
   <div class="rc-layout">
     <div id="rc-map"></div>
+    <div id="rc-statewide-list" hidden></div>
     <aside class="rc-panel" id="rc-panel">
       <h2 id="rc-panel-title">Select a district</h2>
       <div class="total" id="rc-panel-total"></div>

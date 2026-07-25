@@ -211,28 +211,38 @@ def build_legislative_map_from_filings(filings: dict, filer_metrics: list[dict],
     from rapidfuzz import fuzz
 
     metric_by_slug = {fm["slug"]: fm for fm in filer_metrics}
-    # candidate committees grouped by their office_district string
+    # candidate committees grouped by their office_district string, and by bare
+    # office for statewide races (which have no district to match on)
     by_district: dict[str, list] = defaultdict(list)
+    by_office: dict[str, list] = defaultdict(list)
     for row in index:
         if row.get("committee_type") != "Candidate Committee":
             continue
         od = (row.get("office_district") or "").strip()
         if od:
             by_district[od].append(row)
+        off = (row.get("office") or "").strip()
+        if off:
+            by_office[off].append(row)
 
-    out = {"house": {}, "senate": {}, "cycle_start": "2025-01",
+    out = {"house": {}, "senate": {}, "statewide": {}, "cycle_start": "2025-01",
            "election": filings.get("election", ""),
            "scraped": filings.get("scraped", "")}
     stats = {"exact": 0, "fuzzy": 0, "none": 0}
 
     for cand in filings.get("candidates", []):
         chamber = cand["chamber"]
-        district = str(cand["district"])
+        is_statewide = chamber == "statewide"
+        # Statewide races are keyed by office name; districts by number.
+        district = cand.get("office", "") if is_statewide else str(cand["district"])
         key = _cand_key(cand["ballot_name"])
 
-        # Match within the same district only — a tiny pool, so fuzzy is safe.
+        # Constrain the pool: same district, or same office when statewide.
+        # Still a small pool (Governor is the largest at 69), so fuzzy is safe.
+        pool = (by_office.get(cand.get("office", ""), []) if is_statewide
+                else by_district.get(cand.get("office_district", ""), []))
         best, score, method = None, 0, "none"
-        for row in by_district.get(cand.get("office_district", ""), []):
+        for row in pool:
             cn = _cand_key(row.get("candidate_name"))
             if not cn:
                 continue
@@ -255,8 +265,10 @@ def build_legislative_map_from_filings(filings: dict, filer_metrics: list[dict],
         stats[method] += 1
 
         fm = metric_by_slug.get(best.get("slug", ""), {}) if best else {}
-        entry = out[chamber].setdefault(district, {
-            "district": int(district), "total_raised": 0.0, "candidates": []})
+        entry = out[chamber].setdefault(district, (
+            {"office": district, "total_raised": 0.0, "candidates": []}
+            if is_statewide else
+            {"district": int(district), "total_raised": 0.0, "candidates": []}))
         row_out = {
             "slug": best.get("slug") if best else None,
             "name": best.get("name") if best else None,       # committee name
@@ -270,7 +282,7 @@ def build_legislative_map_from_filings(filings: dict, filer_metrics: list[dict],
         entry["candidates"].append(row_out)
         entry["total_raised"] = round(entry["total_raised"] + row_out["raised_cycle"], 2)
 
-    for chamber in ("house", "senate"):
+    for chamber in ("house", "senate", "statewide"):
         for entry in out[chamber].values():
             entry["candidates"].sort(key=lambda c: -c["raised_cycle"])
     out["match_stats"] = stats

@@ -29,10 +29,58 @@ function partyBadge(party) {
   return `<span class="rc-party ${cls}">${esc(label)}</span>`;
 }
 
+/** Statewide races have no geography — render them as cards instead of a map. */
+function renderStatewide() {
+  chamber = "statewide";
+  ["house", "senate", "statewide"].forEach(c =>
+    $("rc-" + c).classList.toggle("active", c === "statewide"));
+  $("rc-map").hidden = true;
+  const list = $("rc-statewide-list");
+  list.hidden = false;
+
+  const races = mapData.statewide || {};
+  list.innerHTML = Object.entries(races).map(([office, e]) => `
+    <div class="rc-sw-card">
+      <div class="rc-sw-head">
+        <span class="rc-sw-office">${esc(office)}</span>
+        <span class="rc-sw-total">${fmt$(e.total_raised)} raised this cycle</span>
+      </div>
+      <div class="rc-sw-sub">${e.candidates.length} candidate${e.candidates.length === 1 ? "" : "s"} on the ballot</div>
+      ${e.candidates.map(c => {
+        const nm = esc(c.candidate_name || c.name || "");
+        const nameHtml = c.slug
+          ? `<a href="/" data-slug="${esc(c.slug)}">${nm}</a>`
+          : `<span class="rc-no-cmte-name">${nm}</span>`;
+        const sub = c.slug ? esc(c.name || "") : "No committee on file";
+        const nums = c.slug
+          ? `<span>Raised: <b>${fmt$(c.raised_cycle)}</b></span>
+             <span>Cash on hand: <b>${fmt$(c.cash_on_hand)}</b></span>`
+          : `<span class="rc-no-cmte">Not reporting contributions</span>`;
+        return `<div class="rc-cand${c.slug ? "" : " rc-cand-nocmte"}">
+            <div class="rc-cand-name">${nameHtml}${partyBadge(c.party)}</div>
+            <div class="rc-cand-sub">${sub}</div>
+            <div class="rc-cand-nums">${nums}</div>
+          </div>`;
+      }).join("")}
+    </div>`).join("") || '<div class="rc-empty">No statewide races on this ballot.</div>';
+
+  list.querySelectorAll("a[data-slug]").forEach(a =>
+    a.addEventListener("click", () => sessionStorage.setItem("openFilerSlug", a.dataset.slug)));
+
+  $("rc-panel-title").textContent = "Statewide races";
+  $("rc-panel-total").textContent = mapData.election || "";
+  $("rc-panel-body").innerHTML =
+    '<span class="rc-empty">Statewide offices are elected by the whole state, so they have no district map. '
+    + 'Offices absent here are not on this ballot — Oregon staggers them across cycles.</span>';
+}
+
 async function loadChamber(which) {
+  if (which === "statewide") return renderStatewide();
   chamber = which;
-  $("rc-house").classList.toggle("active", which === "house");
-  $("rc-senate").classList.toggle("active", which === "senate");
+  $("rc-map").hidden = false;
+  $("rc-statewide-list").hidden = true;
+  ["house", "senate", "statewide"].forEach(c =>
+    $("rc-" + c).classList.toggle("active", c === which));
 
   if (!registered[which]) {
     const resp = await fetch(GEO[which]);
@@ -139,6 +187,15 @@ async function init() {
     await loadChamber("house");
     $("rc-house").onclick = () => loadChamber("house");
     $("rc-senate").onclick = () => loadChamber("senate");
+    // Only offer Statewide when this ballot actually has statewide races —
+    // Oregon staggers them, so 2026 has Governor only.
+    const swCount = Object.keys(mapData.statewide || {}).length;
+    const swBtn = $("rc-statewide");
+    if (swCount) {
+      swBtn.textContent = `Statewide (${swCount})`;
+      swBtn.hidden = false;
+      swBtn.onclick = () => loadChamber("statewide");
+    }
   } catch (e) {
     $("rc-error").hidden = false;
     $("rc-error").textContent = e.message;

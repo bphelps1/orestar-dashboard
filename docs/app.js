@@ -1998,10 +1998,27 @@ function renderFilerRaceHeader() {
     else if (row.committee_type) bits.push(esc(row.committee_type));
     if (row.filer_id) bits.push(`Filer ID ${esc(row.filer_id)}`);
 
-    // Rest of the field, from the filing roster
+    // Rest of the field, from the filing roster. Statewide races are keyed by
+    // office name (no district); legislative races by district number.
     let fieldHtml = "";
     const chamber = CHAMBER[office];
-    if (lm && chamber && district) {
+    const swEntry = lm && lm.statewide ? lm.statewide[office] : null;
+    if (swEntry && swEntry.candidates.length) {
+      fieldHtml = `
+        <div class="frh-field">
+          <div class="frh-field-label">${esc(lm.election || "Race")} · ${esc(office)}</div>
+          ${swEntry.candidates.map(c => {
+            const me = c.slug && c.slug === f.slug;
+            const nm = esc(c.candidate_name || c.name || "");
+            const label = me ? `<span class="frh-opp-self">${nm}</span>`
+              : (c.slug ? `<a data-slug="${esc(c.slug)}">${nm}</a>` : nm);
+            const amt = c.slug ? fmt$(c.raised_cycle)
+              : `<span class="frh-opp-none">no committee</span>`;
+            return `<div class="frh-opp"><span>${label}${partyTag(c.party)}</span><span>${amt}</span></div>`;
+          }).join("")}
+          <a class="frh-link" href="/races">View race map →</a>
+        </div>`;
+    } else if (lm && chamber && district) {
       const entry = (lm[chamber] || {})[String(parseInt(district[1], 10))];
       if (entry && entry.candidates.length) {
         fieldHtml = `
