@@ -599,6 +599,12 @@ def process() -> None:
             _changed = df[df["tran_id"].astype(str).str.strip().isin(_new_ids)]
             supabase_sync.upsert_transactions(_changed)
             supabase_sync.delete_transactions(superseded_ids)
+            # Assign donor_id to the freshly-synced rows (committee-id or exact
+            # alias lookup; unknown names become provisional donors until the
+            # weekly full resolution).
+            if supabase_sync.sync_enabled():
+                import resolve_donors
+                resolve_donors.assign_incremental()
         except Exception as e:
             log.warning("transaction sync failed: %s", e)
 

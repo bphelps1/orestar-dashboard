@@ -21,6 +21,7 @@ MIGRATIONS = [
     "004_transactions.sql",
     "005_aggregate_views.sql",
     "006_public_query_role.sql",
+    "007_donors.sql",
 ]
 
 
