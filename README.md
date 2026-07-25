@@ -14,7 +14,10 @@ Every transaction is queryable: filter ~3 million records by committee, donor, d
 - **~3 million transactions**, 2006–present, live-queryable in Postgres
 - **Dashboard tabs:** Overview, Donors, Recipients
 - **Explore tab:** filter/sort/paginate the full dataset, download filtered CSV, run read-only SQL
+- **Donor Lookup:** search resolved donor entities and view profiles — one page per donor covering every name and address variant
+- **Races:** House/Senate district map with the candidate field and cycle fundraising
 - **Recommend tab:** donor-targeting suggestions for a committee
+- **Committee search** by name, candidate name, filer ID, or race/office
 - **Fuzzy name deduplication** with a manual correction override file
 
 ---
@@ -29,6 +32,8 @@ Every transaction is queryable: filter ~3 million records by committee, donor, d
 [scraper/process.py]  cleans, deduplicates, aggregates
         ↓
 [Supabase Postgres]  ─ transactions      (~3M rows, the queryable table)
+                     ─ donors            (resolved donor entities)
+                     ─ donor_aliases     (name/address variant → entity)
                      ─ dashboard_cache   (aggregate blobs as jsonb)
                      ─ filer_detail      (one jsonb row per committee)
         ↓
@@ -44,6 +49,18 @@ The browser reads **directly from Postgres** via Supabase's API — there are no
 
 `summary`, `filer_index`, and the per-filer detail blobs incorporate `data/orestar_yearly_summaries.json`, `data/orestar_cash_balances.json`, and `data/filer_metadata.json` (party, office, cash-on-hand reconciliation). Reimplementing that in SQL would duplicate several hundred lines of carefully-tuned, ORESTAR-matching logic in `scraper/process.py`. Instead Python stays the source of truth and writes its results into jsonb tables, which are still queryable like any other table.
 
+### Donor entity resolution
+
+ORESTAR records donors as free text, so one person or PAC appears under many spellings and addresses. `scraper/resolve_donors.py` resolves them into `donors` entities, with `donor_aliases` mapping every observed variant and `transactions.donor_id` stamped on every row. It runs in layers, strongest signal first:
+
+1. **Committee IDs.** 243k rows carry ORESTAR's own `contributor/payee committee id`; each becomes entity `c<id>`. Most link to a committee page we already track.
+2. **Guarded name matching.** Names ending in `(1234)`, or matching a committee name exactly, join that committee — but only if the row looks like committee activity. **Rows with book type Individual or Candidate & Immediate Family are never folded into a committee.** This is deliberate: "GELSER, SARA" giving personally is a different entity from "Sara Gelser for State Senate", even though the names match. Instead the person's profile carries a `related_filer_slug` link to the committee.
+3. **Clustering.** Remaining names merge on strong corroboration — near-identical name plus the same normalized address, or the same ZIP and employer. Weaker signals (similar name with no address match, or a same-address/same-first-name/different-surname pair that may be a marriage name change) go to the review queue rather than merging automatically.
+
+Admin decisions in `donor_review_decisions` feed back in as must-link/cannot-link constraints, so reviewing a pair is permanent. Unmatched names still become single-alias entities, so every transaction resolves to something.
+
+Cadence: the weekly `donor-resolve` workflow rebuilds the whole graph; the daily refresh only assigns new rows via alias lookup (seconds).
+
 ---
 
 ## Repository Structure
@@ -53,22 +70,31 @@ orestar-dashboard/
 ├── .github/workflows/
 │   ├── daily-refresh.yml     # daily at 8am PST — scrape, aggregate, sync to Supabase
 │   ├── backfill.yml          # manual historical pull
-│   └── supabase-load.yml     # one-off full reload of the transactions table
+│   ├── supabase-load.yml     # one-off full reload of the transactions table
+│   ├── donor-resolve.yml     # weekly full donor entity resolution
+│   └── district-geojson.yml  # one-off district boundary build (after redistricting)
 ├── scraper/
 │   ├── fetch.py              # downloads Excel exports from ORESTAR
 │   ├── process.py            # cleans, deduplicates, aggregates, syncs
+│   ├── resolve_donors.py     # donor entity resolution (see Architecture)
 │   ├── supabase_sync.py      # COPY/upsert into Postgres, jsonb upserts, CSV upload
 │   ├── db_admin.py           # apply migrations / seed aggregates / verify
+│   ├── build_district_geojson.py  # TIGER → simplified district GeoJSON
 │   └── entity_map.json       # manual name correction overrides
 ├── supabase/
-│   ├── migrations/           # 004 transactions, 005 aggregate tables, 006 SQL role
+│   ├── migrations/           # 004 transactions · 005 aggregates · 006 SQL role
+│   │                         # 007 donors · 008 donor_profile()
 │   └── functions/sql-query/  # read-only SQL endpoint for the Explore page
 ├── data/
 │   ├── transactions/         # per-year source shards (txn_YYYY.csv.gz)
+│   ├── review_queue.json     # donor pairs awaiting admin review
 │   └── aggregated/           # aggregate JSON, mirrored into Postgres
 └── docs/                     # site root (deployed by Vercel)
     ├── index.html, app.js    # dashboard
     ├── explore.html/.js      # filter + download + SQL
+    ├── donors.html/.js       # donor search + profiles
+    ├── races.html/.js        # legislative district map
+    ├── assets/               # or_house.geojson, or_senate.geojson
     └── lib/
         ├── supabase.js       # client + auth
         └── data.js           # dashboard data access layer
@@ -87,9 +113,10 @@ Create a project, then apply the schema and load the data:
 ```bash
 export SUPABASE_DB_URL="postgresql://postgres.<ref>:<password>@<host>:5432/postgres"
 
-python scraper/db_admin.py apply             # migrations 004-006
+python scraper/db_admin.py apply             # migrations 004-008
 python scraper/db_admin.py seed-aggregates   # dashboard_cache + filer_detail
 python scraper/process.py --supabase-full-load   # load all transaction shards
+python scraper/resolve_donors.py --full      # build donor entities (or run the workflow)
 python scraper/db_admin.py verify
 ```
 
@@ -169,6 +196,8 @@ Uncertain matches (80–95% fuzzy confidence) are written to `data/review_queue.
 - **Coverage.** Contributions (1.9M), expenditures (971k), other receipts (149k), and other disbursements (17k) — including in-kind contributions, personal expenditure reimbursements, and items sold at fair market value. Records run from 2006 to present (a handful of earlier filings exist).
 - **Contributor type lives in `book_type`.** ORESTAR's transaction export leaves `contributor_type_label`, `party`, and `office` blank on every row — party and office are committee-level metadata, available in `filer_index`, not per transaction. Filter on `book_type` (Individual, Business Entity, Political Committee, Labor Organization, …).
 - **The API caps every response at 1,000 rows.** Anything needing a complete result set must paginate; the Explore download does this automatically and assembles the full CSV client-side.
+- **Donor entities are conservative by design.** A person and their own candidate committee are kept separate (linked, not merged), and merges require address or employer corroboration — so a donor's totals may under-count where ORESTAR's data is too thin to link variants safely. Unresolved pairs surface in the admin review queue rather than being merged on a guess.
+- **The race map only shows candidates with a current ORESTAR election on file.** Districts with no declared candidate render gray. Senate coverage is about half the chamber in any cycle — Oregon staggers Senate terms, so only half the seats are up.
 - **5,000-record limit per ORESTAR export.** The scraper uses short date windows to stay under it and logs a warning when a window comes close.
 - **ORESTAR is session-based.** No API key required, but its URL structure could change; check the Actions logs if the daily workflow starts failing.
 - **Amendments.** When a transaction is amended, ORESTAR issues a new row referencing the original; the pipeline drops superseded originals so totals aren't double-counted.
