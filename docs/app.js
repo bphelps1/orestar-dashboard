@@ -1751,7 +1751,34 @@ function initFilerSelector() {
   const dateStartEl = document.getElementById("date-start");
   const dateEndEl   = document.getElementById("date-end");
 
-  const fuse = new Fuse(filerIndex, { keys: ["name"], threshold: 0.3 });
+  // Search by committee name, candidate name, race/office, or filer ID.
+  const fuse = new Fuse(filerIndex, {
+    keys: [
+      { name: "name",            weight: 2 },
+      { name: "candidate_name",  weight: 1.5 },
+      { name: "office_district", weight: 1 },
+      { name: "filer_id",        weight: 0.5 },
+    ],
+    threshold: 0.3,
+  });
+
+  function searchFilers(q) {
+    // Digits → exact/prefix filer-ID lookup first ("4792" → Friends of Tina Kotek)
+    if (/^\d+$/.test(q)) {
+      const exact = filerIndex.filter(f => String(f.filer_id) === q);
+      const prefix = filerIndex.filter(f => String(f.filer_id).startsWith(q) && String(f.filer_id) !== q);
+      const byId = exact.concat(prefix);
+      if (byId.length) return byId.slice(0, 20);
+    }
+    return fuse.search(q).map(r => r.item).slice(0, 20);
+  }
+
+  /** Secondary line in the dropdown: candidate · race · election */
+  function filerSubtitle(item) {
+    const parts = [item.candidate_name, item.office_district || item.office, item.election]
+      .filter(Boolean);
+    return parts.length ? `<span class="filer-option-sub">${esc(parts.join(" · "))}</span>` : "";
+  }
 
   let dropdownItems = [];
   let highlightIdx  = -1;
@@ -1790,7 +1817,7 @@ function initFilerSelector() {
     highlightIdx  = -1;
     if (items.length) {
       dropdown.innerHTML = items.map((item, i) =>
-        `<li role="option" data-slug="${esc(item.slug)}" data-idx="${i}">${esc(item.name)}</li>`
+        `<li role="option" data-slug="${esc(item.slug)}" data-idx="${i}">${esc(item.name)}${filerSubtitle(item)}</li>`
       ).join("");
     } else {
       dropdown.innerHTML = `<li class="no-results">No results</li>`;
@@ -1817,18 +1844,12 @@ function initFilerSelector() {
 
   input.addEventListener("focus", () => {
     const q = input.value.trim();
-    const results = q
-      ? fuse.search(q).map(r => r.item).slice(0, 20)
-      : filerIndex.slice(0, 20);
-    openDropdown(results);
+    openDropdown(q ? searchFilers(q) : filerIndex.slice(0, 20));
   });
 
   input.addEventListener("input", () => {
     const q = input.value.trim();
-    const results = q
-      ? fuse.search(q).map(r => r.item).slice(0, 20)
-      : filerIndex.slice(0, 20);
-    openDropdown(results);
+    openDropdown(q ? searchFilers(q) : filerIndex.slice(0, 20));
   });
 
   input.addEventListener("blur", () => {

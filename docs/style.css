@@ -226,6 +226,21 @@ header h1 {
   color: var(--color-text-muted);
   font-style: italic;
 }
+/* Secondary line: candidate · race · election */
+.filer-option-sub {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.filer-dropdown li:hover .filer-option-sub,
+.filer-dropdown li.selected .filer-option-sub {
+  color: inherit;
+  opacity: 0.75;
+}
 
 /* ── Filter Fields / Toggle ─────────────────────────────────────────────── */
 .filter-fields {

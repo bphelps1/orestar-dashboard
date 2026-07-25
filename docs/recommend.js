@@ -87,7 +87,12 @@ async function initApp() {
 
   filerIndex = await DL.getBlob("filer_index");
   filerFuse = new Fuse(filerIndex, {
-    keys: ["name"],
+    keys: [
+      { name: "name",            weight: 2 },
+      { name: "candidate_name",  weight: 1.5 },
+      { name: "office_district", weight: 1 },
+      { name: "filer_id",        weight: 0.5 },
+    ],
     threshold: 0.3,
   });
 
@@ -126,13 +131,25 @@ function initSearch() {
   input.addEventListener("input", () => {
     const q = input.value.trim();
     if (!q) { dropdown.hidden = true; return; }
-    const results = filerFuse.search(q).slice(0, 15).map(r => r.item);
+    // Digits → exact/prefix filer-ID lookup ("4792" → Friends of Tina Kotek)
+    let results;
+    if (/^\d+$/.test(q)) {
+      results = filerIndex
+        .filter(f => String(f.filer_id).startsWith(q))
+        .sort((a, b) => (String(a.filer_id) === q ? -1 : 0) - (String(b.filer_id) === q ? -1 : 0))
+        .slice(0, 15);
+    }
+    if (!results || !results.length) {
+      results = filerFuse.search(q).slice(0, 15).map(r => r.item);
+    }
     if (!results.length) { dropdown.hidden = true; return; }
     dropdown.innerHTML = results.map((f, i) => {
       const metaParts = [fmt$(f.total_in) + " raised"];
+      if (f.candidate_name) metaParts.push(f.candidate_name);
       if (f.party) metaParts.push(f.party);
-      if (f.office) metaParts.push(f.office);
+      if (f.office_district || f.office) metaParts.push(f.office_district || f.office);
       else if (f.committee_type) metaParts.push(f.committee_type);
+      if (f.election) metaParts.push(f.election);
       return `<li data-idx="${i}">
         <span>${esc(f.name)}</span>
         <span class="filer-meta">${metaParts.join(" · ")}</span>
