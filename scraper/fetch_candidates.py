@@ -32,7 +32,7 @@ import logging
 import re
 import sys
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
@@ -82,16 +82,39 @@ def _open(playwright):
     return browser, page
 
 
+def oregon_primary_date(year: int) -> date:
+    """Third Tuesday in May (ORS 254.056)."""
+    d = date(year, 5, 1)
+    d += timedelta(days=(1 - d.weekday()) % 7)   # first Tuesday
+    return d + timedelta(days=14)                # third Tuesday
+
+
 def elections_for_year(page, year: str) -> list[tuple[str, str]]:
-    """[(election_id, label)] for a year, newest-looking first (General before Primary)."""
+    """[(election_id, label)] ordered by which election is currently live.
+
+    The switch point is the primary date, not the size of the field or whether
+    nominees exist:
+      • The primary has MORE candidates than the general (186 vs 139 in 2026),
+        because several candidates compete per party — so "bigger roster" would
+        wrongly keep showing a finished primary.
+      • Unopposed candidates can be "Automatically nominated to General
+        Election" before the primary is held, so "has nominees" leaks early.
+    Before the primary is held the primary field is the live race; after it, the
+    general is. Whichever is preferred, the caller still falls back to the other
+    if it returns nothing.
+    """
     page.select_option("select[name=cfyearActive]", year)
     page.wait_for_timeout(AJAX_WAIT)
     opts = page.evaluate(
         """() => [...document.querySelector('select[name=cfElection]').options]
              .map(o => [o.value, o.text.trim()]).filter(([v]) => v)"""
     )
-    # General before Primary so auto-advance prefers the later election
-    opts.sort(key=lambda kv: (0 if "general" in kv[1].lower() else 1, kv[1]))
+    primary_over = date.today() >= oregon_primary_date(int(year))
+    want = "general" if primary_over else "primary"
+    log.info("Oregon %s primary: %s — %s, preferring the %s election",
+             year, oregon_primary_date(int(year)),
+             "held" if primary_over else "not yet held", want)
+    opts.sort(key=lambda kv: (0 if want in kv[1].lower() else 1, kv[1]))
     return [(v, t) for v, t in opts]
 
 
