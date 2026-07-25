@@ -22,6 +22,7 @@ MIGRATIONS = [
     "005_aggregate_views.sql",
     "006_public_query_role.sql",
     "007_donors.sql",
+    "008_donor_profile.sql",
 ]
 
 
