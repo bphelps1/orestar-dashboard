@@ -2000,14 +2000,27 @@ function renderFilerRaceHeader() {
 
     // Rest of the field, from the filing roster. Statewide races are keyed by
     // office name (no district); legislative races by district number.
+    //
+    // Show the field ONLY when this committee is itself in the race. A
+    // committee keeps its office/district long after the candidate stops
+    // running — "Kate Brown Committee" still reads office=Governor from its
+    // 2018 filing — so matching on office or district alone would present a
+    // former officeholder as part of the current contest. The roster decides
+    // who is running; anything not in it falls through to "not on the ballot".
     let fieldHtml = "";
     const chamber = CHAMBER[office];
     const swEntry = lm && lm.statewide ? lm.statewide[office] : null;
-    if (swEntry && swEntry.candidates.length) {
+    const distEntry = (lm && chamber && district)
+      ? (lm[chamber] || {})[String(parseInt(district[1], 10))]
+      : null;
+    const entry = swEntry || distEntry;
+    const inThisRace = !!(entry && entry.candidates.some(c => c.slug && c.slug === f.slug));
+    if (entry && inThisRace) {
+      const raceLabel = swEntry ? office : (row.office_district || office);
       fieldHtml = `
         <div class="frh-field">
-          <div class="frh-field-label">${esc(lm.election || "Race")} · ${esc(office)}</div>
-          ${swEntry.candidates.map(c => {
+          <div class="frh-field-label">${esc(lm.election || "Race")} · ${esc(raceLabel)}</div>
+          ${entry.candidates.map(c => {
             const me = c.slug && c.slug === f.slug;
             const nm = esc(c.candidate_name || c.name || "");
             const label = me ? `<span class="frh-opp-self">${nm}</span>`
@@ -2018,24 +2031,6 @@ function renderFilerRaceHeader() {
           }).join("")}
           <a class="frh-link" href="/races">View race map →</a>
         </div>`;
-    } else if (lm && chamber && district) {
-      const entry = (lm[chamber] || {})[String(parseInt(district[1], 10))];
-      if (entry && entry.candidates.length) {
-        fieldHtml = `
-          <div class="frh-field">
-            <div class="frh-field-label">${esc(lm.election || "Race")} · ${esc(row.office_district)}</div>
-            ${entry.candidates.map(c => {
-              const me = c.slug && c.slug === f.slug;
-              const nm = esc(c.candidate_name || c.name || "");
-              const label = me ? `<span class="frh-opp-self">${nm}</span>`
-                : (c.slug ? `<a data-slug="${esc(c.slug)}">${nm}</a>` : nm);
-              const amt = c.slug ? fmt$(c.raised_cycle)
-                : `<span class="frh-opp-none">no committee</span>`;
-              return `<div class="frh-opp"><span>${label}${partyTag(c.party)}</span><span>${amt}</span></div>`;
-            }).join("")}
-            <a class="frh-link" href="/races">View race map →</a>
-          </div>`;
-      }
     }
     // A candidate committee with no roster entry isn't on the current ballot.
     if (!fieldHtml && isCand && row.office_district) {
