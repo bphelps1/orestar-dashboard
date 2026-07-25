@@ -330,10 +330,19 @@ def build_legislative_map(filer_metrics: list[dict], index: list[dict]) -> dict:
     return out
 
 
-def generate(agg_dir: Path = AGG_DIR, filers_dir: Path = FILERS_DIR) -> dict:
-    """Generate the activity snapshot data structure."""
-    with open(agg_dir / "filer_index.json") as f:
-        index = json.load(f)
+def generate(agg_dir: Path = AGG_DIR, filers_dir: Path = FILERS_DIR,
+             index: list | None = None, details: list | None = None) -> dict:
+    """Generate the activity snapshot data structure.
+
+    `index` / `details` let callers inject data straight from Postgres instead
+    of reading data/aggregated/. That matters: the local copies lag the
+    database, and the Fundraising Pulse windows are the *last 30/90 days* — so
+    generating from stale files silently produces empty lanes rather than an
+    error. See scraper/refresh_activity_snapshot.py.
+    """
+    if index is None:
+        with open(agg_dir / "filer_index.json") as f:
+            index = json.load(f)
 
     # Determine time periods
     now = datetime.now()
@@ -411,14 +420,18 @@ def generate(agg_dir: Path = AGG_DIR, filers_dir: Path = FILERS_DIR) -> dict:
     # Load ALL filer detail files for donor aggregation (Biggest Donors
     # lane should capture donations to PACs, party committees, etc.)
     all_filer_slugs = [row["slug"] for row in index]
-    all_filer_details = []
-    print(f"Loading {len(all_filer_slugs)} filer detail files for donor aggregation...")
-    for slug in all_filer_slugs:
-        detail_path = filers_dir / f"{slug}.json"
-        if not detail_path.exists():
-            continue
-        with open(detail_path) as f:
-            all_filer_details.append(json.load(f))
+    if details is not None:
+        all_filer_details = details
+        print(f"Using {len(all_filer_details)} injected filer details")
+    else:
+        all_filer_details = []
+        print(f"Loading {len(all_filer_slugs)} filer detail files for donor aggregation...")
+        for slug in all_filer_slugs:
+            detail_path = filers_dir / f"{slug}.json"
+            if not detail_path.exists():
+                continue
+            with open(detail_path) as f:
+                all_filer_details.append(json.load(f))
 
     # Build candidate-specific detail lookup for timeline metrics
     candidate_details = {}  # slug -> detail
