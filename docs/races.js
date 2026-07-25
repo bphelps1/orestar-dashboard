@@ -96,17 +96,27 @@ function showDistrict(name) {
   }
   $("rc-panel-total").textContent =
     `${entry.candidates.length} candidate${entry.candidates.length > 1 ? "s" : ""} · ${fmt$(entry.total_raised)} raised this cycle`;
-  $("rc-panel-body").innerHTML = entry.candidates.map(c => `
-    <div class="rc-cand">
-      <div class="rc-cand-name">
-        <a href="/" data-slug="${esc(c.slug)}">${esc(c.candidate_name || c.name)}</a>${partyBadge(c.party)}
-      </div>
-      <div class="rc-cand-sub">${esc(c.name)}${c.election ? " · " + esc(c.election) : ""}</div>
-      <div class="rc-cand-nums">
-        <span>Raised: <b>${fmt$(c.raised_cycle)}</b></span>
-        <span>Cash on hand: <b>${fmt$(c.cash_on_hand)}</b></span>
-      </div>
-    </div>`).join("");
+  $("rc-panel-body").innerHTML = entry.candidates.map(c => {
+    // Candidates on the ballot with no committee on file: show them (that fact
+    // is informative) but with no link and no money.
+    const name = esc(c.candidate_name || c.name || "");
+    const nameHtml = c.slug
+      ? `<a href="/" data-slug="${esc(c.slug)}">${name}</a>`
+      : `<span class="rc-no-cmte-name">${name}</span>`;
+    const sub = c.slug
+      ? `${esc(c.name || "")}${c.election ? " · " + esc(c.election) : ""}`
+      : "No committee on file";
+    const nums = c.slug
+      ? `<span>Raised: <b>${fmt$(c.raised_cycle)}</b></span>
+         <span>Cash on hand: <b>${fmt$(c.cash_on_hand)}</b></span>`
+      : `<span class="rc-no-cmte">Not reporting contributions</span>`;
+    return `
+    <div class="rc-cand${c.slug ? "" : " rc-cand-nocmte"}">
+      <div class="rc-cand-name">${nameHtml}${partyBadge(c.party)}</div>
+      <div class="rc-cand-sub">${sub}</div>
+      <div class="rc-cand-nums">${nums}</div>
+    </div>`;
+  }).join("");
   $("rc-panel-body").querySelectorAll("a[data-slug]").forEach(a =>
     a.addEventListener("click", () => sessionStorage.setItem("openFilerSlug", a.dataset.slug)));
 }
@@ -116,6 +126,13 @@ async function init() {
     const snap = await DL.getBlob("activity_snapshot");
     mapData = snap.legislative_map;
     if (!mapData) throw new Error("legislative_map not in activity_snapshot yet — next daily refresh adds it");
+    // Name the election the roster came from (moves primary → general on its own)
+    if (mapData.election) {
+      const el = document.querySelector(".provenance");
+      if (el) el.textContent =
+        `Legislative race map · ${mapData.election} · candidates on the ballot ` +
+        `& fundraising this cycle (since Jan 2025)`;
+    }
     chart = echarts.init($("rc-map"), null, { renderer: "svg" });
     chart.on("click", p => { if (p.componentType === "series") showDistrict(p.name); });
     window.addEventListener("resize", () => chart && chart.resize());
