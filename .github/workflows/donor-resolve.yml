@@ -58,7 +58,7 @@ jobs:
           git add data/review_queue.json
           git diff --cached --quiet || git commit -m "chore: weekly donor resolution $(date -u +%Y-%m-%d)"
           for attempt in 1 2 3 4 5; do
-            git pull --rebase -X ours && git push && break
+            GIT_TERMINAL_PROMPT=0 timeout 300 git -c core.editor=true pull --rebase -X ours && GIT_TERMINAL_PROMPT=0 timeout 300 git push && break
             echo "Push attempt $attempt failed, retrying in $((attempt * 15))s..."
             sleep $((attempt * 15))
           done
