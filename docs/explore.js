@@ -84,10 +84,30 @@ async function runSearch() {
   showError("xp-error", "");
   $("xp-status").textContent = "Loading…";
   try {
+    const f = readFilters();
+    // A one-character substring matches millions of rows and can't be sorted
+    // inside any sane timeout. Two characters is also what the donor
+    // autocomplete requires, so the two behave consistently.
+    const tooShort = [f.filer, f.payee].filter(v => v && v.length < 2);
+    if (tooShort.length) {
+      $("xp-status").textContent = "";
+      showError("xp-error", "Enter at least 2 characters to search by name.");
+      return;
+    }
     const sb = await getSupabase();
-    let q = applyFilters(sb.from("transactions").select(SELECT_COLS), readFilters());
-    q = q.order(sortCol, { ascending: sortDir }).range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
-    const { data, error } = await q;
+    // Goes through search_transactions() rather than PostgREST filters: for a
+    // substring search the planner mis-estimates selectivity and walks the date
+    // index row by row (~2s, HTTP 500 under load). The function denies that
+    // plan so the trigram index is used instead — "nike" 3.5s -> 0.23s.
+    const { data, error } = await sb.rpc("search_transactions", {
+      p_filer: f.filer, p_payee: f.payee, p_donor_id: f.donorId,
+      p_tran_type: f.type, p_book_type: f.ctype,
+      p_date_from: f.dateStart || null, p_date_to: f.dateEnd || null,
+      p_amt_min: f.amtMin === "" ? null : Number(f.amtMin),
+      p_amt_max: f.amtMax === "" ? null : Number(f.amtMax),
+      p_sort: sortCol, p_asc: sortDir,
+      p_limit: PAGE_SIZE, p_offset: page * PAGE_SIZE,
+    });
     if (error) throw new Error(error.message);
     lastPageCount = data.length;
     renderTable(data);
@@ -99,7 +119,16 @@ async function runSearch() {
     $("pg-label").textContent = `Page ${page + 1}`;
   } catch (e) {
     $("xp-status").textContent = "";
-    showError("xp-error", e.message);
+    // A very broad term ("oregon" matches 124k rows) can still exceed the
+    // server's statement timeout: sorting that many rows by date is expensive
+    // however it's planned. Picking the donor from the dropdown filters by
+    // donor_id — an indexed lookup that stays ~0.2s at any breadth.
+    const timedOut = /timeout|57014|statement/i.test(e.message || "");
+    showError("xp-error", timedOut
+      ? "That search matched too many records to sort in time. Narrow it — add a "
+        + "date range or amount, or pick a specific donor from the suggestions "
+        + "under “Donor / payee”, which is much faster."
+      : e.message);
   }
 }
 
