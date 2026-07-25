@@ -1475,6 +1475,35 @@ footer a:hover { color: var(--color-accent); }
    MULTI-FILER / COMPARISON
    ════════════════════════════════════════════════════════════════════════ */
 
+/* Candidate / race context shown when the dashboard is filtered to committees */
+.filer-race-header {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  margin-bottom: 24px;
+}
+.frh-row + .frh-row { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--color-border); }
+.frh-title { font-size: 1.05rem; font-weight: 700; }
+.frh-meta { color: #718096; font-size: 0.86rem; margin-top: 2px; }
+.frh-party {
+  display: inline-block; border-radius: 4px; font-size: 0.68rem;
+  padding: 0 6px; color: #fff; vertical-align: 2px; margin-left: 6px;
+}
+.frh-party.D { background: #3182ce; }
+.frh-party.R { background: #e53e3e; }
+.frh-party.other { background: #718096; }
+.frh-field { margin-top: 10px; font-size: 0.85rem; }
+.frh-field-label {
+  color: #718096; text-transform: uppercase;
+  letter-spacing: .03em; font-size: .7rem; margin-bottom: 3px;
+}
+.frh-opp { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
+.frh-opp-self { font-weight: 600; }
+.frh-opp a { color: #2b6cb0; text-decoration: none; cursor: pointer; }
+.frh-opp-none { color: #a0aec0; font-style: italic; }
+.frh-link { font-size: .8rem; margin-top: 8px; display: inline-block; color: #2b6cb0; text-decoration: none; }
+
 .filer-comparison-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
