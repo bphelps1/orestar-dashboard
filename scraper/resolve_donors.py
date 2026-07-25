@@ -196,6 +196,10 @@ def load_tuples(conn) -> pd.DataFrame:
     df = pd.read_sql(TUPLE_SQL, conn)
     log.info("  %s tuples", f"{len(df):,}")
     df["nname"] = df["raw_name"].map(norm_name)
+    # A blank/whitespace-only contributor name normalizes to "" — which is NULL
+    # to COPY and would abort the whole load on the not-null alias columns.
+    # Give it a stable sentinel so the row still resolves to an entity.
+    df.loc[df["nname"].str.strip() == "", "nname"] = "(unnamed)"
     df["akey"] = [norm_addr(a, z) for a, z in zip(df["addr"], df["zip"])]
     df["z5"] = df["zip"].map(zip5)
     df["nemp"] = df["employer"].map(norm_employer)
@@ -463,6 +467,8 @@ def resolve(df: pd.DataFrame, ns: dict, must: dict, cannot: set):
     for did, meta in donors.items():
         if not meta["display_name"] and meta["names"]:
             meta["display_name"] = meta["names"].most_common(1)[0][0]
+        if not (meta["display_name"] or "").strip():
+            meta["display_name"] = "(unnamed)"    # display_name is not-null
         meta["related_filer_slug"] = None
         if did.startswith("d"):
             slug = ns["candidate_by_norm"].get(norm_name(meta["display_name"]))
@@ -489,7 +495,10 @@ def write_back(conn, df, assign, donors, aliases):
     dbuf.seek(0)
     cur.copy_expert(
         "copy donors (donor_id, display_name, book_type, committee_id, filer_slug,"
-        " related_filer_slug, alias_count) from stdin with (format csv, header true, null '')",
+        " related_filer_slug, alias_count) from stdin with (format csv, header true,"
+        # not-null columns must never be NULLed by an empty field; the nullable
+        # slug/committee columns keep '' -> NULL so joins behave.
+        " null '', force_not_null (donor_id, display_name))",
         dbuf)
 
     arows = pd.DataFrame(aliases).drop_duplicates(subset=["alias_key"])
@@ -500,7 +509,8 @@ def write_back(conn, df, assign, donors, aliases):
     cur.copy_expert(
         "copy donor_aliases (alias_key, donor_id, raw_name, norm_name, addr_key,"
         " source, alias_scope) from stdin with (format csv, header true,"
-        " force_not_null (addr_key))",   # empty addr_key is '' — not NULL
+        # every text column: empty means empty string, never NULL
+        " force_not_null (alias_key, raw_name, norm_name, addr_key, source, alias_scope))",
         abuf)
     conn.commit()
     log.info("  %s donors, %s aliases", f"{len(drows):,}", f"{len(arows):,}")
