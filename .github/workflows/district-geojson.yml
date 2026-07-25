@@ -35,11 +35,4 @@ jobs:
 
       - name: Commit assets
         run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/assets/or_house.geojson docs/assets/or_senate.geojson
-          git diff --cached --quiet || git commit -m "chore: build Oregon legislative district GeoJSON (TIGER 2024)"
-          for attempt in 1 2 3; do
-            GIT_TERMINAL_PROMPT=0 timeout 300 git -c core.editor=true pull --rebase -X ours && GIT_TERMINAL_PROMPT=0 timeout 300 git push && break
-            sleep $((attempt * 10))
-          done
+          bash scripts/push_data.sh "chore: build Oregon legislative district GeoJSON (TIGER 2024)" docs/assets/or_house.geojson docs/assets/or_senate.geojson

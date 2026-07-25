@@ -171,24 +171,17 @@ jobs:
       - name: Commit and push backfill data
         if: "!cancelled() && steps.resolve.outputs.resolved != ''"
         run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           # Dashboard reads aggregates from Supabase now — only version data/.
-          git add data/
           FILER_IDS="${{ steps.resolve.outputs.resolved }}"
           IS_AUTO="${{ steps.resolve.outputs.is_auto }}"
           if [ "$IS_AUTO" = "true" ]; then
-            git diff --cached --quiet || git commit -m "chore: auto-backfill filers $FILER_IDS"
+            MSG="chore: auto-backfill filers $FILER_IDS"
           elif [ -n "$FILER_IDS" ]; then
-            git diff --cached --quiet || git commit -m "chore: backfill filers $FILER_IDS"
+            MSG="chore: backfill filers $FILER_IDS"
           else
-            git diff --cached --quiet || git commit -m "chore: backfill ${{ inputs.date_field }}-date ${{ inputs.start_year }}–${{ inputs.end_year || 'now' }}"
+            MSG="chore: backfill ${{ inputs.date_field }}-date ${{ inputs.start_year }}–${{ inputs.end_year || 'now' }}"
           fi
-          for attempt in 1 2 3 4 5; do
-            GIT_TERMINAL_PROMPT=0 timeout 300 git -c core.editor=true pull --rebase -X ours && GIT_TERMINAL_PROMPT=0 timeout 300 git push && break
-            echo "Push attempt $attempt failed, retrying in $((attempt * 15))s..."
-            sleep $((attempt * 15))
-          done
+          bash scripts/push_data.sh "$MSG" data/
 
       - name: Re-trigger if backfill incomplete
         if: "!cancelled()"

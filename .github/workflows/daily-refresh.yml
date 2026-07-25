@@ -56,15 +56,4 @@ jobs:
 
       - name: Commit and push updated data
         run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          # The dashboard reads aggregates from Supabase now, so we no longer
-          # publish the JSON tree to docs/. We still version the per-year
-          # transaction shards and scraper state files under data/.
-          git add data/
-          git diff --cached --quiet || git commit -m "chore: daily data refresh $(date -u +%Y-%m-%d)"
-          for attempt in 1 2 3 4 5; do
-            GIT_TERMINAL_PROMPT=0 timeout 300 git -c core.editor=true pull --rebase -X ours && GIT_TERMINAL_PROMPT=0 timeout 300 git push && break
-            echo "Push attempt $attempt failed, retrying in $((attempt * 15))s..."
-            sleep $((attempt * 15))
-          done
+          bash scripts/push_data.sh "chore: daily data refresh $(date -u +%Y-%m-%d)" data/

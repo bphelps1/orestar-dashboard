@@ -55,12 +55,25 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 async function initApp() {
-  // Load review queue
+  // Load the review queue from Supabase. The resolver writes it to
+  // dashboard_cache('donor_review_queue') as well as to disk, so reading the
+  // cache means the weekly job no longer has to git-commit the file back to
+  // the repo just to make the queue visible here — that commit step was
+  // hanging for ~50 minutes and failing the job after the real work was done.
   try {
-    reviewQueue = await fetchJSON("../data/review_queue.json");
+    const sb = await getSupabase();
+    const { data, error } = await sb.from("dashboard_cache")
+      .select("data").eq("key", "donor_review_queue").single();
+    if (error) throw new Error(error.message);
+    reviewQueue = data?.data || [];
   } catch (e) {
-    console.warn("Could not load review_queue.json:", e.message);
-    reviewQueue = [];
+    console.warn("Review queue not in dashboard_cache (%s) — falling back to file", e.message);
+    try {
+      reviewQueue = await fetchJSON("../data/review_queue.json");
+    } catch (e2) {
+      console.warn("Could not load review_queue.json:", e2.message);
+      reviewQueue = [];
+    }
   }
 
   // Load existing decisions from Supabase
