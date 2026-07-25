@@ -12,7 +12,7 @@ Every transaction is queryable: filter ~3 million records by committee, donor, d
 
 - **Daily automatic updates** via GitHub Actions (no manual work required)
 - **~3 million transactions**, 2006–present, live-queryable in Postgres
-- **Dashboard tabs:** Overview, Donors, Recipients, Transactions
+- **Dashboard tabs:** Overview, Donors, Recipients
 - **Explore tab:** filter/sort/paginate the full dataset, download filtered CSV, run read-only SQL
 - **Recommend tab:** donor-targeting suggestions for a committee
 - **Fuzzy name deduplication** with a manual correction override file
@@ -188,7 +188,6 @@ Uncertain matches (80–95% fuzzy confidence) are written to `data/review_queue.
 ## Future Improvements
 
 - Saved/shareable queries and permalinks for Explore filter states
-- Single-file full-dataset download (needs the Supabase Storage upload limit raised above ~150 MB)
 - Candidate-level drill-down pages
 - Email/Slack alerts for large contributions
 
