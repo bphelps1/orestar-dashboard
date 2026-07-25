@@ -1959,6 +1959,85 @@ async function loadOverview() {
     renderOverviewMultiFiler(profiles);
     await loadTimeline();
   }
+  renderFilerRaceHeader();
+}
+
+/**
+ * Candidate / race context for the committees currently filtered on.
+ *
+ * Answers "who is this and what are they running for" without leaving Overview,
+ * and for legislative seats lists the rest of the field from the ORESTAR
+ * candidate filing roster (activity_snapshot.legislative_map) — the ballot
+ * record, not the committee's self-reported election, which goes stale.
+ */
+function renderFilerRaceHeader() {
+  const box = document.getElementById("filer-race-header");
+  if (!box) return;
+  const sel = state.selectedFilers;
+  if (!sel.length || !filerIndex) { box.hidden = true; return; }
+
+  const partyTag = p => {
+    const s = (p || "").toLowerCase();
+    const cls = s.startsWith("dem") ? "D" : s.startsWith("rep") ? "R" : "other";
+    return p ? `<span class="frh-party ${cls}">${cls === "other" ? esc(p) : cls}</span>` : "";
+  };
+
+  const lm = (typeof activitySnapshot !== "undefined" && activitySnapshot)
+    ? activitySnapshot.legislative_map : null;
+  const CHAMBER = { "State Representative": "house", "State Senator": "senate" };
+
+  const rows = sel.map(f => {
+    const row = filerIndex.find(r => r.slug === f.slug) || {};
+    const office = row.office || "";
+    const district = (row.office_district || "").match(/(\d+)\w*\s+District/i);
+    const isCand = row.committee_type === "Candidate Committee";
+
+    const bits = [];
+    if (row.candidate_name) bits.push(esc(row.candidate_name));
+    if (row.office_district) bits.push(esc(row.office_district));
+    else if (row.committee_type) bits.push(esc(row.committee_type));
+    if (row.filer_id) bits.push(`Filer ID ${esc(row.filer_id)}`);
+
+    // Rest of the field, from the filing roster
+    let fieldHtml = "";
+    const chamber = CHAMBER[office];
+    if (lm && chamber && district) {
+      const entry = (lm[chamber] || {})[String(parseInt(district[1], 10))];
+      if (entry && entry.candidates.length) {
+        fieldHtml = `
+          <div class="frh-field">
+            <div class="frh-field-label">${esc(lm.election || "Race")} · ${esc(row.office_district)}</div>
+            ${entry.candidates.map(c => {
+              const me = c.slug && c.slug === f.slug;
+              const nm = esc(c.candidate_name || c.name || "");
+              const label = me ? `<span class="frh-opp-self">${nm}</span>`
+                : (c.slug ? `<a data-slug="${esc(c.slug)}">${nm}</a>` : nm);
+              const amt = c.slug ? fmt$(c.raised_cycle)
+                : `<span class="frh-opp-none">no committee</span>`;
+              return `<div class="frh-opp"><span>${label}${partyTag(c.party)}</span><span>${amt}</span></div>`;
+            }).join("")}
+            <a class="frh-link" href="/races">View race map →</a>
+          </div>`;
+      }
+    }
+    // A candidate committee with no roster entry isn't on the current ballot.
+    if (!fieldHtml && isCand && row.office_district) {
+      fieldHtml = `<div class="frh-field"><span class="frh-opp-none">Not on the current ballot`
+        + `${row.election ? ` — committee reports “${esc(row.election)}”` : ""}</span></div>`;
+    }
+
+    return `<div class="frh-row">
+        <div class="frh-title">${esc(row.name || f.name)}${partyTag(row.party)}</div>
+        ${bits.length ? `<div class="frh-meta">${bits.join(" · ")}</div>` : ""}
+        ${fieldHtml}
+      </div>`;
+  }).join("");
+
+  box.innerHTML = rows;
+  box.hidden = false;
+  // Opponent links reuse the existing in-page filer navigation
+  box.querySelectorAll("a[data-slug]").forEach(a =>
+    a.addEventListener("click", e => { e.preventDefault(); selectFilerBySlug(a.dataset.slug); }));
 }
 
 function renderOverviewGlobal() {
@@ -3257,6 +3336,9 @@ async function loadCampaignPulse() {
     const el = document.getElementById("campaign-pulse");
     if (el) { el.hidden = false; renderPulsePeriod(pulseCurrentPeriod); }
     renderRacesToWatch();
+    // The race header needs legislative_map, which only exists once this
+    // resolves — re-render so the field appears if Overview drew first.
+    renderFilerRaceHeader();
     // Wire up period toggle
     const toggle = document.getElementById("pulse-period-toggle");
     if (toggle) {

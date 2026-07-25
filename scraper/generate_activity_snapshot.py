@@ -478,6 +478,11 @@ def generate(agg_dir: Path = AGG_DIR, filers_dir: Path = FILERS_DIR,
             "growth_1m": growth_1m,
             "growth_3m": growth_3m,
             "growth_cycle": growth_cycle,
+            # Prior-window totals: the growth denominator. Kept so the Momentum
+            # lane can require a real base — a % off near-zero is noise.
+            "prior_1m": round(raised_prior_1m, 2),
+            "prior_3m": round(raised_prior_3m, 2),
+            "prior_cycle": round(raised_prior_cycle, 2),
             "cash_on_hand": row.get("cash_on_hand", 0),
             "total_in": row.get("total_in", 0),
         })
@@ -516,6 +521,9 @@ def generate(agg_dir: Path = AGG_DIR, filers_dir: Path = FILERS_DIR,
             "growth_1m": _cgrowth(raised_1m, raised_prior_1m),
             "growth_3m": _cgrowth(raised_3m, raised_prior_3m),
             "growth_cycle": _cgrowth(raised_cycle, raised_prior_cycle),
+            "prior_1m": round(raised_prior_1m, 2),
+            "prior_3m": round(raised_prior_3m, 2),
+            "prior_cycle": round(raised_prior_cycle, 2),
         })
 
     # Aggregate top donors from per-filer monthly data (full, not limited)
@@ -525,7 +533,8 @@ def generate(agg_dir: Path = AGG_DIR, filers_dir: Path = FILERS_DIR,
     top_donors_cycle = aggregate_top_donors_from_filers(all_filer_details, cycle_months)
 
     # Build output per period
-    def build_period(metric_key, growth_key, top_donors, min_raised=5000):
+    def build_period(metric_key, growth_key, top_donors, min_raised=5000,
+                     prior_key=None):
         by_tier = {"statewide": [], "legislative": [], "local": [], "committees": []}
         growth_candidates = []
 
@@ -553,6 +562,7 @@ def generate(agg_dir: Path = AGG_DIR, filers_dir: Path = FILERS_DIR,
                     "tier": fm["tier"],
                     "raised": raised,
                     "growth_pct": fm[growth_key],
+                    "prior": fm.get(prior_key, 0) if prior_key else 0,
                     "is_new": fm[growth_key] == 999,
                 })
 
@@ -578,6 +588,7 @@ def generate(agg_dir: Path = AGG_DIR, filers_dir: Path = FILERS_DIR,
                     "tier": "committees",
                     "raised": raised,
                     "growth_pct": cm[growth_key],
+                    "prior": cm.get(prior_key, 0) if prior_key else 0,
                     "is_new": cm[growth_key] == 999,
                 })
 
@@ -586,10 +597,15 @@ def generate(agg_dir: Path = AGG_DIR, filers_dir: Path = FILERS_DIR,
             by_tier[tier].sort(key=lambda x: -x["raised"])
             by_tier[tier] = by_tier[tier][:3]
 
-        # Top growth: only existing filers with positive growth (no new entrants)
-        # Sorted by growth percentage descending, flat list (no tiers)
+        # Top growth: existing filers with positive growth (no new entrants).
+        # The prior window must ALSO clear min_raised — otherwise the percentage
+        # is arithmetic noise off a near-zero base ($0.06 -> $1,050 reads as
+        # "+1,750,033%") and those artifacts crowd out real momentum.
         top_growth_list = sorted(
-            [c for c in growth_candidates if not c.get("is_new") and c["growth_pct"] > 0],
+            [c for c in growth_candidates
+             if not c.get("is_new")
+             and c["growth_pct"] > 0
+             and c.get("prior", 0) >= min_raised],
             key=lambda x: -x["growth_pct"],
         )[:12]
 
@@ -605,17 +621,17 @@ def generate(agg_dir: Path = AGG_DIR, filers_dir: Path = FILERS_DIR,
             "30d": {
                 "label": "Last 30 Days",
                 "months": sorted(recent_1m),
-                **build_period("raised_1m", "growth_1m", top_donors_30d, min_raised=500),
+                **build_period("raised_1m", "growth_1m", top_donors_30d, min_raised=500, prior_key="prior_1m"),
             },
             "90d": {
                 "label": "Last 90 Days",
                 "months": sorted(recent_3m),
-                **build_period("raised_3m", "growth_3m", top_donors_90d, min_raised=1000),
+                **build_period("raised_3m", "growth_3m", top_donors_90d, min_raised=1000, prior_key="prior_3m"),
             },
             "cycle": {
                 "label": "This Cycle",
                 "months": sorted(cycle_months),
-                **build_period("raised_cycle", "growth_cycle", top_donors_cycle, min_raised=5000),
+                **build_period("raised_cycle", "growth_cycle", top_donors_cycle, min_raised=5000, prior_key="prior_cycle"),
             },
         },
         "meta": {
