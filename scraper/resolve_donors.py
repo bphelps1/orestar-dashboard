@@ -499,7 +499,8 @@ def write_back(conn, df, assign, donors, aliases):
     abuf.seek(0)
     cur.copy_expert(
         "copy donor_aliases (alias_key, donor_id, raw_name, norm_name, addr_key,"
-        " source, alias_scope) from stdin with (format csv, header true, null '')",
+        " source, alias_scope) from stdin with (format csv, header true,"
+        " force_not_null (addr_key))",   # empty addr_key is '' — not NULL
         abuf)
     conn.commit()
     log.info("  %s donors, %s aliases", f"{len(drows):,}", f"{len(arows):,}")
@@ -514,7 +515,11 @@ def write_back(conn, df, assign, donors, aliases):
     })
     mdf.to_csv(mbuf, index=False)
     mbuf.seek(0)
-    cur.copy_expert("copy _dmap from stdin with (format csv, header true, null '')", mbuf)
+    # force_not_null: empty addr/zip must stay '' so the coalesce() join below
+    # matches no-address rows — as NULLs they would silently never join.
+    cur.copy_expert(
+        "copy _dmap from stdin with (format csv, header true,"
+        " force_not_null (raw_name, addr, zip))", mbuf)
     cur.execute("create index on _dmap (raw_name, addr, zip)")
     # committee-id rows are authoritative regardless of name/address
     cur.execute("""update transactions set donor_id = 'c' || contributor_payee_committee_id
