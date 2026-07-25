@@ -92,6 +92,21 @@ _SUFFIXES = {
 }
 _UNIT_TAIL = re.compile(r"\b(apt|suite|ste|unit|#)\s*\S*\s*$", re.I)
 
+# A comma usually means "LAST, FIRST" — but not when what follows is a corporate
+# form or a personal suffix. Without this guard "Philip Morris USA, Inc." becomes
+# "inc philip morris usa" while "Philip Morris USA Inc." becomes
+# "philip morris usa inc", so the two never share a blocking key and can never
+# merge — even at an identical address. Same for "Smith, Jr." → "jr smith".
+_NO_FLIP_AFTER_COMMA = {
+    # corporate forms
+    "inc", "llc", "corp", "co", "ltd", "lp", "llp", "pc", "plc", "pllc",
+    "company", "incorporated", "corporation", "limited", "sa", "nv", "ag",
+    "gmbh", "pa", "psc", "trust", "foundation", "fund", "and sons", "sons",
+    # personal / professional suffixes
+    "jr", "sr", "ii", "iii", "iv", "v", "md", "phd", "esq", "dds", "cpa",
+    "rn", "do", "dc", "od", "dvm", "jd", "mba", "pe", "aia", "ret",
+}
+
 
 def norm_name(raw: str) -> str:
     """Lowercase, de-punctuate, flip 'LAST, FIRST [MI]' → 'first [mi] last',
@@ -100,7 +115,10 @@ def norm_name(raw: str) -> str:
     s = EMBEDDED_ID_PAT.sub("", s)
     if s.count(",") == 1:
         last, first = s.split(",")
-        if last.strip() and first.strip() and not any(ch.isdigit() for ch in s):
+        # Only invert for a real "LAST, FIRST" — not "Acme, Inc." or "Smith, Jr."
+        tail = _WS.sub(" ", _PUNCT.sub(" ", first.strip().lower())).strip()
+        if (last.strip() and first.strip() and not any(ch.isdigit() for ch in s)
+                and tail not in _NO_FLIP_AFTER_COMMA):
             s = f"{first.strip()} {last.strip()}"
     s = _PUNCT.sub(" ", s.lower())
     return _WS.sub(" ", s).strip()
