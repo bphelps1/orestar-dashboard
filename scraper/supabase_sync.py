@@ -139,14 +139,43 @@ def _parse_dsn(dsn: str) -> dict:
     }
 
 
-def _connect():
+def _connect(attempts: int = 6):
+    """Connect, retrying transient pool-checkout failures with backoff.
+
+    Supabase's session pooler has a finite slot count; a cancelled job or a
+    burst of activity can exhaust it, and every connect then fails with
+    ECHECKOUTTIMEOUT for minutes. Without a retry a long batch job dies on its
+    very first connection, throwing away all the work that would follow."""
+    import time
     import psycopg2  # imported lazily so local runs without the dep still work
     _load_dotenv()
     params = _parse_dsn(os.environ["SUPABASE_DB_URL"])
     # TLS + TCP keepalives keep long bulk-load connections from being dropped.
     params.update(sslmode="require", keepalives=1, keepalives_idle=30,
                   keepalives_interval=10, keepalives_count=5)
-    conn = psycopg2.connect(**params)
+    last = None
+    for attempt in range(1, attempts + 1):
+        try:
+            conn = psycopg2.connect(**params)
+            break
+        except psycopg2.OperationalError as e:
+            msg = str(e)
+            transient = ("ECHECKOUTTIMEOUT" in msg              # pooler slots exhausted
+                         or "authentication did not complete" in msg
+                         or "too many clients" in msg
+                         or "timeout expired" in msg
+                         or "SSL connection has been closed" in msg   # dropped mid-handshake
+                         or "server closed the connection" in msg
+                         or "Connection refused" in msg)
+            last = e
+            if not transient or attempt == attempts:
+                raise
+            wait = min(60, 5 * 2 ** (attempt - 1))
+            log.warning("DB connect attempt %d/%d failed (%s) — retrying in %ds",
+                        attempt, attempts, msg.strip().split("\n")[0][:80], wait)
+            time.sleep(wait)
+    else:  # pragma: no cover — loop always breaks or raises
+        raise last
     # Supabase enforces a 2-min statement_timeout by default, which cancels
     # building a GIN trigram index over 3M rows. This is a trusted maintenance
     # connection (service role), so disable the per-statement timeout.
