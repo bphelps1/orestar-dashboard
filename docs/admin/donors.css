@@ -275,3 +275,35 @@
   gap: 6px;
   white-space: nowrap;
 }
+
+/* ── Entity Merges (address-aware) ─────────────────────────────────────── */
+.em-picker { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin: 1rem 0; }
+@media (max-width: 780px) { .em-picker { grid-template-columns: 1fr; } }
+.em-side label { display: block; font-weight: 600; font-size: .85rem; margin-bottom: .3rem; }
+.em-box { position: relative; }
+.em-box input { width: 100%; padding: .5rem .6rem; border: 1px solid #ccc; border-radius: 6px; font-size: .9rem; }
+.em-results {
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 40; background: #fff;
+  border: 1px solid #e2e8f0; border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.08);
+  max-height: 320px; overflow-y: auto; list-style: none; margin: 3px 0 0; padding: 0;
+}
+.em-results li { padding: .45rem .6rem; cursor: pointer; }
+.em-results li:hover { background: #ebf4ff; }
+.em-r-name { font-weight: 600; font-size: .88rem; }
+.em-r-meta { color: #718096; font-size: .76rem; }
+.em-card:empty { display: none; }
+.em-card { margin-top: .6rem; border: 1px solid #e2e8f0; border-radius: 8px; padding: .7rem; background: #f7fafc; }
+.em-card-name { font-weight: 700; }
+.em-card-meta { color: #4a5568; font-size: .8rem; margin-bottom: .4rem; }
+.em-card-nums { display: flex; gap: .9rem; font-size: .8rem; font-variant-numeric: tabular-nums; margin-bottom: .5rem; }
+.em-addr-title { font-size: .75rem; text-transform: uppercase; letter-spacing: .03em; color: #718096; }
+.em-addr { font-size: .78rem; font-family: ui-monospace, Menlo, monospace; color: #2d3748; }
+.em-actions { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-top: .5rem; }
+.em-status { color: #4a5568; font-size: .84rem; }
+.em-note { font-style: italic; }
+.em-row { display: flex; justify-content: space-between; align-items: flex-start;
+          gap: 1rem; padding: .5rem 0; border-bottom: 1px solid #edf2f7; }
+.em-badge { display: inline-block; border-radius: 4px; font-size: .68rem; text-transform: uppercase;
+            padding: 1px 6px; margin-right: 6px; color: #fff; }
+.em-badge.em-merged { background: #38a169; }
+.em-badge.em-separate { background: #718096; }

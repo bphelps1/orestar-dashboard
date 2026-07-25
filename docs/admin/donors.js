@@ -647,3 +647,177 @@ async function reconsiderPair(pk) {
   renderRejectedPairs();
   renderPendingPairs(document.getElementById("review-search").value);
 }
+
+// ── Entity Merges (address-aware) ────────────────────────────────────────────
+//
+// The pair-based flow above keys decisions on NAMES, so it cannot express
+// "same name, different address" — the case where one company resolves into
+// several entities. This section searches resolved entities directly and
+// records decisions keyed on alias_key (norm_name|addr_key), which is stable
+// across resolver runs. donor_id must NOT be used: it is a content hash of the
+// cluster and changes on every run.
+
+const emState = { a: null, b: null };
+
+const emFmt$ = v => Number(v || 0).toLocaleString("en-US",
+  { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+
+async function emSearch(q) {
+  const sb = await getSupabase();
+  const { data, error } = await sb.rpc("donor_search", { p_q: q, p_limit: 12 });
+  if (error) { console.warn("donor_search:", error.message); return []; }
+  return data || [];
+}
+
+function emRenderCard(side) {
+  const d = emState[side];
+  const el = document.getElementById(`em-card-${side}`);
+  if (!d) { el.innerHTML = ""; emSyncButtons(); return; }
+  const addrs = (d.addresses || []);
+  el.innerHTML = `
+    <div class="em-card-name">${esc(d.display_name)}</div>
+    <div class="em-card-meta">${esc([d.book_type,
+        [d.city, d.state].filter(Boolean).join(", ")].filter(Boolean).join(" · "))}</div>
+    <div class="em-card-nums">
+      <span>${emFmt$(d.total_given)} given</span>
+      <span>${Number(d.gift_count || 0).toLocaleString()} gifts</span>
+      <span>${Number(d.alias_count || 0).toLocaleString()} aliases</span>
+    </div>
+    <div class="em-card-addrs">
+      <div class="em-addr-title">${addrs.length} address${addrs.length === 1 ? "" : "es"}</div>
+      ${addrs.slice(0, 6).map(a => `<div class="em-addr">${esc(a)}</div>`).join("")}
+      ${addrs.length > 6 ? `<div class="em-addr">…and ${addrs.length - 6} more</div>` : ""}
+    </div>`;
+  emSyncButtons();
+}
+
+function emSyncButtons() {
+  const ready = !!(emState.a && emState.b &&
+                   emState.a.rep_alias_key && emState.b.rep_alias_key &&
+                   emState.a.donor_id !== emState.b.donor_id);
+  document.getElementById("em-merge-btn").disabled = !ready;
+  document.getElementById("em-separate-btn").disabled = !ready;
+  const status = document.getElementById("em-status");
+  if (emState.a && emState.b && emState.a.donor_id === emState.b.donor_id) {
+    status.textContent = "Both sides are the same entity — pick two different ones.";
+  } else if (ready) {
+    status.textContent = "";
+  }
+}
+
+function emInitSide(side) {
+  const input = document.getElementById(`em-search-${side}`);
+  const ul = document.getElementById(`em-results-${side}`);
+  let timer = null;
+  input.addEventListener("input", () => {
+    emState[side] = null;
+    emRenderCard(side);
+    clearTimeout(timer);
+    const q = input.value.trim();
+    if (q.length < 2) { ul.hidden = true; return; }
+    timer = setTimeout(async () => {
+      const rows = await emSearch(q);
+      if (!rows.length) { ul.hidden = true; return; }
+      ul.innerHTML = rows.map((r, i) => `
+        <li data-i="${i}">
+          <div class="em-r-name">${esc(r.display_name)}</div>
+          <div class="em-r-meta">${esc([r.book_type,
+            [r.city, r.state].filter(Boolean).join(", ")].filter(Boolean).join(" · "))}
+            · ${emFmt$(r.total_given)} · ${(r.addresses || []).length} addr</div>
+        </li>`).join("");
+      ul.hidden = false;
+      ul.querySelectorAll("li").forEach((li, i) => li.addEventListener("mousedown", () => {
+        emState[side] = rows[i];
+        input.value = rows[i].display_name;
+        ul.hidden = true;
+        emRenderCard(side);
+      }));
+    }, 220);
+  });
+  document.addEventListener("click", e => {
+    if (!e.target.closest(`#em-search-${side}`) && !e.target.closest(`#em-results-${side}`)) {
+      ul.hidden = true;
+    }
+  });
+}
+
+async function emRecord(decision) {
+  const a = emState.a, b = emState.b;
+  if (!a || !b) return;
+  const status = document.getElementById("em-status");
+  status.textContent = "Saving…";
+  try {
+    const sb = await getSupabase();
+    const [ka, kb] = [a.rep_alias_key, b.rep_alias_key].sort();
+    const session = await getSession();
+    const { error } = await sb.from("donor_merge_overrides").upsert({
+      merge_key: `${ka}|||${kb}`,
+      alias_a: ka, alias_b: kb,
+      decision,
+      label_a: a.display_name, label_b: b.display_name,
+      decided_by: session?.user?.email || null,
+    });
+    if (error) throw new Error(error.message);
+    status.textContent = decision === "merged"
+      ? "Merge recorded — applied on the next resolver run."
+      : "Marked as separate — they will not be merged.";
+    emState.a = emState.b = null;
+    ["a", "b"].forEach(s => {
+      document.getElementById(`em-search-${s}`).value = "";
+      emRenderCard(s);
+    });
+    await emLoadList();
+  } catch (e) {
+    status.textContent = "Failed: " + e.message;
+  }
+}
+
+async function emLoadList(filter = "") {
+  const el = document.getElementById("em-list");
+  if (!el) return;
+  try {
+    const sb = await getSupabase();
+    const { data, error } = await sb.from("donor_merge_overrides")
+      .select("*").order("decided_at", { ascending: false }).limit(200);
+    if (error) throw new Error(error.message);
+    const q = filter.toLowerCase();
+    const rows = (data || []).filter(r =>
+      !q || `${r.label_a} ${r.label_b} ${r.alias_a} ${r.alias_b}`.toLowerCase().includes(q));
+    if (!rows.length) { el.innerHTML = '<p class="empty-msg">No entity decisions recorded yet.</p>'; return; }
+    el.innerHTML = rows.map(r => `
+      <div class="em-row">
+        <div>
+          <span class="em-badge em-${esc(r.decision)}">${esc(r.decision)}</span>
+          <strong>${esc(r.label_a || r.alias_a)}</strong>
+          ${r.decision === "merged" ? "＋" : "✕"}
+          <strong>${esc(r.label_b || r.alias_b)}</strong>
+          <div class="em-r-meta">${esc(r.alias_a)} ↔ ${esc(r.alias_b)}</div>
+        </div>
+        <button class="btn-link em-undo" data-key="${esc(r.merge_key)}">Undo</button>
+      </div>`).join("");
+    el.querySelectorAll(".em-undo").forEach(btn => btn.addEventListener("click", async () => {
+      const sb2 = await getSupabase();
+      await sb2.from("donor_merge_overrides").delete().eq("merge_key", btn.dataset.key);
+      emLoadList(document.getElementById("em-filter").value.trim());
+    }));
+  } catch (e) {
+    el.innerHTML = `<p class="empty-msg">Could not load: ${esc(e.message)}</p>`;
+  }
+}
+
+function initEntityMerge() {
+  if (!document.getElementById("em-search-a")) return;
+  emInitSide("a");
+  emInitSide("b");
+  document.getElementById("em-merge-btn").addEventListener("click", () => emRecord("merged"));
+  document.getElementById("em-separate-btn").addEventListener("click", () => emRecord("separate"));
+  const filter = document.getElementById("em-filter");
+  let ft = null;
+  filter.addEventListener("input", () => {
+    clearTimeout(ft);
+    ft = setTimeout(() => emLoadList(filter.value.trim()), 200);
+  });
+  emLoadList();
+}
+
+document.addEventListener("DOMContentLoaded", initEntityMerge);

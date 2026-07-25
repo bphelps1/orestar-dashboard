@@ -249,6 +249,31 @@ def load_committee_namespace(conn) -> dict:
     return ns
 
 
+def load_alias_constraints(conn) -> tuple[list, set]:
+    """Manual entity-level merges → (must_alias: [(a,b)], cannot_alias: {frozenset}).
+
+    Keyed on alias_key (norm_name|addr_key) rather than name, so a reviewer can
+    merge two entities that share a name but sit at different addresses — which
+    a name→name constraint cannot express."""
+    must: list[tuple[str, str]] = []
+    cannot: set[frozenset] = set()
+    cur = conn.cursor()
+    try:
+        cur.execute("select alias_a, alias_b, decision from donor_merge_overrides")
+    except Exception:
+        conn.rollback()          # table not migrated yet — no overrides to apply
+        return must, cannot
+    for a, b, decision in cur.fetchall():
+        if not a or not b or a == b:
+            continue
+        if decision == "merged":
+            must.append((a, b))
+        elif decision == "separate":
+            cannot.add(frozenset((a, b)))
+    log.info("Alias overrides: %d merge, %d separate", len(must), len(cannot))
+    return must, cannot
+
+
 def load_constraints(conn) -> tuple[dict, set]:
     """entity_map + review decisions → (must_link: norm→norm, cannot: {frozenset})"""
     must: dict[str, str] = {}
@@ -286,9 +311,12 @@ def committee_eligible(book_type: str, raw_name: str) -> bool:
 
 # ── Resolution ───────────────────────────────────────────────────────────────
 
-def resolve(df: pd.DataFrame, ns: dict, must: dict, cannot: set):
+def resolve(df: pd.DataFrame, ns: dict, must: dict, cannot: set,
+            must_alias: list | None = None, cannot_alias: set | None = None):
     """Returns (assignments: tuple_idx→donor_id, donors: {id→meta},
     aliases: list, review: list)."""
+    must_alias = must_alias or []
+    cannot_alias = cannot_alias or set()
     donors: dict[str, dict] = {}
     assign: dict[int, str] = {}
     aliases: list[dict] = []
@@ -393,8 +421,27 @@ def resolve(df: pd.DataFrame, ns: dict, must: dict, cannot: set):
                 for i in lst[1:]:
                     uf.union(lst[0], i)
 
+    # must-links from manual entity-level merges (alias-level: name+address).
+    # These express "same entity at a different address", which the name-level
+    # constraints above cannot.
+    alias_groups: dict[str, list[int]] = defaultdict(list)
+    for idx in sub.index:
+        alias_groups[sub.at[idx, "aliaskey"]].append(idx)
+    n_applied = 0
+    for a, b in must_alias:
+        if a in alias_groups and b in alias_groups:
+            uf.union(alias_groups[a][0], alias_groups[b][0])
+            for lst in (alias_groups[a], alias_groups[b]):
+                for i in lst[1:]:
+                    uf.union(lst[0], i)
+            n_applied += 1
+    if must_alias:
+        log.info("Applied %d/%d manual entity merges", n_applied, len(must_alias))
+
     def blocked(i, j) -> bool:
-        return frozenset((sub.at[i, "nname"], sub.at[j, "nname"])) in cannot
+        if frozenset((sub.at[i, "nname"], sub.at[j, "nname"])) in cannot:
+            return True
+        return frozenset((sub.at[i, "aliaskey"], sub.at[j, "aliaskey"])) in cannot_alias
 
     # Pass 1 — same normalized name: same zip5 → auto-union (exact-name rule)
     for nname, idxs in norm_groups.items():
@@ -716,7 +763,9 @@ def main():
     df = load_tuples(conn)
     ns = load_committee_namespace(conn)
     must, cannot = load_constraints(conn)
-    assign, donors, aliases, review = resolve(df, ns, must, cannot)
+    must_alias, cannot_alias = load_alias_constraints(conn)
+    assign, donors, aliases, review = resolve(df, ns, must, cannot,
+                                              must_alias, cannot_alias)
 
     n_committee = sum(1 for d in donors if d.startswith("c"))
     log.info("RESULT: %s entities (%s committees, %s clusters) from %s tuples / %s raw names",

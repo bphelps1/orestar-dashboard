@@ -50,6 +50,7 @@
     <button class="admin-tab-btn active" data-admin-tab="tab-pending">Pending Review</button>
     <button class="admin-tab-btn" data-admin-tab="tab-active-merges">Active Merges</button>
     <button class="admin-tab-btn" data-admin-tab="tab-manual-merge">Manual Merge</button>
+    <button class="admin-tab-btn" data-admin-tab="tab-entity-merge">Entity Merges</button>
     <button class="admin-tab-btn" data-admin-tab="tab-rejected">Rejected Pairs</button>
   </div>
 
@@ -116,6 +117,53 @@
         </div>
         <button id="merge-create-btn" class="btn-primary" disabled>Merge</button>
       </div>
+    </section>
+  </div>
+
+  <!-- Tab: Entity Merges (address-aware) -->
+  <div id="tab-entity-merge" class="admin-tab" hidden>
+    <section class="admin-section">
+      <h2>Merge Donor Entities</h2>
+      <p class="section-desc">
+        For donors split across <strong>multiple addresses</strong> — e.g. one company
+        filing from several offices. Search resolved entities, compare their addresses
+        and totals, then merge. Decisions are keyed on name+address, so they survive
+        every re-run of the resolver.
+      </p>
+
+      <div class="em-picker">
+        <div class="em-side">
+          <label for="em-search-a">Entity A</label>
+          <div class="em-box">
+            <input type="text" id="em-search-a" placeholder="Search donors — e.g. Philip Morris…" autocomplete="off" />
+            <ul class="em-results" id="em-results-a" hidden></ul>
+          </div>
+          <div class="em-card" id="em-card-a"></div>
+        </div>
+        <div class="em-side">
+          <label for="em-search-b">Entity B</label>
+          <div class="em-box">
+            <input type="text" id="em-search-b" placeholder="Search donors…" autocomplete="off" />
+            <ul class="em-results" id="em-results-b" hidden></ul>
+          </div>
+          <div class="em-card" id="em-card-b"></div>
+        </div>
+      </div>
+
+      <div class="em-actions">
+        <button id="em-merge-btn" class="btn-primary" disabled>Merge these entities</button>
+        <button id="em-separate-btn" class="btn-secondary" disabled>Mark as separate</button>
+        <span class="em-status" id="em-status"></span>
+      </div>
+      <p class="section-desc em-note">
+        Applied on the next run of the Donor Entity Resolution workflow.
+      </p>
+    </section>
+
+    <section class="admin-section">
+      <h2>Recorded Entity Decisions</h2>
+      <input type="search" id="em-filter" class="table-search" placeholder="Filter decisions…" />
+      <div id="em-list"></div>
     </section>
   </div>
 
