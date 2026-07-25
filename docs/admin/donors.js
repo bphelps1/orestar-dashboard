@@ -128,9 +128,29 @@ function renderPendingPairs(filter = "") {
 
   listEl.innerHTML = shown.map((item, i) => {
     const key = pairKey(item.a, item.b);
+    // Evidence from the entity resolver (type + corroborating signals)
+    let evidenceHtml = "";
+    if (item.evidence && item.evidence.type) {
+      const ev = item.evidence;
+      const labels = {
+        name_vs_filer: "Possible committee match",
+        same_address: "Same address",
+        name_only: "Similar name, no address corroboration",
+        possible_name_change: "Possible name change (same address, same first name)",
+        guard_conflict: "Committee-like name filed as Individual",
+      };
+      const extra = [
+        ev.addr ? `addr: ${ev.addr}` : "",
+        ev.filer_id ? `filer ID: ${ev.filer_id}` : "",
+        ev.book_type ? `book type: ${ev.book_type}` : "",
+        ev.employer_match ? "employer matches" : "",
+      ].filter(Boolean).join(" · ");
+      evidenceHtml = `<div class="pair-evidence">${esc(labels[ev.type] || ev.type)}${extra ? " — " + esc(extra) : ""}</div>`;
+    }
     return `
       <div class="cluster-card" data-pair-key="${esc(key)}" data-pair-idx="${i}">
         <div class="pair-score">Score: ${item.score}</div>
+        ${evidenceHtml}
         <div class="cluster-names">
           <div class="pair-name">
             <label><input type="radio" name="keep-${i}" value="a" checked /> <span>${esc(item.a)}</span></label>

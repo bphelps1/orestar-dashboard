@@ -40,6 +40,14 @@
   gap: 4px;
   margin-bottom: 12px;
 }
+.pair-evidence {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  background: var(--color-surface-alt, #f7fafc);
+  border-radius: 4px;
+  padding: 4px 8px;
+  margin: 4px 0 8px;
+}
 .cluster-name {
   display: flex;
   align-items: center;
