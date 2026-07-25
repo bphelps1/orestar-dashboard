@@ -39,10 +39,16 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const fmtAmount = v => (v == null || v === "") ? "" : Number(v).toLocaleString("en-US", { style: "currency", currency: "USD" });
 
+// Entity-aware donor filter: when the user picks a resolved donor from the
+// dropdown, we filter by donor_id (matching every name/address variant)
+// instead of a raw-name ilike.
+let selectedDonor = null; // {donor_id, display_name}
+
 function readFilters() {
   return {
     filer: $("f-filer").value.trim(),
     payee: $("f-payee").value.trim(),
+    donorId: selectedDonor ? selectedDonor.donor_id : "",
     type: $("f-type").value,
     ctype: $("f-ctype").value.trim(),
     dateStart: $("f-date-start").value,
@@ -55,7 +61,8 @@ function readFilters() {
 /** Apply the current filters to a supabase query builder. */
 function applyFilters(q, f) {
   if (f.filer)     q = q.ilike("filer_canonical", `%${f.filer}%`);
-  if (f.payee)     q = q.ilike("contributor_payee_canonical", `%${f.payee}%`);
+  if (f.donorId)   q = q.eq("donor_id", f.donorId);
+  else if (f.payee) q = q.ilike("contributor_payee_canonical", `%${f.payee}%`);
   if (f.type)      q = q.eq("tran_type", f.type);
   if (f.ctype)     q = q.ilike("book_type", `%${f.ctype}%`);
   if (f.dateStart) q = q.gte("tran_date", f.dateStart);
@@ -219,11 +226,52 @@ function csvCell(v) {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+// ── Donor entity autocomplete ───────────────────────────────────────────────
+let donorSearchTimer = null;
+
+function initDonorAutocomplete() {
+  const input = $("f-payee");
+  const ul = $("f-payee-results");
+  input.addEventListener("input", () => {
+    selectedDonor = null; // typing clears any picked entity
+    clearTimeout(donorSearchTimer);
+    const q = input.value.trim();
+    if (q.length < 2) { ul.hidden = true; return; }
+    donorSearchTimer = setTimeout(async () => {
+      try {
+        const sb = await getSupabase();
+        const { data } = await sb.from("donors")
+          .select("donor_id, display_name, book_type, city, state, total_given")
+          .ilike("display_name", `%${q}%`)
+          .order("total_given", { ascending: false })
+          .limit(8);
+        if (!data || !data.length) { ul.hidden = true; return; }
+        ul.innerHTML = data.map((d, i) =>
+          `<li data-idx="${i}">${esc(d.display_name)}
+             <div class="sub">${esc([d.book_type, [d.city, d.state].filter(Boolean).join(", ")].filter(Boolean).join(" · "))}
+             · ${Number(d.total_given || 0).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })}</div></li>`).join("");
+        ul.hidden = false;
+        ul.querySelectorAll("li").forEach((li, i) => li.addEventListener("mousedown", () => {
+          selectedDonor = data[i];
+          input.value = data[i].display_name;
+          ul.hidden = true;
+          page = 0;
+          runSearch();
+        }));
+      } catch { ul.hidden = true; }
+    }, 220);
+  });
+  document.addEventListener("click", e => {
+    if (!e.target.closest("#f-payee") && !e.target.closest("#f-payee-results")) ul.hidden = true;
+  });
+}
+
 // ── Init ────────────────────────────────────────────────────────────────────
 function resetFilters() {
   ["f-filer", "f-payee", "f-ctype", "f-date-start", "f-date-end", "f-amt-min", "f-amt-max"]
     .forEach(id => { $(id).value = ""; });
   $("f-type").value = "";
+  selectedDonor = null;
   page = 0; sortCol = "tran_date"; sortDir = false;
   runSearch();
 }
@@ -238,5 +286,6 @@ document.addEventListener("DOMContentLoaded", () => {
   $("pg-next").onclick = () => { if (lastPageCount === PAGE_SIZE) { page++; runSearch(); } };
   ["f-filer", "f-payee", "f-ctype"].forEach(id =>
     $(id).addEventListener("keydown", e => { if (e.key === "Enter") { page = 0; runSearch(); } }));
+  initDonorAutocomplete();
   runSearch();
 });

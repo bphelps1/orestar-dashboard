@@ -3440,6 +3440,13 @@ const loaders = {
   // Load donor→filer map in background (non-blocking)
   ensureDonorFilerMap().catch(() => {});
   initFilerSelector();
+  // Cross-page handoff: /donors and /races link to a committee by stashing
+  // its slug in sessionStorage before navigating here.
+  const handoff = sessionStorage.getItem("openFilerSlug");
+  if (handoff) {
+    sessionStorage.removeItem("openFilerSlug");
+    selectFilerBySlug(handoff);
+  }
   renderActiveTab();
 
   // Silently check if user has admin/reviewer role — show admin button if so

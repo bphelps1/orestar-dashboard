@@ -183,6 +183,59 @@ def build_races(filer_metrics: list[dict], index: list[dict]) -> list[dict]:
     return statewide + other
 
 
+def build_legislative_map(filer_metrics: list[dict], index: list[dict]) -> dict:
+    """Race-map data: current-cycle candidates per legislative district.
+
+    {"house": {"27": {"district": 27, "total_raised": X, "candidates": [...]}, …},
+     "senate": {...}, "cycle_start": "2025-01"}
+
+    Same strict election gate as build_races (ORESTAR election field must be
+    this year or next), but includes single-candidate districts — the map
+    shows everyone in the field, not only contested races.
+    """
+    import re as _re
+    metric_by_slug = {fm["slug"]: fm for fm in filer_metrics}
+    now = datetime.now()
+    valid_election_years = {now.year, now.year + 1}
+    chambers = {"State Representative": "house", "State Senator": "senate"}
+    dist_pat = _re.compile(r"(\d+)\w*\s+District", _re.I)
+
+    out = {"house": {}, "senate": {}, "cycle_start": "2025-01",
+           "election_years": sorted(valid_election_years)}
+    for row in index:
+        if row.get("committee_type") != "Candidate Committee":
+            continue
+        chamber = chambers.get(row.get("office", ""))
+        if not chamber:
+            continue
+        m = dist_pat.search(row.get("office_district", "") or "")
+        if not m:
+            continue
+        election = row.get("election", "")
+        yr = _re.match(r"(\d{4})", election or "")
+        if not yr or int(yr.group(1)) not in valid_election_years:
+            continue
+        district = str(int(m.group(1)))
+        fm = metric_by_slug.get(row.get("slug", ""), {})
+        entry = out[chamber].setdefault(district, {
+            "district": int(district), "total_raised": 0.0, "candidates": []})
+        cand = {
+            "slug": row.get("slug", ""),
+            "name": row.get("name", ""),
+            "party": row.get("party", ""),
+            "candidate_name": row.get("candidate_name", ""),
+            "election": election,
+            "raised_cycle": round(fm.get("raised_cycle", 0), 2),
+            "cash_on_hand": row.get("cash_on_hand", 0),
+        }
+        entry["candidates"].append(cand)
+        entry["total_raised"] = round(entry["total_raised"] + cand["raised_cycle"], 2)
+    for chamber in ("house", "senate"):
+        for entry in out[chamber].values():
+            entry["candidates"].sort(key=lambda c: -c["raised_cycle"])
+    return out
+
+
 def generate(agg_dir: Path = AGG_DIR, filers_dir: Path = FILERS_DIR) -> dict:
     """Generate the activity snapshot data structure."""
     with open(agg_dir / "filer_index.json") as f:
@@ -467,6 +520,7 @@ def generate(agg_dir: Path = AGG_DIR, filers_dir: Path = FILERS_DIR) -> dict:
     }
 
     snapshot["races"] = build_races(filer_metrics, index)
+    snapshot["legislative_map"] = build_legislative_map(filer_metrics, index)
 
     return snapshot
 

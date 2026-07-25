@@ -38,6 +38,21 @@
     }
     .xp-note { font-size: .8rem; color: #718096; margin: .4rem 0; }
     .xp-error { color: #c53030; font-size: .85rem; margin: .5rem 0; white-space: pre-wrap; }
+    .xp-donor-results {
+      position: absolute; top: 100%; left: 0; right: 0; z-index: 30;
+      background: #fff; border: 1px solid #e2e8f0; border-radius: 6px;
+      box-shadow: 0 6px 18px rgba(0,0,0,.08); max-height: 300px; overflow-y: auto;
+      list-style: none; margin: 2px 0 0; padding: 0; font-size: .85rem;
+    }
+    .xp-donor-results li { padding: .4rem .6rem; cursor: pointer; }
+    .xp-donor-results li:hover { background: #ebf4ff; }
+    .xp-donor-results .sub { color: #718096; font-size: .75rem; }
+    .xp-entity-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: #ebf4ff; color: #2b6cb0; border-radius: 4px;
+      font-size: .75rem; padding: 1px 6px; margin-top: 3px;
+    }
+    .xp-entity-chip button { border: 0; background: none; color: inherit; cursor: pointer; font-size: .9em; }
   </style>
 </head>
 <body>
@@ -53,6 +68,7 @@
   <div class="tab-nav-inner">
     <a class="tab-btn tab-link" href="/">← Dashboard</a>
     <span class="tab-btn active">Explore</span>
+    <a class="tab-btn tab-link" href="/donors">Donor Lookup</a>
   </div>
 </nav>
 
@@ -67,9 +83,10 @@
       <label for="f-filer">Committee (filer)</label>
       <input type="text" id="f-filer" placeholder="e.g. Kotek" />
     </div>
-    <div class="xp-field">
+    <div class="xp-field" style="position:relative">
       <label for="f-payee">Donor / payee</label>
-      <input type="text" id="f-payee" placeholder="e.g. Nike" />
+      <input type="text" id="f-payee" placeholder="e.g. Nike" autocomplete="off" />
+      <ul class="xp-donor-results" id="f-payee-results" hidden></ul>
     </div>
     <div class="xp-field">
       <label for="f-type">Transaction type</label>
