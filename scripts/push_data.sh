@@ -17,7 +17,12 @@
 # onto it, restore our generated files, and re-commit. Fails loudly.
 #
 # Usage: scripts/push_data.sh "<commit message>" <path> [path...]
-set -uo pipefail
+# Deliberately no `set -u`: guarding empty arrays against it needs constructs
+# like ${arr[@]+"${arr[@]}"} and ${#arr[@]-0} whose behaviour differs between
+# bash 3.2 (macOS, where this gets tested) and bash 5 (CI). One of those
+# variants parsed locally, failed on CI, and turned a SUCCESSFUL push into a
+# reported failure. Plain array syntax is worth more here than -u.
+set -o pipefail
 
 MSG="${1:?commit message required}"; shift
 [ "$#" -gt 0 ] || { echo "no paths given"; exit 2; }
@@ -44,7 +49,7 @@ while IFS= read -r line; do
 done < <(git diff --name-only HEAD~1 HEAD)
 
 SNAP="$(mktemp -d)"
-for f in ${CHANGED[@]+"${CHANGED[@]}"}; do   # ${...[@]+...} keeps `set -u` happy when empty
+for f in "${CHANGED[@]}"; do
   [ -f "$f" ] || continue
   mkdir -p "$SNAP/$(dirname "$f")"
   cp "$f" "$SNAP/$f"
@@ -60,7 +65,7 @@ fi
 
 for attempt in 1 2 3; do
   if run_git push origin "HEAD:$BRANCH"; then
-    echo "Pushed ${#CHANGED[@]-0} file(s) on attempt $attempt."
+    echo "Pushed ${#CHANGED[@]} file(s) on attempt $attempt."
     exit 0
   fi
   echo "Push attempt $attempt failed — re-syncing with origin/$BRANCH (shallow)…"
@@ -71,7 +76,7 @@ for attempt in 1 2 3; do
     continue
   fi
   git reset --hard FETCH_HEAD
-  for f in ${CHANGED[@]+"${CHANGED[@]}"}; do
+  for f in "${CHANGED[@]}"; do
     [ -f "$SNAP/$f" ] || continue
     mkdir -p "$(dirname "$f")"
     cp "$SNAP/$f" "$f"
