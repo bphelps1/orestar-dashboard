@@ -320,6 +320,12 @@ document.querySelectorAll(".admin-tab-btn").forEach(btn => {
     if (tab === "tab-active-merges" || tab === "tab-manual-merge" || tab === "tab-rejected") {
       loadMergeManager();
     }
+    if (tab === "tab-candidate-links") {
+      clLoad().catch(e => {
+        document.getElementById("cl-list").innerHTML =
+          `<p class="empty-msg">Could not load: ${esc(e.message)}</p>`;
+      });
+    }
   });
 });
 
@@ -854,3 +860,192 @@ function initEntityMerge() {
 }
 
 document.addEventListener("DOMContentLoaded", initEntityMerge);
+
+// ══════════════════════════════════════════════════════════════════════
+// Candidate → committee links
+//
+// The matcher pairs a filed candidate with a committee using the district
+// plus a tiered name comparison, and reports what it could not pair. Some of
+// those genuinely have no committee; a few have one the matcher was right to
+// refuse — "David Nelson" filed for HD 17 while a committee of that exact name
+// reads "State Senator, 28th District", which is plausibly a different person.
+//
+// Guessing either way is the failure this tab exists to prevent: a wrong link
+// shows one candidate's money under another's name, a missed one shows a
+// funded candidate at $0, and both look equally confident on the map.
+// ══════════════════════════════════════════════════════════════════════
+
+let clUnmatched = [];      // review queue, from the snapshot
+let clCommittees = [];     // candidate committees, for search
+let clDecisions = [];      // rows already recorded
+let clDecisionsError = null;
+
+/** Normalised name tokens, minus initials and honorifics — mirrors the scraper. */
+const CL_NOISE = new Set(["dr","mr","mrs","ms","miss","rev","hon","sen","rep","gov",
+  "jr","sr","ii","iii","iv","vi","md","phd","dds","esq","cpa","rn"]);
+function clKey(name) {
+  return (name || "").toLowerCase().replace(/[^a-z ]/g, " ").split(/\s+/)
+    .filter(t => t.length > 1 && !CL_NOISE.has(t)).join(" ");
+}
+
+async function clLoad() {
+  const sb = await getSupabase();
+  const [snap, idx, dec] = await Promise.all([
+    sb.from("dashboard_cache").select("data").eq("key", "activity_snapshot").single(),
+    sb.from("dashboard_cache").select("data").eq("key", "filer_index").single(),
+    sb.from("candidate_committee_links").select("*").order("decided_at", { ascending: false }),
+  ]);
+  if (snap.error) throw new Error(snap.error.message);
+  if (idx.error) throw new Error(idx.error.message);
+
+  const lm = (snap.data?.data || {}).legislative_map || {};
+  // Older snapshots stored display strings; those cannot be acted on, so skip
+  // them rather than render a row whose buttons would write a malformed key.
+  clUnmatched = (lm.unmatched || []).filter(u => u && typeof u === "object" && u.key);
+  clCommittees = (idx.data?.data || []).filter(f => f.committee_type === "Candidate Committee");
+  // An unreadable table must not render as "no decisions recorded" — that
+  // reads as a clean slate and invites re-deciding what is already decided.
+  clDecisionsError = dec.error ? dec.error.message : null;
+  clDecisions = dec.error ? [] : (dec.data || []);
+  clRender();
+  clRenderDecisions();
+}
+
+function clRender(filter = "") {
+  const el = document.getElementById("cl-list");
+  const decided = new Set(clDecisions.map(d => d.candidate_key));
+  const q = filter.toLowerCase();
+  const rows = clUnmatched
+    .filter(u => !decided.has(u.key))
+    .filter(u => !q || `${u.ballot_name} ${u.office_district}`.toLowerCase().includes(q));
+
+  document.getElementById("cl-count").textContent = clDecisionsError
+    ? `${rows.length} listed · decisions unavailable`
+    : `${rows.length} awaiting review · ${decided.size} decided`;
+
+  if (!rows.length) {
+    el.innerHTML = '<p class="empty-msg">Nothing awaiting review.</p>';
+    return;
+  }
+  el.innerHTML = rows.map(u => `
+    <div class="em-row" data-key="${esc(u.key)}">
+      <div>
+        <b>${esc(u.ballot_name)}</b>
+        <span class="section-desc"> — ${esc(u.office_district)}${u.party ? " · " + esc(u.party) : ""}</span>
+      </div>
+      <div class="cl-suggest">${clSuggestHtml(u)}</div>
+      <div class="merge-input-group" style="margin-top:8px">
+        <input type="text" class="cl-search" placeholder="Search committees…"
+               data-key="${esc(u.key)}" autocomplete="off" />
+        <div class="merge-suggestions cl-results" hidden></div>
+      </div>
+      <button class="btn-small cl-none" data-key="${esc(u.key)}">No committee exists</button>
+    </div>`).join("");
+
+  el.querySelectorAll(".cl-search").forEach(inp =>
+    inp.addEventListener("input", () => clSearch(inp)));
+  el.querySelectorAll(".cl-none").forEach(btn =>
+    btn.addEventListener("click", () => clDecide(btn.dataset.key, null, "none")));
+  el.querySelectorAll("[data-pick]").forEach(btn =>
+    btn.addEventListener("click", () => clDecide(btn.dataset.key, btn.dataset.pick, "link")));
+}
+
+/**
+ * Committees the matcher declined but a person might accept — shown as
+ * suggestions only. These are exactly the pairs that are too uncertain to
+ * automate, which is why they arrive here with an explicit "why" instead of
+ * being linked silently.
+ */
+function clSuggestHtml(u) {
+  const k = clKey(u.ballot_name);
+  const kt = new Set(k.split(" ").filter(Boolean));
+  if (!kt.size) return "";
+  const hits = clCommittees.map(f => {
+    const ct = new Set(clKey(f.candidate_name).split(" ").filter(Boolean));
+    const shared = [...kt].filter(t => ct.has(t)).length;
+    if (!shared) return null;
+    const exact = shared === kt.size && shared === ct.size;
+    if (!exact && shared < 2) return null;
+    return { f, why: exact ? "same name, different office" : `${shared} name tokens in common` };
+  }).filter(Boolean).slice(0, 4);
+  if (!hits.length) return '<div class="section-desc">No similarly-named committee found.</div>';
+  return `<div class="section-desc">Possible matches — check the office before linking:</div>` +
+    hits.map(({ f, why }) => `
+      <div class="cl-hit">
+        <span><b>${esc(f.name)}</b> · ${esc(f.candidate_name || "")}
+          <span class="section-desc">(${esc(f.office_district || "no office on file")}) — ${why}</span></span>
+        <button class="btn-small" data-key="${esc(u.key)}" data-pick="${esc(f.filer_id)}">Link</button>
+      </div>`).join("");
+}
+
+function clSearch(inp) {
+  const box = inp.parentElement.querySelector(".cl-results");
+  const q = inp.value.trim().toLowerCase();
+  if (q.length < 2) { box.hidden = true; return; }
+  const hits = clCommittees.filter(f =>
+    `${f.name} ${f.candidate_name || ""}`.toLowerCase().includes(q)).slice(0, 8);
+  box.hidden = false;
+  box.innerHTML = hits.length ? hits.map(f => `
+    <div class="cl-hit">
+      <span><b>${esc(f.name)}</b> · ${esc(f.candidate_name || "")}
+        <span class="section-desc">(${esc(f.office_district || "no office on file")})</span></span>
+      <button class="btn-small" data-key="${esc(inp.dataset.key)}" data-pick="${esc(f.filer_id)}">Link</button>
+    </div>`).join("") : '<div class="section-desc">No match.</div>';
+  box.querySelectorAll("[data-pick]").forEach(btn =>
+    btn.addEventListener("click", () => clDecide(btn.dataset.key, btn.dataset.pick, "link")));
+}
+
+async function clDecide(key, filerId, decision) {
+  const u = clUnmatched.find(x => x.key === key);
+  if (!u) return;
+  const cmte = filerId ? clCommittees.find(f => String(f.filer_id) === String(filerId)) : null;
+  try {
+    const sb = await getSupabase();
+    const { data: { session } } = await sb.auth.getSession();
+    const { error } = await sb.from("candidate_committee_links").upsert({
+      candidate_key: key,
+      ballot_name: u.ballot_name,
+      office_district: u.office_district,
+      filer_id: filerId || null,
+      decision,
+      committee_name: cmte ? cmte.name : null,
+      decided_by: session?.user?.email || null,
+    });
+    if (error) throw new Error(error.message);
+    await clLoad();
+  } catch (e) {
+    alert(`Could not save: ${e.message}`);
+  }
+}
+
+function clRenderDecisions() {
+  const el = document.getElementById("cl-decisions");
+  if (clDecisionsError) {
+    el.innerHTML = `<p class="empty-msg">Could not read recorded decisions — ` +
+      `${esc(clDecisionsError)}. The count above is not trustworthy until this loads.</p>`;
+    return;
+  }
+  if (!clDecisions.length) {
+    el.innerHTML = '<p class="empty-msg">No decisions recorded yet.</p>';
+    return;
+  }
+  el.innerHTML = clDecisions.map(d => `
+    <div class="em-row">
+      <span><b>${esc(d.ballot_name)}</b>
+        <span class="section-desc"> — ${esc(d.office_district)}</span><br/>
+        ${d.decision === "link"
+          ? `→ ${esc(d.committee_name || d.filer_id)} <span class="section-desc">(${esc(d.filer_id)})</span>`
+          : '<span class="section-desc">confirmed: no committee</span>'}
+      </span>
+      <button class="btn-small cl-undo" data-key="${esc(d.candidate_key)}">Undo</button>
+    </div>`).join("");
+  el.querySelectorAll(".cl-undo").forEach(btn => btn.addEventListener("click", async () => {
+    const sb = await getSupabase();
+    await sb.from("candidate_committee_links").delete().eq("candidate_key", btn.dataset.key);
+    clLoad();
+  }));
+}
+
+document.addEventListener("input", e => {
+  if (e.target && e.target.id === "cl-filter") clRender(e.target.value.trim());
+});

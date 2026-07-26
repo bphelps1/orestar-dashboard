@@ -189,21 +189,41 @@ CANDIDATE_FILINGS = ROOT / "data" / "candidate_filings.json"
 CANDIDATE_OVERRIDES = ROOT / "scraper" / "candidate_overrides.json"
 
 
-def _load_candidate_overrides() -> dict:
+def _load_candidate_overrides(cur=None) -> dict:
     """{"ballot name|district": filer_id} — manual candidate→committee links.
 
     For pairings no matcher should be asked to infer (a committee named nothing
     like its candidate, or two plausible people in one district).
+
+    Two sources, both human decisions: the checked-in JSON file, and the
+    candidate_committee_links table written by the admin page. The table wins
+    on conflict — it is the one a reviewer can correct without a commit.
+    A 'none' row records "this candidate really has no committee" and maps to
+    None, which is not the same as an absent key: it means reviewed, not
+    unreviewed, and keeps the candidate off the review queue.
     """
-    if not CANDIDATE_OVERRIDES.exists():
-        return {}
-    try:
-        raw = json.loads(CANDIDATE_OVERRIDES.read_text())
-    except Exception as e:                       # noqa: BLE001
-        print(f"  WARNING: could not read {CANDIDATE_OVERRIDES.name}: {e}")
-        return {}
-    return {str(k).strip().lower(): v for k, v in raw.items()
-            if not str(k).startswith("_")}
+    out = {}
+    if CANDIDATE_OVERRIDES.exists():
+        try:
+            raw = json.loads(CANDIDATE_OVERRIDES.read_text())
+            out = {str(k).strip().lower(): v for k, v in raw.items()
+                   if not str(k).startswith("_")}
+        except Exception as e:                   # noqa: BLE001
+            print(f"  WARNING: could not read {CANDIDATE_OVERRIDES.name}: {e}")
+
+    if cur is not None:
+        try:
+            cur.execute("select candidate_key, filer_id, decision "
+                        "from candidate_committee_links")
+            rows = cur.fetchall()
+            for key, filer_id, decision in rows:
+                out[str(key).strip().lower()] = filer_id if decision == "link" else None
+            if rows:
+                print(f"  Loaded {len(rows)} reviewed candidate link(s) from the database")
+        except Exception as e:                   # noqa: BLE001
+            # The map is still correct without them, just less complete.
+            print(f"  WARNING: could not read candidate_committee_links: {e}")
+    return out
 
 
 def _override_key(cand: dict) -> str:
@@ -414,7 +434,7 @@ def _match_in_pool(key: str, pool: list[dict]) -> tuple[dict | None, str]:
 
 
 def build_legislative_map_from_filings(filings: dict, filer_metrics: list[dict],
-                                       index: list[dict]) -> dict:
+                                       index: list[dict], cur=None) -> dict:
     """Race-map data driven by the ORESTAR candidate FILING record.
 
     The roster is who is actually on the ballot; committees supply only the
@@ -448,7 +468,7 @@ def build_legislative_map_from_filings(filings: dict, filer_metrics: list[dict],
            "election": filings.get("election", ""),
            "scraped": filings.get("scraped", "")}
     stats = {"exact": 0, "subset": 0, "fuzzy": 0, "override": 0, "none": 0}
-    overrides = _load_candidate_overrides()
+    overrides = _load_candidate_overrides(cur)
     unmatched: list[str] = []
 
     for cand in filings.get("candidates", []):
@@ -466,7 +486,9 @@ def build_legislative_map_from_filings(filings: dict, filer_metrics: list[dict],
 
         # 1. Manual override wins outright — for pairings no algorithm should
         #    be asked to guess (see scraper/candidate_overrides.json).
-        ov_filer = overrides.get(_override_key(cand))
+        ok = _override_key(cand)
+        reviewed = ok in overrides
+        ov_filer = overrides.get(ok)
         if ov_filer:
             forced = next((r for r in pool if str(r.get("filer_id")) == str(ov_filer)), None)
             if forced is None:   # override may point outside the district pool
@@ -477,11 +499,20 @@ def build_legislative_map_from_filings(filings: dict, filer_metrics: list[dict],
 
         if best is None:
             best, method = _match_in_pool(key, pool)
+        if reviewed and method == "none":
+            method = "reviewed-none"       # a human confirmed there is none
         stats[method] = stats.get(method, 0) + 1
         if method == "none":
-            unmatched.append(
-                f"{cand['ballot_name']} ({cand.get('office_district') or cand.get('office')})"
-            )
+            # Structured, not a display string: this is the admin page's review
+            # queue, and it needs the same key the override lookup uses.
+            unmatched.append({
+                "key": ok,
+                "ballot_name": cand["ballot_name"],
+                "office_district": cand.get("office_district") or cand.get("office") or "",
+                "party": cand.get("party", ""),
+                "chamber": chamber,
+                "district": district,
+            })
 
         fm = metric_by_slug.get(best.get("slug", ""), {}) if best else {}
         entry = out[chamber].setdefault(district, (
@@ -515,7 +546,7 @@ def build_legislative_map_from_filings(filings: dict, filer_metrics: list[dict],
     # List them: a candidate silently sitting at $0 is indistinguishable from
     # one who genuinely hasn't raised anything.
     for u in unmatched:
-        print(f"    unmatched: {u}")
+        print(f"    unmatched: {u['ballot_name']} ({u['office_district']})")
     return out
 
 
