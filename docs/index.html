@@ -128,62 +128,6 @@
     </div>
 
     <!-- ── Races to Watch ─────────────────────────────────────────────── -->
-    <div class="races-to-watch" id="races-to-watch" hidden>
-      <h2>Races to Watch</h2>
-      <div class="races-list" id="races-list"></div>
-    </div>
-
-    <!-- Collapsible Account Summary Details -->
-    <details class="acct-summary-details" id="acct-summary-details">
-      <summary class="acct-summary-toggle">Account Summary Details</summary>
-      <div class="acct-summary-controls" id="acct-summary-controls" hidden>
-        <label for="acct-year-select">Year:</label>
-        <select id="acct-year-select"><option value="">All Time</option></select>
-      </div>
-      <div class="acct-summary-grid" id="acct-summary-grid"></div>
-    </details>
-
-    <div class="overview-charts">
-      <div class="chart-area" id="overview-donut-box">
-        <h2 id="overview-donut-title">Contributions by Donor Type</h2>
-        <div id="chart-contributor-type" class="echart-container"></div>
-      </div>
-
-      <!-- ── Party Fundraising ──────────────────────────────────────────── -->
-      <div class="chart-area" id="party-fundraising-box" hidden>
-        <div class="chart-header">
-          <h2>Who Funds Oregon's Parties</h2>
-        </div>
-        <div id="chart-party-fundraising" class="echart-container"></div>
-      </div>
-
-      <div class="chart-area chart-area-wide" id="overview-timeline-box">
-        <h2>Monthly Cash Flow</h2>
-        <div id="chart-timeline" class="echart-container"></div>
-      </div>
-    </div>
-
-    <!-- ── Historical comparison ──────────────────────────────────────── -->
-    <div class="chart-area chart-area-wide cmp-box">
-      <div class="cmp-head">
-        <h2>Compared with past cycles</h2>
-        <div class="cmp-controls">
-          <div class="cmp-toggle" id="cmp-set">
-            <button data-set="governor" class="active">Governor</button>
-            <button data-set="leadership">Leadership</button>
-            <button data-set="caucus">Caucus PACs</button>
-          </div>
-          <div class="cmp-toggle" id="cmp-mode">
-            <button data-mode="nominal" class="active">Nominal $</button>
-            <button data-mode="real">Real $</button>
-          </div>
-        </div>
-      </div>
-      <p class="cmp-note" id="cmp-note">Nominal dollars as reported</p>
-      <div id="cmp-chart" class="echart-container"></div>
-    </div>
-
-    <!-- ── Legislative race map (moved here from the retired /races page) ── -->
     <div class="chart-area chart-area-wide rc-box">
       <div class="cmp-head">
         <h2>Legislative races</h2>
@@ -205,6 +149,65 @@
       </div>
     </div>
 
+    <div class="races-to-watch" id="races-to-watch" hidden>
+      <h2>Races to Watch</h2>
+      <div class="races-list" id="races-list"></div>
+    </div>
+
+    <!-- Collapsible Account Summary Details -->
+    <div class="chart-area chart-area-wide cmp-box">
+      <div class="cmp-head">
+        <h2>Compared with past cycles</h2>
+        <div class="cmp-controls">
+          <div class="cmp-toggle" id="cmp-set">
+            <button data-set="governor" class="active">Governor</button>
+            <button data-set="leadership">Leadership</button>
+            <button data-set="caucus">Caucus PACs</button>
+          </div>
+          <div class="cmp-toggle" id="cmp-mode">
+            <button data-mode="nominal" class="active">Nominal $</button>
+            <button data-mode="real">Real $</button>
+          </div>
+        </div>
+      </div>
+      <p class="cmp-note" id="cmp-note">Nominal dollars as reported</p>
+      <div id="cmp-chart" class="echart-container"></div>
+    </div>
+
+    <!-- ── Legislative race map (moved here from the retired /races page) ── -->
+    <details class="acct-summary-details" id="acct-summary-details">
+      <summary class="acct-summary-toggle">Account Summary Details</summary>
+      <div class="acct-summary-controls" id="acct-summary-controls" hidden>
+        <label for="acct-year-select">Year:</label>
+        <select id="acct-year-select"><option value="">All Time</option></select>
+      </div>
+      <div class="acct-summary-grid" id="acct-summary-grid"></div>
+    </details>
+
+    <div class="overview-charts">
+      <div class="chart-area" id="overview-donut-box">
+        <h2 id="overview-donut-title">Contributions by Donor Type</h2>
+        <div id="chart-contributor-type" class="echart-container"></div>
+        <div id="cc-donortype-chart" class="echart-container" hidden></div>
+      </div>
+
+      <!-- ── Party Fundraising ──────────────────────────────────────────── -->
+      <div class="chart-area" id="party-fundraising-box" hidden>
+        <div class="chart-header">
+          <h2>Who Funds Oregon's Parties</h2>
+        </div>
+        <div id="chart-party-fundraising" class="echart-container"></div>
+        <div id="cc-party-chart" class="echart-container" hidden></div>
+      </div>
+
+      <div class="chart-area chart-area-wide" id="overview-timeline-box">
+        <h2>Monthly Cash Flow</h2>
+        <div id="chart-timeline" class="echart-container"></div>
+        <div id="cc-cash-chart" class="echart-container" hidden></div>
+      </div>
+    </div>
+
+    <!-- ── Historical comparison ──────────────────────────────────────── -->
     <p class="last-updated">Data through <span id="last-updated">—</span></p>
   </section>
 
@@ -310,6 +313,7 @@
 
 <script src="compare.js"></script>
 <script src="racemap.js"></script>
+<script src="cyclecompare.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

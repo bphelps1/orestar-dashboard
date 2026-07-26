@@ -54,9 +54,45 @@ function rcShowDistrict(name) {
         <div class="rc-cand-nums">${nums}</div>
       </div>`;
   }).join("");
+  bodyEl.innerHTML += renderDistrictHistory(name);
+
   // Already on the dashboard, so select the filer in place rather than navigating.
   bodyEl.querySelectorAll("a[data-slug]").forEach(a =>
     a.addEventListener("click", e => { e.preventDefault(); selectFilerBySlug(a.dataset.slug); }));
+}
+
+/** Past cycles for this district, appended beneath the current match-up. */
+function renderDistrictHistory(district) {
+  const hist = ((rcData.district_history || {})[rcChamber] || {})[district] || [];
+  if (!hist.length) return "";
+
+  const rows = hist.map(h => {
+    // Margin comes from official results and is always right. The dollar
+    // figure depends on matching candidates to committees, so an incomplete
+    // one is labelled rather than presented as fact.
+    const marginTxt = h.unopposed
+      ? `<span class="rc-h-margin">unopposed</span>`
+      : (h.margin_pts != null
+          ? `<span class="rc-h-margin">${esc(h.winner_party || "")} +${h.margin_pts.toFixed(1)} pts</span>`
+          : `<span class="rc-h-margin rc-h-na">margin n/a</span>`);
+    const partial = h.matched < h.total
+      ? `<span class="rc-h-partial" title="${h.total - h.matched} of ${h.total} candidates had no committee on file, so this total is a floor">${h.matched}/${h.total} committees</span>`
+      : "";
+    const who = h.winner ? `<div class="rc-h-winner">${esc(h.winner)} won</div>` : "";
+    return `<div class="rc-h-row">
+        <div class="rc-h-top">
+          <span class="rc-h-cycle">${h.cycle}</span>
+          ${marginTxt}
+          <span class="rc-h-raised">${rcFmt$(h.raised)}${partial ? " " + partial : ""}</span>
+        </div>
+        ${who}
+      </div>`;
+  }).join("");
+
+  return `<div class="rc-history">
+      <div class="rc-history-title">Previous cycles</div>
+      ${rows}
+    </div>`;
 }
 
 async function rcLoadChamber(which) {

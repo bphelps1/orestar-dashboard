@@ -219,6 +219,57 @@ def _cand_key(name: str) -> str:
     return " ".join(t for t in s.split() if len(t) > 1)
 
 
+# ── Historical candidate matching ────────────────────────────────────────────
+#
+# Deliberately separate from the current-cycle matcher above. Official results
+# print names "Last First" ("Gomberg David") while committees record them
+# "First Last" ("David Gomberg"), so the surname-anchored rule used for the
+# live roster matches nothing here (measured: 0%). This compares sorted token
+# sets instead, which is looser — hence its confinement to the historical
+# layer, where a miss only understates a past dollar figure and never
+# re-points a current candidate.
+#
+# Nicknames are the largest remaining gap: "Wagner Rob" vs "Robert Wagner",
+# "Patterson Deb" vs "Deborah". Folding them in took matching from 76% to 84%.
+NICKNAMES = {
+    "rob": "robert", "bob": "robert", "bobby": "robert",
+    "deb": "deborah", "debbie": "deborah",
+    "rich": "richard", "rick": "richard", "dick": "richard",
+    "bill": "william", "will": "william", "billy": "william",
+    "jim": "james", "jimmy": "james", "mike": "michael",
+    "dan": "daniel", "danny": "daniel", "dave": "david",
+    "tom": "thomas", "tommy": "thomas", "chris": "christopher",
+    "kim": "kimberly", "ben": "benjamin", "ed": "edward", "eddie": "edward",
+    "jeff": "jeffrey", "sue": "susan", "susie": "susan",
+    "liz": "elizabeth", "beth": "elizabeth", "matt": "matthew",
+    "nick": "nicholas", "tony": "anthony", "pat": "patricia",
+    "patty": "patricia", "greg": "gregory", "steve": "steven",
+    "stephen": "steven", "joe": "joseph", "tim": "timothy",
+    "ron": "ronald", "don": "donald", "ken": "kenneth",
+    "andy": "andrew", "drew": "andrew", "sam": "samuel",
+    "charlie": "charles", "chuck": "charles",
+    "kate": "katherine", "kathy": "katherine", "cathy": "catherine",
+    "jen": "jennifer", "jenny": "jennifer", "becky": "rebecca",
+    "peggy": "margaret", "meg": "margaret",
+}
+
+
+def hist_name_key(name: str) -> str:
+    """Order-independent, nickname-normalised name key for historical matching."""
+    toks = [NICKNAMES.get(t, t) for t in _cand_key(name).split()]
+    return " ".join(sorted(t for t in toks if len(t) > 1))
+
+
+def norm_district(d: str) -> str:
+    """'18th District (2 year term' -> '18th District'.
+
+    Results carry parentheticals for special/short terms; the committee index
+    does not, so the raw string never matches.
+    """
+    import re as _re
+    return _re.sub(r"\s*\(.*$", "", (d or "")).strip()
+
+
 def build_legislative_map_from_filings(filings: dict, filer_metrics: list[dict],
                                        index: list[dict]) -> dict:
     """Race-map data driven by the ORESTAR candidate FILING record.
