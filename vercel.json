@@ -5,7 +5,6 @@
     { "source": "/recommend", "destination": "/recommend.html" },
     { "source": "/explore", "destination": "/explore.html" },
     { "source": "/donors", "destination": "/donors.html" },
-    { "source": "/races", "destination": "/races.html" },
     { "source": "/admin/:path*", "destination": "/admin/:path*.html" }
   ],
   "headers": [

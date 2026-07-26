@@ -518,6 +518,18 @@ async function splitMerge(pk, source) {
 }
 
 // ── Manual Merge Creator ──────────────────────────────────────────────
+
+/** lowercased merged-away name -> the name it was merged into. */
+function mergedAliasMap() {
+  const m = new Map();
+  for (const row of supabaseDecisionRows) {
+    if (row.decision === "merged" && row.merged_name && row.kept_name) {
+      m.set(String(row.merged_name).toLowerCase(), row.kept_name);
+    }
+  }
+  return m;
+}
+
 let _mergeCreatorInitialized = false;
 
 function initMergeCreator() {
@@ -550,9 +562,17 @@ function initMergeCreator() {
 
       if (!matches.length) { suggestEl.hidden = true; return; }
 
-      suggestEl.innerHTML = matches.map(m =>
-        `<div class="merge-suggest-item" data-name="${esc(m)}">${esc(m)}</div>`
-      ).join("");
+      // Flag names already merged away, so an accidental no-op pairing is
+      // obvious. They stay selectable, and the name they were merged INTO is
+      // untouched — further aliases must still be mergeable into it.
+      const mergedInto = mergedAliasMap();
+      suggestEl.innerHTML = matches.map(m => {
+        const into = mergedInto.get(m.toLowerCase());
+        return `<div class="merge-suggest-item${into ? " merge-suggest-merged" : ""}" data-name="${esc(m)}">`
+          + esc(m)
+          + (into ? `<span class="merge-suggest-note">already merged → ${esc(into)}</span>` : "")
+          + `</div>`;
+      }).join("");
       suggestEl.hidden = false;
     });
 

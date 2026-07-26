@@ -218,6 +218,17 @@
   background: var(--color-accent-light);
   color: var(--color-accent);
 }
+/* Already merged away — flagged, not disabled: the name it was merged into
+   stays available so further aliases can still be merged onto it. */
+.merge-suggest-merged {
+  opacity: 0.72;
+}
+.merge-suggest-note {
+  display: block;
+  font-size: 0.72rem;
+  color: #a16207;
+  margin-top: 1px;
+}
 
 /* ── Source badges ──────────────────────────────────────────────────────── */
 .merge-source-badge {

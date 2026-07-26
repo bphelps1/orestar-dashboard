@@ -1910,6 +1910,9 @@ function initFilerSelector() {
     onStateChange();
   });
 
+  // updateClearBtn is local to this initialiser, so hand it over explicitly.
+  initCyclePresets(dateStartEl, dateEndEl, updateClearBtn);
+
   clearBtn.addEventListener("click", () => {
     state.selectedFilers = [];
     state.dateStart = "";
@@ -1918,6 +1921,57 @@ function initFilerSelector() {
     dateStartEl.value = "2006-01-01";
     dateEndEl.value   = (summaryData && summaryData.date_range_end) || "";
     renderChips();
+    updateClearBtn();
+    onStateChange();
+  });
+}
+
+// ── Election-cycle presets ────────────────────────────────────────────────────
+
+/** An Oregon election cycle runs Dec of the pre-election year → Nov of the
+ *  election year (2026 cycle = 2024-12-01 … 2026-11-30). */
+function cycleRange(electionYear) {
+  return { start: `${electionYear - 2}-12-01`, end: `${electionYear}-11-30` };
+}
+
+/** The three most recent even-numbered election years, ending with the current
+ *  cycle. Derived from today's date so the buttons advance without a code edit. */
+function recentCycles(count = 3) {
+  const now = new Date();
+  // Before December, the cycle ending this even year is still the current one.
+  let latest = now.getFullYear();
+  if (latest % 2 !== 0) latest += 1;                       // odd year → next even
+  else if (now.getMonth() >= 11) latest += 2;              // Dec → next cycle began
+  return Array.from({ length: count }, (_, i) => latest - i * 2);
+}
+
+function initCyclePresets(dateStartEl, dateEndEl, updateClearBtn) {
+  const box = document.getElementById("cycle-presets");
+  if (!box) return;
+  const years = recentCycles(3);
+  box.insertAdjacentHTML("beforeend", years.map(y => {
+    const { start, end } = cycleRange(y);
+    return `<button class="cycle-btn" data-start="${start}" data-end="${end}" data-year="${y}"
+              title="${start} to ${end}">${y}</button>`;
+  }).join(""));
+
+  box.addEventListener("click", e => {
+    const btn = e.target.closest(".cycle-btn");
+    if (!btn) return;
+    const active = btn.classList.contains("active");
+    box.querySelectorAll(".cycle-btn").forEach(b => b.classList.remove("active"));
+    if (active) {                       // clicking the active cycle clears it
+      state.dateStart = "";
+      state.dateEnd = "";
+      dateStartEl.value = "2006-01-01";
+      dateEndEl.value = (summaryData && summaryData.date_range_end) || "";
+    } else {
+      btn.classList.add("active");
+      state.dateStart = btn.dataset.start;
+      state.dateEnd = btn.dataset.end;
+      dateStartEl.value = state.dateStart;
+      dateEndEl.value = state.dateEnd;
+    }
     updateClearBtn();
     onStateChange();
   });
@@ -2029,7 +2083,7 @@ function renderFilerRaceHeader() {
               : `<span class="frh-opp-none">no committee</span>`;
             return `<div class="frh-opp"><span>${label}${partyTag(c.party)}</span><span>${amt}</span></div>`;
           }).join("")}
-          <a class="frh-link" href="/races">View race map →</a>
+          <a class="frh-link" href="#" data-scroll-map>View race map ↓</a>
         </div>`;
     }
     // A candidate committee with no roster entry isn't on the current ballot.
@@ -2050,6 +2104,12 @@ function renderFilerRaceHeader() {
   // Opponent links reuse the existing in-page filer navigation
   box.querySelectorAll("a[data-slug]").forEach(a =>
     a.addEventListener("click", e => { e.preventDefault(); selectFilerBySlug(a.dataset.slug); }));
+  // The map is on this page now, so scroll to it instead of navigating.
+  box.querySelectorAll("a[data-scroll-map]").forEach(a =>
+    a.addEventListener("click", e => {
+      e.preventDefault();
+      document.querySelector(".rc-box")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }));
 }
 
 function renderOverviewGlobal() {
@@ -3344,6 +3404,9 @@ const PULSE_ROWS = 3;
 async function loadCampaignPulse() {
   try {
     activitySnapshot = await DL.getBlob("activity_snapshot");
+    // Overview extras: historical comparison, then the district map below it.
+    if (typeof initCompare === "function") { try { initCompare(); } catch (e) { console.warn("[compare]", e); } }
+    if (typeof initRaceMap === "function") { try { initRaceMap(activitySnapshot); } catch (e) { console.warn("[racemap]", e); } }
     await ensureDonorFilerMap();
     const el = document.getElementById("campaign-pulse");
     if (el) { el.hidden = false; renderPulsePeriod(pulseCurrentPeriod); }

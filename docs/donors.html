@@ -25,6 +25,7 @@
     .dn-results li:hover, .dn-results li.selected { background: #ebf4ff; }
     .dn-result-name { font-weight: 600; }
     .dn-result-meta { font-size: .78rem; color: #718096; }
+    .dn-result-alias { font-size: .74rem; color: #2b6cb0; margin-top: 1px; }
     .dn-hint { color: #718096; font-size: .85rem; margin-top: .5rem; }
     .dn-profile { margin-top: 1.5rem; }
     .dn-head h2 { margin: 0 0 .25rem; }
@@ -98,18 +99,12 @@
       <div id="dn-chart"></div>
     </div>
 
-    <div class="dn-cols">
-      <div class="dn-section">
-        <h3>Top recipients</h3>
-        <table class="dn-table" id="dn-recipients">
-          <thead><tr><th>Committee</th><th class="num">Gifts</th><th class="num">Total</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <div class="dn-section">
-        <h3>Also appears as</h3>
-        <div class="dn-aliases" id="dn-aliases"></div>
-      </div>
+    <div class="dn-section">
+      <h3>Top recipients</h3>
+      <table class="dn-table" id="dn-recipients">
+        <thead><tr><th>Committee</th><th class="num">Gifts</th><th class="num">Total</th></tr></thead>
+        <tbody></tbody>
+      </table>
     </div>
 
     <div class="dn-section" style="margin-top:1.5rem">
@@ -123,6 +118,13 @@
         <span id="dn-page">—</span>
         <button class="dn-btn" id="dn-next" disabled>Next ›</button>
       </div>
+    </div>
+
+    <!-- Aliases last: useful for confirming an identity, but not what the
+         page is primarily about. -->
+    <div class="dn-section" style="margin-top:1.5rem">
+      <h3>Also appears as</h3>
+      <div class="dn-aliases" id="dn-aliases"></div>
     </div>
   </div>
 </main>

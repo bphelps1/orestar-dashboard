@@ -26,11 +26,9 @@ let results = [];
 
 async function runSearch(q) {
   const sb = await getSupabase();
-  const { data, error } = await sb.from("donors")
-    .select("donor_id, display_name, book_type, city, state, total_given, gift_count, filer_slug")
-    .ilike("display_name", `%${q}%`)
-    .order("total_given", { ascending: false })
-    .limit(12);
+  // RPC rather than a display_name filter: it searches aliases too, so a raw
+  // spelling ("Phillip H Knight") finds the resolved entity.
+  const { data, error } = await sb.rpc("search_donors", { p_q: q, p_limit: 12 });
   if (error) { console.warn(error.message); return; }
   results = data || [];
   const ul = $("dn-results");
@@ -45,6 +43,9 @@ async function runSearch(q) {
           ${esc([r.book_type, [r.city, r.state].filter(Boolean).join(", ")].filter(Boolean).join(" · "))}
           · ${fmt$(r.total_given)} given · ${fmtN(r.gift_count)} gifts
         </div>
+        ${r.matched_alias
+          ? `<div class="dn-result-alias">matched alias: “${esc((r.matched_alias || "").trim())}”</div>`
+          : ""}
       </li>`).join("");
   }
   ul.hidden = false;
@@ -131,6 +132,10 @@ async function loadProfile(donorId) {
     $("dn-span").textContent = (donor.first_date && donor.last_date)
       ? `${donor.first_date.slice(0, 4)}–${donor.last_date.slice(0, 4)}` : "—";
 
+    // Unhide before drawing: ECharts measures the container at init time.
+    $("dn-loading").hidden = true;
+    $("dn-profile").hidden = false;
+
     renderChart(prof?.by_year || []);
     renderRecipients(prof?.top_recipients || []);
     $("dn-aliases").innerHTML = (aliases || [])
@@ -138,9 +143,6 @@ async function loadProfile(donorId) {
 
     txnPage = 0;
     await loadTxns();
-
-    $("dn-loading").hidden = true;
-    $("dn-profile").hidden = false;
   } catch (err) {
     $("dn-loading").hidden = true;
     $("dn-error").hidden = false;
@@ -148,12 +150,28 @@ async function loadProfile(donorId) {
   }
 }
 
+let chartObserver = null;
+let chartResizeHandler = null;
+
 function renderChart(byYear) {
   const el = $("dn-chart");
   const inst = echarts.getInstanceByDom(el);
   if (inst) inst.dispose();
   if (!byYear.length) { el.innerHTML = '<span class="dn-sub">No dated transactions.</span>'; return; }
   const chart = echarts.init(el, null, { renderer: "svg" });
+  // The container must be visible before init or it measures 0 wide and the
+  // chart stays squashed against the left edge. loadProfile unhides the
+  // profile first; this observer covers every other way the width can change
+  // (sidebar toggles, zoom) — plain window.resize does not fire when a hidden
+  // element becomes visible.
+  if (chartObserver) chartObserver.disconnect();
+  chartObserver = new ResizeObserver(() => chart.resize());
+  chartObserver.observe(el);
+  // Also bind window.resize: it covers the ordinary "user resized the window"
+  // case in environments where ResizeObserver is unavailable or inert.
+  if (chartResizeHandler) window.removeEventListener("resize", chartResizeHandler);
+  chartResizeHandler = () => chart.resize();
+  window.addEventListener("resize", chartResizeHandler);
   chart.setOption({
     grid: { left: 70, right: 12, top: 12, bottom: 24 },
     xAxis: { type: "category", data: byYear.map(r => r.year) },

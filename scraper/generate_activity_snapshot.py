@@ -186,6 +186,31 @@ def build_races(filer_metrics: list[dict], index: list[dict]) -> list[dict]:
 CANDIDATE_FILINGS = ROOT / "data" / "candidate_filings.json"
 
 
+CANDIDATE_OVERRIDES = ROOT / "scraper" / "candidate_overrides.json"
+
+
+def _load_candidate_overrides() -> dict:
+    """{"ballot name|district": filer_id} — manual candidate→committee links.
+
+    For pairings no matcher should be asked to infer (a committee named nothing
+    like its candidate, or two plausible people in one district).
+    """
+    if not CANDIDATE_OVERRIDES.exists():
+        return {}
+    try:
+        raw = json.loads(CANDIDATE_OVERRIDES.read_text())
+    except Exception as e:                       # noqa: BLE001
+        print(f"  WARNING: could not read {CANDIDATE_OVERRIDES.name}: {e}")
+        return {}
+    return {str(k).strip().lower(): v for k, v in raw.items()
+            if not str(k).startswith("_")}
+
+
+def _override_key(cand: dict) -> str:
+    race = cand.get("office_district") or cand.get("office") or ""
+    return f"{cand.get('ballot_name', '')}|{race}".strip().lower()
+
+
 def _cand_key(name: str) -> str:
     """Normalize a personal name for matching: lowercase, strip punctuation,
     drop single-letter middle initials ('Kevin L Mannix' ~ 'Kevin Mannix')."""
@@ -228,7 +253,9 @@ def build_legislative_map_from_filings(filings: dict, filer_metrics: list[dict],
     out = {"house": {}, "senate": {}, "statewide": {}, "cycle_start": "2025-01",
            "election": filings.get("election", ""),
            "scraped": filings.get("scraped", "")}
-    stats = {"exact": 0, "fuzzy": 0, "none": 0}
+    stats = {"exact": 0, "subset": 0, "fuzzy": 0, "override": 0, "none": 0}
+    overrides = _load_candidate_overrides()
+    unmatched: list[str] = []
 
     for cand in filings.get("candidates", []):
         chamber = cand["chamber"]
@@ -242,27 +269,59 @@ def build_legislative_map_from_filings(filings: dict, filer_metrics: list[dict],
         pool = (by_office.get(cand.get("office", ""), []) if is_statewide
                 else by_district.get(cand.get("office_district", ""), []))
         best, score, method = None, 0, "none"
-        for row in pool:
-            cn = _cand_key(row.get("candidate_name"))
-            if not cn:
-                continue
-            if cn == key:
-                best, score, method = row, 100, "exact"
-                break
-            # Surname must agree. Without this, partial/token matching links
-            # people who merely share a first name — "Michael Summers" was
-            # matched to "Michael Sipe for State Representative", which would
-            # show one candidate's money under another's name.
-            if cn.split()[-1] != key.split()[-1]:
-                continue
-            sc = fuzz.token_sort_ratio(key, cn)
-            if sc > score:
-                best, score = row, sc
-        if method != "exact":
-            method = "fuzzy" if (best and score >= 80) else "none"
-            if method == "none":
-                best = None
-        stats[method] += 1
+
+        # 1. Manual override wins outright — for pairings no algorithm should
+        #    be asked to guess (see scraper/candidate_overrides.json).
+        ov_filer = overrides.get(_override_key(cand))
+        if ov_filer:
+            forced = next((r for r in pool if str(r.get("filer_id")) == str(ov_filer)), None)
+            if forced is None:   # override may point outside the district pool
+                forced = next((r for r in index
+                               if str(r.get("filer_id")) == str(ov_filer)), None)
+            if forced is not None:
+                best, score, method = forced, 100, "override"
+
+        subset_hit = None
+        if best is None:
+            for row in pool:
+                cn = _cand_key(row.get("candidate_name"))
+                if not cn:
+                    continue
+                if cn == key:
+                    best, score, method = row, 100, "exact"
+                    break
+                # Surname must agree. Without this, partial/token matching links
+                # people who merely share a first name — "Michael Summers" was
+                # matched to "Michael Sipe for State Representative", which would
+                # show one candidate's money under another's name.
+                if cn.split()[-1] != key.split()[-1]:
+                    continue
+                # Maiden/hyphenated names: the committee records a shorter form
+                # of the same person ("Vikki K Iverson" vs ballot "Vikki
+                # Breese-Iverson"). token_sort_ratio scores that 78.8 — just
+                # under the threshold — so a strict token-subset with an
+                # agreeing surname is accepted directly rather than by lowering
+                # the threshold for everyone.
+                kt, ct = set(key.split()), set(cn.split())
+                if kt <= ct or ct <= kt:
+                    if subset_hit is None:
+                        subset_hit = row
+                sc = fuzz.token_sort_ratio(key, cn)
+                if sc > score:
+                    best, score = row, sc
+
+        if method not in ("exact", "override"):
+            if best and score >= 80:
+                method = "fuzzy"
+            elif subset_hit is not None:
+                best, method = subset_hit, "subset"
+            else:
+                best, method = None, "none"
+        stats[method] = stats.get(method, 0) + 1
+        if method == "none":
+            unmatched.append(
+                f"{cand['ballot_name']} ({cand.get('office_district') or cand.get('office')})"
+            )
 
         fm = metric_by_slug.get(best.get("slug", ""), {}) if best else {}
         entry = out[chamber].setdefault(district, (
@@ -286,9 +345,15 @@ def build_legislative_map_from_filings(filings: dict, filer_metrics: list[dict],
         for entry in out[chamber].values():
             entry["candidates"].sort(key=lambda c: -c["raised_cycle"])
     out["match_stats"] = stats
-    out["matched_count"] = stats["exact"] + stats["fuzzy"]
+    out["matched_count"] = sum(v for k, v in stats.items() if k != "none")
+    out["unmatched"] = unmatched          # surfaced in /admin for manual linking
     print(f"  Legislative map: {len(filings.get('candidates', []))} filed candidates — "
-          f"{stats['exact']} exact, {stats['fuzzy']} fuzzy, {stats['none']} without a committee")
+          f"{stats['exact']} exact, {stats['subset']} subset, {stats['fuzzy']} fuzzy, "
+          f"{stats['override']} override, {stats['none']} without a committee")
+    # List them: a candidate silently sitting at $0 is indistinguishable from
+    # one who genuinely hasn't raised anything.
+    for u in unmatched:
+        print(f"    unmatched: {u}")
     return out
 
 
