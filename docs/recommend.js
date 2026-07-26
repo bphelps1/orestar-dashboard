@@ -274,11 +274,12 @@ async function runRecommendations() {
     // 4. Build repeat donor targets (existing donors to THIS filer)
     showStatus("Analyzing repeat donors…", "loading");
     targetProfile._leadershipTier = filer.leadership_tier || 0;
-    const { targets: repeatTargets, notRecommended: repeatNotRec } = buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years, cycle, seatCompetitiveness(filer));
+    const targetSeat = seatCompetitiveness(filer);
+    const { targets: repeatTargets, notRecommended: repeatNotRec } = buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years, cycle, targetSeat);
 
     // 5. Build new donor scoring
     showStatus("Scoring new donors…", "loading");
-    const { prospects: recommendations, notRecommended: prospectNotRec } = scoreDonors(targetProfile, comparables, compProfiles, years, cycle);
+    const { prospects: recommendations, notRecommended: prospectNotRec } = scoreDonors(targetProfile, comparables, compProfiles, years, cycle, targetSeat);
     const allNotRecommended = [...repeatNotRec, ...prospectNotRec];
 
     // 6. Display results
@@ -815,7 +816,7 @@ function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years
 }
 
 // ── Step 4b: Score new donors ─────────────────────────────────────────────
-function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
+function scoreDonors(targetProfile, comparables, compProfiles, years, cycle, targetSeat) {
   // Build a set of leadership filer slugs for quick lookup
   const leadershipSlugs = new Set(
     comparables.filter(c => c.leadership_tier > 0).map(c => c.slug)
