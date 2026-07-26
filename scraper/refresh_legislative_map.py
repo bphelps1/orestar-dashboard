@@ -25,7 +25,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import supabase_sync as s
 from generate_activity_snapshot import (
-    build_legislative_map_from_filings, hist_name_key, norm_district,
+    build_legislative_map_from_filings, build_name_order_ref, hist_name_key,
+    norm_district, speaking_name,
 )
 
 # Current district era only. The GeoJSON is TIGER 2024, so a pre-2022 race
@@ -122,6 +123,12 @@ def build_district_history(cur, index, timelines) -> dict:
     margins = {(y, o, norm_district(d)): (w, wp, m, u)
                for y, o, d, w, wp, m, u in cur.fetchall()}
 
+    # Results file names as "Surname First"; the panel shows them as spoken.
+    name_refs = build_name_order_ref(index)
+
+    def say(n):
+        return speaking_name(n, name_refs) if n else n
+
     out = {"house": {}, "senate": {}}
     stats = {y: [0, 0] for y in HISTORY_CYCLES}
     for (yr, off, dist), cands in contests.items():
@@ -148,7 +155,7 @@ def build_district_history(cur, index, timelines) -> dict:
                 amt = cycle_sum(timelines.get(who.get("slug")), yr)
                 raised += amt
                 matched += 1
-            rows.append({"candidate": cd["candidate"], "party": cd["party"],
+            rows.append({"candidate": say(cd["candidate"]), "party": cd["party"],
                          "votes": cd["votes"], "won": cd["won"],
                          "slug": who.get("slug") if (who and ok) else None,
                          "raised": round(amt, 2)})
@@ -157,7 +164,7 @@ def build_district_history(cur, index, timelines) -> dict:
         w, wp, m, unopp = margins.get((yr, off, dist), (None, None, None, None))
         out[chamber].setdefault(str(int(num.group(1))), []).append({
             "cycle": yr, "raised": round(raised, 2),
-            "winner": w, "winner_party": wp,
+            "winner": say(w), "winner_party": wp,
             "margin_pts": float(m) if m is not None else None,
             "unopposed": bool(unopp),
             "matched": matched, "total": len(cands),
