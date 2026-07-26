@@ -727,9 +727,15 @@ def aggregate(df: pd.DataFrame) -> None:
 
     # ── summary.json ─────────────────────────────────────────────────────────
     summary = {
-        "total_contributions":  round(_orestar_contribs["amount"].sum(), 2),
+        # Contributions are CASH ONLY app-wide; in-kind is reported separately
+        # as total_inkind and never folded in. ORESTAR's own "Cash
+        # Contributions" line does include in-kind, so these figures will
+        # differ from ORESTAR's published summary by exactly total_inkind —
+        # the ORESTAR reconciliation below uses its own _orestar_* frames and
+        # is unaffected.
+        "total_contributions":  round(cash_contribs["amount"].sum(), 2),
         "total_inkind":         round(inkind_contribs["amount"].sum(), 2),
-        "total_expenditures":   round(_cash_expend_global["amount"].sum() + _inkind_global_amount, 2),
+        "total_expenditures":   round(_cash_expend_global["amount"].sum(), 2),
         "total_other_receipts":  round(other_receipts["amount"].sum(), 2),
         "total_other_disburse":  round(other_disburse["amount"].sum(), 2),
         "total_transactions":   int(len(df)),
@@ -1252,9 +1258,14 @@ def aggregate_filers(
         _cash_expend_only = filer_expend[filer_expend["sub_type"] == "Cash Expenditure"] if not filer_expend.empty else filer_expend
         _inkind_amount = round(float(filer_inkind["amount"].sum()) if not filer_inkind.empty else 0.0, 2)
 
-        total_in    = round(float(_orestar_contrib["amount"].sum()) if not _orestar_contrib.empty else 0.0, 2)
+        # Cash only — in-kind is a separate, distinct metric (total_inkind).
+        # _orestar_contrib / _yearly_orestar_c keep the in-kind-inclusive
+        # definition for the ORESTAR reconciliation further down.
+        _cash_contrib_only = (filer_contrib[filer_contrib["sub_type"] != "In-Kind Contribution"]
+                              if not filer_contrib.empty else filer_contrib)
+        total_in    = round(float(_cash_contrib_only["amount"].sum()) if not _cash_contrib_only.empty else 0.0, 2)
         total_inkind = _inkind_amount
-        total_out   = round(float(_cash_expend_only["amount"].sum()) if not _cash_expend_only.empty else 0.0, 2) + _inkind_amount
+        total_out   = round(float(_cash_expend_only["amount"].sum()) if not _cash_expend_only.empty else 0.0, 2)
         total_or    = round(float(filer_or["amount"].sum()) if not filer_or.empty else 0.0, 2)
         total_od    = round(float(filer_od["amount"].sum()) if not filer_od.empty else 0.0, 2)
         tran_count  = int(len(filer_all))

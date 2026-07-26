@@ -51,6 +51,10 @@
         <input type="date" id="date-end" aria-label="End date" />
         <button class="filter-apply-btn" id="filter-apply-btn">Apply</button>
       </div>
+      <div class="cycle-presets" id="cycle-presets" aria-label="Election cycle presets">
+        <span class="cycle-presets-label">Cycle:</span>
+        <!-- Filled by app.js so the years advance on their own -->
+      </div>
       <button class="filter-clear-btn" id="filter-clear-btn" hidden>Clear</button>
     </div>
   </div>
@@ -63,7 +67,6 @@
     <button class="tab-btn"        data-tab="recipients"  role="tab">Recipients</button>
     <a class="tab-btn tab-link" href="/explore">Explore</a>
     <a class="tab-btn tab-link" href="/donors">Donor Lookup</a>
-    <a class="tab-btn tab-link" href="/races">Races</a>
     <a class="tab-btn tab-link" href="/recommend">Recommend</a>
     <a class="tab-btn tab-link tab-admin" id="admin-link" href="/admin/donors" hidden>Admin</a>
   </div>
@@ -83,11 +86,11 @@
     <div class="stat-cards" id="stat-cards">
       <div class="card">
         <div class="card-value" id="stat-contributions">—</div>
-        <div class="card-label">Contributions <span class="card-help" tabindex="0" role="button" aria-label="Info">?<span class="card-help-tip"><strong>Counted:</strong> All contributions including cash and in-kind. Matches ORESTAR's Cash Contributions line.<br><strong>Note:</strong> In-kind is counted on both contribution and expenditure sides, netting to zero for cash balance.</span></span></div>
+        <div class="card-label">Contributions <span class="card-help" tabindex="0" role="button" aria-label="Info">?<span class="card-help-tip"><strong>Counted:</strong> Cash contributions only. In-kind is tracked separately and is never folded in.<br><strong>Note:</strong> ORESTAR's own "Cash Contributions" line does include in-kind, so this figure is lower than theirs by the in-kind total.</span></span></div>
       </div>
       <div class="card">
         <div class="card-value" id="stat-expenditures">—</div>
-        <div class="card-label">Expenditures <span class="card-help" tabindex="0" role="button" aria-label="Info">?<span class="card-help-tip"><strong>Counted:</strong> Cash expenditures plus in-kind (mirrored). Matches ORESTAR's Cash Expenditures line.<br><strong>Excludes:</strong> Agent expenditures, accounts payable, and personal expenditure reimbursements.</span></span></div>
+        <div class="card-label">Expenditures <span class="card-help" tabindex="0" role="button" aria-label="Info">?<span class="card-help-tip"><strong>Counted:</strong> Cash expenditures only, mirroring the cash-only contribution rule.<br><strong>Excludes:</strong> In-kind, agent expenditures, accounts payable, and personal expenditure reimbursements.</span></span></div>
       </div>
       <div class="card">
         <div class="card-value" id="stat-cash-on-hand">—</div>
@@ -157,6 +160,48 @@
       <div class="chart-area chart-area-wide" id="overview-timeline-box">
         <h2>Monthly Cash Flow</h2>
         <div id="chart-timeline" class="echart-container"></div>
+      </div>
+    </div>
+
+    <!-- ── Historical comparison ──────────────────────────────────────── -->
+    <div class="chart-area chart-area-wide cmp-box">
+      <div class="cmp-head">
+        <h2>Compared with past cycles</h2>
+        <div class="cmp-controls">
+          <div class="cmp-toggle" id="cmp-set">
+            <button data-set="governor" class="active">Governor</button>
+            <button data-set="leadership">Leadership</button>
+            <button data-set="caucus">Caucus PACs</button>
+          </div>
+          <div class="cmp-toggle" id="cmp-mode">
+            <button data-mode="nominal" class="active">Nominal $</button>
+            <button data-mode="real">Real $</button>
+          </div>
+        </div>
+      </div>
+      <p class="cmp-note" id="cmp-note">Nominal dollars as reported</p>
+      <div id="cmp-chart" class="echart-container"></div>
+    </div>
+
+    <!-- ── Legislative race map (moved here from the retired /races page) ── -->
+    <div class="chart-area chart-area-wide rc-box">
+      <div class="cmp-head">
+        <h2>Legislative races</h2>
+        <div class="cmp-controls">
+          <div class="cmp-toggle" id="rc-chamber">
+            <button data-chamber="house" class="active">House</button>
+            <button data-chamber="senate">Senate</button>
+          </div>
+        </div>
+      </div>
+      <p class="cmp-note" id="rc-note">Districts shaded by total raised this cycle. Click one for its candidates.</p>
+      <div class="rc-layout">
+        <div id="rc-map"></div>
+        <aside class="rc-panel" id="rc-panel">
+          <h3 id="rc-panel-title">Select a district</h3>
+          <div class="rc-total" id="rc-panel-total"></div>
+          <div id="rc-panel-body" class="rc-empty">Click any district on the map.</div>
+        </aside>
       </div>
     </div>
 
@@ -263,6 +308,8 @@
   </p>
 </footer>
 
+<script src="compare.js"></script>
+<script src="racemap.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

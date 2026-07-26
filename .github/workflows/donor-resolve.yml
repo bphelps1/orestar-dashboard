@@ -51,6 +51,11 @@ jobs:
       - name: Run full donor resolution
         run: python scraper/resolve_donors.py --full
 
+      - name: Rebuild donor aggregates by resolved entity
+        # Must follow the resolve: the Donors tab blobs are keyed by donor_id,
+        # so they are stale until the entities are rebuilt.
+        run: python scraper/refresh_donor_aggregates.py
+
       # No git commit here on purpose. resolve_donors.py already upserts the
       # review queue to dashboard_cache('donor_review_queue'), which is what the
       # admin page reads, so committing data/review_queue.json back to the repo

@@ -269,11 +269,8 @@ function initDonorAutocomplete() {
     donorSearchTimer = setTimeout(async () => {
       try {
         const sb = await getSupabase();
-        const { data } = await sb.from("donors")
-          .select("donor_id, display_name, book_type, city, state, total_given")
-          .ilike("display_name", `%${q}%`)
-          .order("total_given", { ascending: false })
-          .limit(8);
+        // Alias-aware, same as /donors: a raw spelling finds the entity.
+        const { data } = await sb.rpc("search_donors", { p_q: q, p_limit: 8 });
         if (!data || !data.length) { ul.hidden = true; return; }
         ul.innerHTML = data.map((d, i) =>
           `<li data-idx="${i}">${esc(d.display_name)}

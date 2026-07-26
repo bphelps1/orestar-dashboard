@@ -274,7 +274,7 @@ async function runRecommendations() {
     // 4. Build repeat donor targets (existing donors to THIS filer)
     showStatus("Analyzing repeat donors…", "loading");
     targetProfile._leadershipTier = filer.leadership_tier || 0;
-    const { targets: repeatTargets, notRecommended: repeatNotRec } = buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years, cycle);
+    const { targets: repeatTargets, notRecommended: repeatNotRec } = buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years, cycle, seatCompetitiveness(filer));
 
     // 5. Build new donor scoring
     showStatus("Scoring new donors…", "loading");
@@ -326,7 +326,72 @@ function isOfficeComparable(targetOffice, fOffice) {
 // NOT individual donor ask amounts — comparable uplift handles that naturally.
 
 // ── Step 2: Find comparable fundraisers ────────────────────────────────────
+// ── Seat competitiveness ─────────────────────────────────────────────────────
+//
+// How close a seat is shapes what donors give: a swing-seat candidate can ask
+// for more than someone in a safe seat, and a safe seat's donor history is a
+// poor template for a competitive one. Margins come from race_margins
+// (general elections only — primaries are too variable to describe a seat).
+//
+// Only the CURRENT district era is used. Oregon redraws maps two years after
+// each census (2012, 2022), so a pre-2022 margin describes a different
+// electorate under the same district number.
+
+const MARGIN_BANDS = [
+  { band: "competitive", max: 10,       mult: 1.25, label: "competitive (<10 pt margin)" },
+  { band: "lean",        max: 20,       mult: 1.05, label: "lean (10–20 pt margin)" },
+  { band: "safe",        max: Infinity, mult: 0.85, label: "safe (>20 pt margin)" },
+];
+const UNOPPOSED = { band: "unopposed", mult: 0.75, label: "unopposed last cycle" };
+
+let raceMarginIndex = null;   // "Office|District" -> {margin_pts, band, mult, label, year}
+
+function bandFor(marginPts, unopposed) {
+  if (unopposed) return UNOPPOSED;
+  if (marginPts == null) return null;
+  return MARGIN_BANDS.find(b => marginPts < b.max) || MARGIN_BANDS[MARGIN_BANDS.length - 1];
+}
+
+async function loadRaceMargins() {
+  if (raceMarginIndex) return raceMarginIndex;
+  raceMarginIndex = new Map();
+  try {
+    const sb = await getSupabase();
+    const { data, error } = await sb
+      .from("race_margins")
+      .select("year, office_normalized, district, margin_pts, unopposed, era")
+      .eq("era", "2022-")                       // current maps only
+      .order("year", { ascending: false });
+    if (error) throw new Error(error.message);
+    for (const r of data || []) {
+      const key = `${r.office_normalized}|${r.district || ""}`;
+      if (raceMarginIndex.has(key)) continue;   // newest year wins
+      const b = bandFor(r.margin_pts, r.unopposed);
+      if (b) raceMarginIndex.set(key, { ...b, margin_pts: r.margin_pts, year: r.year });
+    }
+    console.log(`[recommend] loaded competitiveness for ${raceMarginIndex.size} seats`);
+  } catch (e) {
+    console.warn("[recommend] race margins unavailable — scaling disabled:", e.message);
+  }
+  return raceMarginIndex;
+}
+
+/** Competitiveness for a filer, from its office_district ("State Representative, 15th District"). */
+function seatCompetitiveness(filer) {
+  if (!raceMarginIndex || !filer) return null;
+  const od = (filer.office_district || "").trim();
+  if (!od) return null;
+  const i = od.indexOf(",");
+  if (i === -1) return null;
+  return raceMarginIndex.get(`${od.slice(0, i).trim()}|${od.slice(i + 1).trim()}`) || null;
+}
+
 async function findComparables(targetProfile, targetFiler, cycle) {
+  await loadRaceMargins();
+  const targetSeat = seatCompetitiveness(targetFiler);
+  if (targetSeat) {
+    console.log(`[recommend] target seat: ${targetSeat.label} (${targetSeat.year})`);
+  }
   const officeType = getOffice(targetFiler);
   const party = getParty(targetFiler);
   const chamber = getChamber(targetFiler);
@@ -385,6 +450,21 @@ async function findComparables(targetProfile, targetFiler, cycle) {
     } else if (!isTargetLeadership && fTier > 0) {
       // Target is NOT leadership but comparable IS — bigger penalty
       similarity -= 15;
+    }
+
+    // Seat competitiveness: prefer comparables from similarly-contested seats.
+    // Without this, a safe-seat donor history can set the template for a swing
+    // seat (and vice versa), which is exactly what skews the suggested ask.
+    if (targetSeat) {
+      const fSeat = seatCompetitiveness(f);
+      if (fSeat) {
+        if (fSeat.band === targetSeat.band) similarity += 12;
+        else if ((fSeat.band === "competitive" && targetSeat.band === "safe") ||
+                 (fSeat.band === "safe" && targetSeat.band === "competitive") ||
+                 fSeat.band === "unopposed" || targetSeat.band === "unopposed") {
+          similarity -= 8;                       // opposite ends of the scale
+        }
+      }
     }
 
     // Check admin tags for exclusions
@@ -511,7 +591,7 @@ function _getAllYearGifts(donorName, compProfiles, comparables) {
 // For ANY donor who has ever given to THIS candidate, compute a fundraising
 // target: ~5% increase from their last giving, adjusted upward if they gave
 // more to comparable candidates.
-function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years, cycle) {
+function buildRepeatDonorTargets(targetProfile, comparables, compProfiles, years, cycle, targetSeat) {
   const byYear = targetProfile.top_donors_by_year || {};
   const allYears = Object.keys(byYear).map(Number).sort((a, b) => a - b);
   const cycleStart = cycle - 1;
@@ -834,6 +914,15 @@ function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
     const maxGift = Math.max(...compAmounts);
     let targetAsk = Math.min(Math.round(((median + p75) / 2) * 100) / 100, maxGift);
 
+    // Scale by how contested the seat is: closer races draw larger gifts, so a
+    // safe-seat baseline understates a swing seat (and vice versa). Bounded
+    // 0.75×–1.25× so it tilts the ask without inventing a number, and the
+    // reason is surfaced in the explanation below rather than left implicit.
+    const seat = targetSeat;
+    if (seat) {
+      targetAsk = Math.min(Math.round(targetAsk * seat.mult * 100) / 100, maxGift);
+    }
+
     const remainingAsk = Math.max(0, targetAsk - alreadyGiven);
 
     // Comparable giving range
@@ -843,6 +932,16 @@ function scoreDonors(targetProfile, comparables, compProfiles, years, cycle) {
     // ── Explainable score components ──────────────────────────────────
     let score = 0;
     const factors = [];
+
+    // Say so when the seat moved the ask, so a scaled number is legible
+    // rather than looking arbitrary.
+    if (seat && seat.mult !== 1) {
+      const dir = seat.mult > 1 ? "raised" : "lowered";
+      factors.push(
+        `Ask ${dir} ${Math.round(Math.abs(seat.mult - 1) * 100)}% — seat is ${seat.label}`
+        + (seat.year ? ` (${seat.year})` : "")
+      );
+    }
 
     // Factor 1: Number of distinct comparable filers supported (0-35 pts)
     // STRONG preference for donors who gave to MULTIPLE candidates.

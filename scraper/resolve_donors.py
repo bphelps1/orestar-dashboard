@@ -644,6 +644,7 @@ def write_back(conn, df, assign, donors, aliases):
     cur.execute("""
       update donors d set
         total_given    = coalesce(t.given, 0),
+        total_inkind   = coalesce(t.given_inkind, 0),
         total_received = coalesce(t.received, 0),
         gift_count     = coalesce(t.gifts, 0),
         first_date     = t.first_date,
@@ -659,9 +660,17 @@ def write_back(conn, df, assign, donors, aliases):
         updated_at     = now()
       from (
         select donor_id,
-               sum(amount) filter (where tran_type = 'C')          as given,
+               -- Contributions are CASH ONLY app-wide; in-kind is tracked
+               -- separately so it is excluded here too. Without this,
+               -- donors.total_given disagreed with the Donors tab by exactly
+               -- a donor's in-kind giving (SEIU 503: $2.39M).
+               sum(amount) filter (where tran_type = 'C'
+                     and coalesce(sub_type,'') <> 'In-Kind Contribution')  as given,
+               sum(amount) filter (where tran_type = 'C'
+                     and sub_type = 'In-Kind Contribution')                as given_inkind,
                sum(amount) filter (where tran_type = 'E')          as received,
-               count(*)    filter (where tran_type = 'C')          as gifts,
+               count(*)    filter (where tran_type = 'C'
+                     and coalesce(sub_type,'') <> 'In-Kind Contribution')  as gifts,
                min(tran_date) as first_date, max(tran_date) as last_date,
                mode() within group (order by nullif(city,''))      as city,
                mode() within group (order by nullif(state,''))     as state,
