@@ -138,14 +138,55 @@ async function rcLoadChamber(which) {
     },
     series: [{
       type: "map", map: "or_" + which, roam: true, nameProperty: "name",
+      selectedMode: "single",        // so a filtered filer's district can be lit
       itemStyle: { areaColor: "#edf2f7", borderColor: "#fff", borderWidth: 1 },
       emphasis: { label: { show: true }, itemStyle: { areaColor: "#eda100" } },
-      select: { itemStyle: { areaColor: "#eda100" } },
+      // Outline, not fill: the fill is the visualMap's to spend on "how much
+      // was raised", and repainting it would cost the district its value on
+      // the very scale the map exists to show.
+      select: {
+        label: { show: true },
+        itemStyle: { borderColor: "#1a202c", borderWidth: 2.5, areaColor: "inherit" },
+      },
       label: { show: false },
       data,
     }],
   }, { notMerge: true });
 
+  document.getElementById("rc-panel-title").textContent = "Select a district";
+  document.getElementById("rc-panel-total").textContent = "";
+  document.getElementById("rc-panel-body").innerHTML =
+    '<span class="rc-empty">Click any district on the map.</span>';
+}
+
+/** Which seat a committee is running for this cycle, or null. */
+function rcDistrictForSlug(slug) {
+  if (!rcData || !slug) return null;
+  for (const chamber of ["house", "senate"]) {
+    for (const [district, entry] of Object.entries(rcData[chamber] || {})) {
+      if ((entry.candidates || []).some(c => c.slug === slug)) return { chamber, district };
+    }
+  }
+  return null;
+}
+
+/**
+ * Select a district and open its panel — used when the page is filtered to one
+ * committee, so the map answers "where is this race" instead of sitting on the
+ * statewide default.
+ */
+async function rcSelectDistrict(chamber, district) {
+  if (!rcChart) return;
+  if (chamber !== rcChamber) await rcLoadChamber(chamber);
+  rcChart.dispatchAction({ type: "select", seriesIndex: 0, name: String(district) });
+  rcShowDistrict(String(district));
+}
+
+/** Drop any selection and restore the statewide prompt. */
+function rcClearSelection() {
+  if (!rcChart) return;
+  rcChart.dispatchAction({ type: "unselect", seriesIndex: 0,
+                           name: Object.keys(rcData[rcChamber] || {}) });
   document.getElementById("rc-panel-title").textContent = "Select a district";
   document.getElementById("rc-panel-total").textContent = "";
   document.getElementById("rc-panel-body").innerHTML =
