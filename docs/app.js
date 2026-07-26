@@ -2292,6 +2292,7 @@ function cohIndicatorHTML(profile) {
 function renderOverviewSingleFiler(profile) {
   const pulseEl = document.getElementById("campaign-pulse");
   if (pulseEl) pulseEl.hidden = true;
+  if (typeof ccSetEnabled === "function") ccSetEnabled(false);
   const partyBox = document.getElementById("party-fundraising-box");
   if (partyBox) partyBox.hidden = true;
   const racesBox = document.getElementById("races-to-watch");
@@ -2342,6 +2343,7 @@ function renderOverviewSingleFiler(profile) {
 function renderOverviewMultiFiler(profiles) {
   const pulseEl = document.getElementById("campaign-pulse");
   if (pulseEl) pulseEl.hidden = true;
+  if (typeof ccSetEnabled === "function") ccSetEnabled(false);
   const partyBox = document.getElementById("party-fundraising-box");
   if (partyBox) partyBox.hidden = true;
   const racesBox = document.getElementById("races-to-watch");
@@ -3086,6 +3088,10 @@ async function loadTimeline() {
 }
 
 function renderTimeline(year) {
+  // Cycle comparison is a statewide aggregate, so it belongs to this view only.
+  if (typeof initCycleCompare === "function") {
+    try { initCycleCompare(); } catch (e) { console.warn("[cyclecompare]", e); }
+  }
   // Date range takes precedence over year dropdown
   let rows;
   if (state.dateStart || state.dateEnd) {
@@ -3199,6 +3205,7 @@ function renderTimelineMultiFiler(profiles) {
 async function loadPartyFundraising() {
   try {
     const data = await DL.getBlob("by_party_type");
+    window.partyTypeData = data;   // reused by cyclecompare.js
     if (!data || !data.by_year) return;
     const box = document.getElementById("party-fundraising-box");
     if (!box) return;

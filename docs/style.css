@@ -2295,3 +2295,10 @@ footer a:hover { color: var(--color-accent); }
 .rc-h-raised { margin-left: auto; font-variant-numeric: tabular-nums; color: #718096; white-space: nowrap; }
 .rc-h-partial { font-size: .68rem; color: #a16207; }
 .rc-h-winner { font-size: .74rem; color: #718096; }
+
+/* Cycle comparison controls */
+.cc-bar { display: flex; align-items: center; gap: .5rem; margin: .2rem 0 .5rem; flex-wrap: wrap; }
+.cc-select {
+  padding: 5px 9px; border: 1px solid var(--color-border, #cbd5e0);
+  border-radius: var(--radius); font-size: .8rem; background: #fff; color: #4a5568;
+}
