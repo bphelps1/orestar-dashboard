@@ -36,11 +36,19 @@ function ccCurrentCycle() {
   return y;
 }
 
-/** How many months of the current cycle have actually happened. */
+/**
+ * How many months of the current cycle the data actually covers.
+ *
+ * Counted rather than looked up, because the newest month is often not IN the
+ * window. Every December the cycle rolls over while reporting still ends in
+ * November, and an exact lookup misses — a fallback of "the whole cycle" would
+ * then compare a cycle that has barely started against a finished one and
+ * label it complete. Floors at 1 so the comparison is visibly empty instead.
+ */
 function ccElapsed(year, latestMonth) {
   const months = ccCycleMonths(year);
-  const i = months.indexOf(latestMonth);
-  return i === -1 ? months.length : i + 1;
+  const n = months.filter(m => m <= latestMonth).length;
+  return Math.min(Math.max(n, 1), months.length);
 }
 
 const ccFmt$ = v => "$" + Math.round(v).toLocaleString("en-US");
