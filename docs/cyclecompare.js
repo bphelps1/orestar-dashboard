@@ -176,21 +176,54 @@ function ccRenderCashFlow(elId, timeline, cycleA, cycleB, elapsed) {
 let ccWired = false;
 
 /**
- * Show or hide every comparison control.
+ * What the comparison charts are comparing.
  *
- * The comparisons are statewide aggregates, so they are meaningless once the
- * page is filtered to one committee. Rather than leave a button that would
- * quietly answer a different question, the controls disappear — and snap back
- * to Trend on the way out so the original chart is the one on screen.
+ *   statewide — every committee; all three charts
+ *   filer     — one committee's own money; donor mix and cash flow only, since
+ *               "who funds the parties" is not a question about one committee
+ *   none      — several committees at once; no comparison at all, because a
+ *               single pair of bars cannot say which of them moved
  */
-function ccSetEnabled(on) {
-  document.querySelectorAll(".cc-bar").forEach(bar => {
-    if (!on && !bar.hidden) {
+let ccScope = { mode: "statewide", profile: null };
+
+const ccByMonth = () => ccScope.mode === "filer"
+  ? (ccScope.profile.by_contributor_type_by_month || {})
+  : ((typeof byTypeDataGlobal !== "undefined" && byTypeDataGlobal || {}).by_month || {});
+
+const ccTimeline = () => ccScope.mode === "filer"
+  ? (ccScope.profile.timeline || [])
+  : (typeof timelineData !== "undefined" ? timelineData || [] : []);
+
+/** Controls this scope supports, by control id. */
+const CC_IN_SCOPE = {
+  statewide: ["cc-donortype", "cc-party", "cc-cash"],
+  filer:     ["cc-donortype", "cc-cash"],
+  none:      [],
+};
+
+/**
+ * Point the comparisons at a committee, the whole state, or nothing.
+ *
+ * Controls that fall out of scope snap back to Trend before hiding, so the
+ * chart on screen is always the one the visible buttons describe. Controls
+ * that stay in scope re-render, since the underlying numbers just changed.
+ */
+function ccSetScope(mode, profile) {
+  ccScope = { mode, profile: profile || null };
+  const allowed = CC_IN_SCOPE[mode] || [];
+  for (const id of ["cc-donortype", "cc-party", "cc-cash"]) {
+    const sel = document.getElementById(id);
+    const bar = sel && sel.closest(".cc-bar");
+    if (!bar) continue;
+    const ok = allowed.includes(id);
+    if (!ok) {
       const trend = bar.querySelector('button[data-v="trend"]');
       if (trend && !trend.classList.contains("active")) trend.click();
+    } else if (!sel.hidden) {
+      sel.dispatchEvent(new Event("change"));   // same cycle, new numbers
     }
-    bar.hidden = !on;
-  });
+    bar.hidden = !ok;
+  }
 }
 
 function ccBuildControl(boxSel, id, onPick) {
@@ -225,7 +258,7 @@ function ccBuildControl(boxSel, id, onPick) {
 
 function initCycleCompare() {
   // renderTimeline() runs on every filter change; the controls are built once.
-  if (ccWired) { ccSetEnabled(true); return; }
+  if (ccWired) { ccSetScope("statewide"); return; }
   ccWired = true;
 
   const cur = ccCurrentCycle();
@@ -250,7 +283,7 @@ function initCycleCompare() {
   ccBuildControl("#overview-donut-box", "cc-donortype", cycle => {
     swap("chart-contributor-type", "cc-donortype-chart", cycle, () =>
       ccRenderComposition("cc-donortype-chart",
-        y => ccSumByType((byTypeDataGlobal || {}).by_month, y), cur, cycle, note));
+        y => ccSumByType(ccByMonth(), y), cur, cycle, note));
     // That legend's dollar figures are all-time; they don't belong to a
     // two-cycle comparison and would be read as if they did.
     const tot = document.querySelector("#overview-donut-box .stacked-area-legend");
@@ -263,7 +296,7 @@ function initCycleCompare() {
 
   ccBuildControl("#overview-timeline-box", "cc-cash", cycle =>
     swap("chart-timeline", "cc-cash-chart", cycle, () =>
-      ccRenderCashFlow("cc-cash-chart", timelineData, cur, cycle, elapsed)));
+      ccRenderCashFlow("cc-cash-chart", ccTimeline(), cur, cycle, elapsed)));
 
   window.addEventListener("resize", () => {
     ["cc-donortype-chart", "cc-party-chart", "cc-cash-chart"].forEach(id => {
