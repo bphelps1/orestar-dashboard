@@ -128,12 +128,53 @@
     </div>
 
     <!-- ── Races to Watch ─────────────────────────────────────────────── -->
+    <div class="chart-area chart-area-wide rc-box">
+      <div class="cmp-head">
+        <h2>Legislative races</h2>
+        <div class="cmp-controls">
+          <div class="cmp-toggle" id="rc-chamber">
+            <button data-chamber="house" class="active">House</button>
+            <button data-chamber="senate">Senate</button>
+          </div>
+        </div>
+      </div>
+      <p class="cmp-note" id="rc-note">Districts shaded by total raised this cycle. Click one for its candidates.</p>
+      <div class="rc-layout">
+        <div id="rc-map"></div>
+        <aside class="rc-panel" id="rc-panel">
+          <h3 id="rc-panel-title">Select a district</h3>
+          <div class="rc-total" id="rc-panel-total"></div>
+          <div id="rc-panel-body" class="rc-empty">Click any district on the map.</div>
+        </aside>
+      </div>
+    </div>
+
     <div class="races-to-watch" id="races-to-watch" hidden>
       <h2>Races to Watch</h2>
       <div class="races-list" id="races-list"></div>
     </div>
 
     <!-- Collapsible Account Summary Details -->
+    <div class="chart-area chart-area-wide cmp-box">
+      <div class="cmp-head">
+        <h2>Compared with past cycles</h2>
+        <div class="cmp-controls">
+          <div class="cmp-toggle" id="cmp-set">
+            <button data-set="governor" class="active">Governor</button>
+            <button data-set="leadership">Leadership</button>
+            <button data-set="caucus">Caucus PACs</button>
+          </div>
+          <div class="cmp-toggle" id="cmp-mode">
+            <button data-mode="nominal" class="active">Nominal $</button>
+            <button data-mode="real">Real $</button>
+          </div>
+        </div>
+      </div>
+      <p class="cmp-note" id="cmp-note">Nominal dollars as reported</p>
+      <div id="cmp-chart" class="echart-container"></div>
+    </div>
+
+    <!-- ── Legislative race map (moved here from the retired /races page) ── -->
     <details class="acct-summary-details" id="acct-summary-details">
       <summary class="acct-summary-toggle">Account Summary Details</summary>
       <div class="acct-summary-controls" id="acct-summary-controls" hidden>
@@ -164,47 +205,6 @@
     </div>
 
     <!-- ── Historical comparison ──────────────────────────────────────── -->
-    <div class="chart-area chart-area-wide cmp-box">
-      <div class="cmp-head">
-        <h2>Compared with past cycles</h2>
-        <div class="cmp-controls">
-          <div class="cmp-toggle" id="cmp-set">
-            <button data-set="governor" class="active">Governor</button>
-            <button data-set="leadership">Leadership</button>
-            <button data-set="caucus">Caucus PACs</button>
-          </div>
-          <div class="cmp-toggle" id="cmp-mode">
-            <button data-mode="nominal" class="active">Nominal $</button>
-            <button data-mode="real">Real $</button>
-          </div>
-        </div>
-      </div>
-      <p class="cmp-note" id="cmp-note">Nominal dollars as reported</p>
-      <div id="cmp-chart" class="echart-container"></div>
-    </div>
-
-    <!-- ── Legislative race map (moved here from the retired /races page) ── -->
-    <div class="chart-area chart-area-wide rc-box">
-      <div class="cmp-head">
-        <h2>Legislative races</h2>
-        <div class="cmp-controls">
-          <div class="cmp-toggle" id="rc-chamber">
-            <button data-chamber="house" class="active">House</button>
-            <button data-chamber="senate">Senate</button>
-          </div>
-        </div>
-      </div>
-      <p class="cmp-note" id="rc-note">Districts shaded by total raised this cycle. Click one for its candidates.</p>
-      <div class="rc-layout">
-        <div id="rc-map"></div>
-        <aside class="rc-panel" id="rc-panel">
-          <h3 id="rc-panel-title">Select a district</h3>
-          <div class="rc-total" id="rc-panel-total"></div>
-          <div id="rc-panel-body" class="rc-empty">Click any district on the map.</div>
-        </aside>
-      </div>
-    </div>
-
     <p class="last-updated">Data through <span id="last-updated">—</span></p>
   </section>
 

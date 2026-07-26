@@ -3333,67 +3333,55 @@ async function loadPartyFundraising() {
 
 // ── Races to Watch ──────────────────────────────────────────────────────
 function renderRacesToWatch() {
-  if (!activitySnapshot || !activitySnapshot.races || !activitySnapshot.races.length) return;
-  const races = activitySnapshot.races;
+  // Built from legislative_map — the same roster the district map uses, so the
+  // cards and the map can never disagree. That roster is already the current
+  // GENERAL election only, which is what we want now the primary is decided.
+  const lm = activitySnapshot && activitySnapshot.legislative_map;
   const el = document.getElementById("races-to-watch");
   const list = document.getElementById("races-list");
-  if (!el || !list) return;
+  if (!lm || !el || !list) return;
+
+  const races = [];
+  for (const [chamber, label] of [["house", "House District"], ["senate", "Senate District"]]) {
+    for (const [d, e] of Object.entries(lm[chamber] || {})) {
+      races.push({ office: `${label} ${d}`, total: e.total_raised || 0,
+                   candidates: e.candidates || [] });
+    }
+  }
+  for (const [office, e] of Object.entries(lm.statewide || {})) {
+    races.push({ office, total: e.total_raised || 0, candidates: e.candidates || [] });
+  }
+
+  // Top 6 by money — a 2x3 grid rather than a long list.
+  const top = races.sort((a, b) => b.total - a.total).slice(0, 6);
+  if (!top.length) return;
   el.hidden = false;
 
-  function raceRowHTML(c) {
-    const partyClass = c.party === "Democrat" ? "party-d" : c.party === "Republican" ? "party-r" : "party-other";
-    const badge = c.party ? `<span class="pulse-entry-party ${partyClass}">${c.party.charAt(0)}</span>` : "";
-    return `<div class="race-row" ${c.slug ? `data-slug="${esc(c.slug)}" style="cursor:pointer"` : ""}>
-        <span class="race-col-name">${badge} ${esc(c.candidate_name || c.name)}</span>
-        <span class="race-col-raised">${fmt$(c.raised_cycle)}</span>
-        <span class="race-col-coh">${fmt$(c.cash_on_hand)}</span>
+  list.innerHTML = top.map(race => {
+    const rows = race.candidates.slice(0, 4).map(c => {
+      const p = (c.party || "").toLowerCase();
+      const cls = p.startsWith("dem") ? "party-d" : p.startsWith("rep") ? "party-r" : "party-other";
+      const badge = c.party ? `<span class="pulse-entry-party ${cls}">${esc(c.party.charAt(0))}</span>` : "";
+      const nm = esc(c.candidate_name || c.name || "");
+      const name = c.slug
+        ? `<a href="#" data-slug="${esc(c.slug)}">${nm}</a>`
+        : `<span class="race-no-cmte">${nm}</span>`;
+      return `<div class="race-row"><span class="race-col-name">${badge} ${name}</span>` +
+             `<span class="race-col-raised">${c.slug ? fmt$(c.raised_cycle) : "—"}</span></div>`;
+    }).join("");
+    const more = race.candidates.length > 4
+      ? `<div class="race-more">+${race.candidates.length - 4} more</div>` : "";
+    return `<div class="race-card">
+        <div class="race-card-header">
+          <span class="race-office">${esc(race.office)}</span>
+          <span class="race-total">${fmt$(race.total)}</span>
+        </div>
+        ${rows}${more}
       </div>`;
-  }
+  }).join("");
 
-  let html = "";
-  for (let ri = 0; ri < races.length; ri++) {
-    const race = races[ri];
-    const visible = race.candidates.slice(0, 5);
-    const extra = race.candidates.slice(5);
-    html += `<div class="race-card">
-      <div class="race-card-header">
-        <span class="race-office">${esc(race.office)}</span>
-        <span class="race-total">${fmt$(race.total_raised)}</span>
-      </div>
-      <div class="race-table">
-        <div class="race-table-header">
-          <span class="race-col-name">Candidate</span>
-          <span class="race-col-raised">Raised</span>
-          <span class="race-col-coh">Cash on Hand</span>
-        </div>`;
-    for (const c of visible) html += raceRowHTML(c);
-    if (extra.length > 0) {
-      html += `<div class="race-extra" id="race-extra-${ri}" hidden>`;
-      for (const c of extra) html += raceRowHTML(c);
-      html += `</div>`;
-      html += `<div class="race-show-more" data-race-idx="${ri}">Show ${extra.length} more</div>`;
-    }
-    html += `</div></div>`;
-  }
-  list.innerHTML = html;
-
-  // Wire up click-to-navigate on race rows
-  list.querySelectorAll(".race-row[data-slug]").forEach(row => {
-    row.addEventListener("click", () => selectFilerBySlug(row.dataset.slug));
-  });
-
-  // Wire up show-more toggles
-  list.querySelectorAll(".race-show-more").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const idx = btn.dataset.raceIdx;
-      const extra = document.getElementById(`race-extra-${idx}`);
-      if (!extra) return;
-      extra.hidden = !extra.hidden;
-      btn.textContent = extra.hidden
-        ? `Show ${extra.children.length} more`
-        : "Show fewer";
-    });
-  });
+  list.querySelectorAll("a[data-slug]").forEach(a =>
+    a.addEventListener("click", e => { e.preventDefault(); selectFilerBySlug(a.dataset.slug); }));
 }
 
 // ── Fundraising Pulse ────────────────────────────────────────────────────

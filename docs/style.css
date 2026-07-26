@@ -2252,3 +2252,46 @@ footer a:hover { color: var(--color-accent); }
 .rc-party { display: inline-block; border-radius: 4px; font-size: .66rem; padding: 0 6px; color: #fff; margin-left: 6px; vertical-align: 1px; }
 .rc-party.D { background: #2a78d6; } .rc-party.R { background: #e34948; }
 .rc-party.other { background: #718096; }
+
+/* Races to Watch — 2x3 grid of compact cards */
+.races-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .75rem;
+}
+@media (max-width: 1000px) { .races-list { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+@media (max-width: 640px)  { .races-list { grid-template-columns: 1fr; } }
+.race-card {
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: 10px;
+  padding: .7rem .8rem;
+}
+.race-card-header {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: .5rem; margin-bottom: .4rem;
+  border-bottom: 1px solid #edf2f7; padding-bottom: .35rem;
+}
+.race-office { font-weight: 700; font-size: .88rem; }
+.race-total { font-size: .8rem; color: #718096; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.race-row { display: flex; justify-content: space-between; gap: .5rem; padding: .18rem 0; font-size: .82rem; }
+.race-col-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.race-col-name a { color: var(--color-accent); text-decoration: none; }
+.race-col-raised { font-variant-numeric: tabular-nums; color: #4a5568; white-space: nowrap; }
+.race-no-cmte { color: #a0aec0; }
+.race-more { font-size: .72rem; color: #a0aec0; margin-top: .2rem; }
+
+/* District panel — previous cycles */
+.rc-history { margin-top: .9rem; border-top: 1px solid #e2e8f0; padding-top: .6rem; }
+.rc-history-title {
+  font-size: .7rem; text-transform: uppercase; letter-spacing: .04em;
+  color: #a0aec0; margin-bottom: .35rem;
+}
+.rc-h-row { padding: .3rem 0; border-bottom: 1px solid #f7fafc; }
+.rc-h-row:last-child { border-bottom: 0; }
+.rc-h-top { display: flex; align-items: baseline; gap: .5rem; font-size: .8rem; }
+.rc-h-cycle { font-weight: 700; }
+.rc-h-margin { color: #4a5568; }
+.rc-h-na { color: #a0aec0; font-style: italic; }
+.rc-h-raised { margin-left: auto; font-variant-numeric: tabular-nums; color: #718096; white-space: nowrap; }
+.rc-h-partial { font-size: .68rem; color: #a16207; }
+.rc-h-winner { font-size: .74rem; color: #718096; }
