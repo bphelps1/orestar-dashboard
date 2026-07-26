@@ -52,6 +52,7 @@
     <button class="admin-tab-btn" data-admin-tab="tab-manual-merge">Manual Merge</button>
     <button class="admin-tab-btn" data-admin-tab="tab-entity-merge">Entity Merges</button>
     <button class="admin-tab-btn" data-admin-tab="tab-rejected">Rejected Pairs</button>
+    <button class="admin-tab-btn" data-admin-tab="tab-candidate-links">Candidate Links</button>
   </div>
 
   <!-- Tab: Pending Review (existing content) -->
@@ -86,6 +87,31 @@
       <div id="donor-search-results" class="donor-search-results"></div>
     </section>
 
+  </div>
+
+
+  <!-- Tab: Candidate Links -->
+  <div id="tab-candidate-links" class="admin-tab" hidden>
+    <section class="admin-section">
+      <h2>Candidates Without a Committee</h2>
+      <p class="section-desc">
+        Filed candidates the matcher could not pair with a committee. Most genuinely
+        have none — that is real information, not an error — so confirming "no committee"
+        is a decision worth recording, and takes them off this list.
+        Anything linked here overrides the matcher and survives the weekly rebuild.
+      </p>
+      <div class="toolbar" style="margin-bottom:12px">
+        <input type="search" id="cl-filter" class="table-search" placeholder="Filter candidates…" />
+        <span id="cl-count" class="section-desc"></span>
+      </div>
+      <div id="cl-list"></div>
+    </section>
+
+    <section class="admin-section">
+      <h2>Recorded Decisions</h2>
+      <p class="section-desc">Links and "no committee" confirmations already in effect.</p>
+      <div id="cl-decisions"></div>
+    </section>
   </div>
 
   <!-- Tab: Active Merges -->

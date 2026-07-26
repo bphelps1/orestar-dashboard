@@ -27,6 +27,7 @@ MIGRATIONS = [
     "010_search_transactions.sql",
     "011_donor_search_and_inkind.sql",
     "012_election_results.sql",
+    "013_candidate_committee_links.sql",
 ]
 
 

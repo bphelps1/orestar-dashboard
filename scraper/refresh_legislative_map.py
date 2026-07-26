@@ -217,7 +217,7 @@ def main() -> int:
     ]
     log.info("Loaded %d candidate committees, %d timelines", len(slugs), len(metrics))
 
-    lm = build_legislative_map_from_filings(filings, metrics, index)
+    lm = build_legislative_map_from_filings(filings, metrics, index, cur)
 
     log.info("Building per-district history for %s…", HISTORY_CYCLES)
     tl_by_slug = {slug: tl for slug, tl in timeline_rows}
