@@ -81,6 +81,42 @@ async function fetchTimelines(slugs) {
   return out;
 }
 
+/** The cycle currently under way (same rule as the Overview cycle presets). */
+function currentCycleYear() {
+  const now = new Date();
+  let y = now.getFullYear();
+  if (y % 2 !== 0) y += 1;
+  else if (now.getMonth() >= 11) y += 2;
+  return y;
+}
+
+/**
+ * Current Speaker / Senate President, read live from the filer index.
+ *
+ * filer_index carries leadership_role, populated from data/leadership_roles.json
+ * and refreshed weekly by leadership-refresh.yml — so when the Speaker or
+ * President changes, this chart follows without anyone editing a file. The
+ * supplied spreadsheet only runs through 2024, which is why the current cycle
+ * has to come from live data rather than the history.
+ */
+function currentLeadersFromIndex(cycle) {
+  const WANT = {
+    "speaker of the house": "Speaker of the House",
+    "senate president": "Senate President",
+  };
+  const out = [];
+  for (const f of (typeof filerIndex !== "undefined" && filerIndex) || []) {
+    const pos = WANT[(f.leadership_role || "").trim().toLowerCase()];
+    if (!pos || !f.slug) continue;
+    out.push({
+      cycle, position: pos,
+      candidate: f.candidate_name || f.name,
+      slug: f.slug, committee: f.name, match: "live",
+    });
+  }
+  return out;
+}
+
 async function loadLeadership() {
   if (leadershipHistory) return leadershipHistory;
   try {
@@ -88,6 +124,15 @@ async function loadLeadership() {
     const r = await fetch("assets/leadership_history.json");
     leadershipHistory = r.ok ? await r.json() : { leaders: [] };
   } catch { leadershipHistory = { leaders: [] }; }
+
+  // Fold in whoever currently holds these roles, for any cycle the historical
+  // file doesn't cover yet.
+  const cycle = currentCycleYear();
+  const have = new Set(leadershipHistory.leaders
+    .filter(l => l.cycle === cycle).map(l => l.position));
+  for (const l of currentLeadersFromIndex(cycle)) {
+    if (!have.has(l.position)) leadershipHistory.leaders.push(l);
+  }
   return leadershipHistory;
 }
 
