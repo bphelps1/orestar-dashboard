@@ -318,3 +318,13 @@
             padding: 1px 6px; margin-right: 6px; color: #fff; }
 .em-badge.em-merged { background: #38a169; }
 .em-badge.em-separate { background: #718096; }
+
+/* Candidate → committee linking */
+.cl-suggest { margin: 8px 0; }
+.cl-hit {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 6px 0; border-top: 1px solid #edf2f7;
+}
+.cl-hit span { font-size: .85rem; }
+.cl-results { max-height: 260px; overflow-y: auto; }
+.cl-none { margin-top: 8px; }

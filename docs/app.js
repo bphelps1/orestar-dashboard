@@ -2002,6 +2002,7 @@ async function loadOverview() {
   const n = state.selectedFilers.length;
 
   if (n === 0) {
+    setOverviewTiles("statewide");
     renderOverviewGlobal();
     await loadTimeline();
   } else if (n === 1) {
@@ -2289,10 +2290,43 @@ function cohIndicatorHTML(profile) {
   return '';
 }
 
+
+/**
+ * Show only the tiles that still mean something under the current filter.
+ *
+ * "Compared with past cycles" charts fixed sets of statewide committees, so it
+ * never describes a filtered selection. The district map is kept only when the
+ * filter is one committee that is actually on this cycle's ballot — then it is
+ * lit on that district, which is more use than the statewide default. Anything
+ * else (a PAC, a former officeholder, several committees at once) hides it,
+ * since a map with nothing to point at is just noise.
+ *
+ * mode: "statewide" | "filer" | "multi"
+ */
+function setOverviewTiles(mode, profile) {
+  // Fixed sets of statewide committees — never a description of a selection.
+  const past = document.getElementById("past-cycles-box");
+  if (past) past.hidden = mode !== "statewide";
+
+  const mapBox = document.getElementById("legislative-races-box");
+  if (!mapBox) return;
+  if (mode === "statewide") {
+    mapBox.hidden = false;
+    if (typeof rcClearSelection === "function") rcClearSelection();
+    return;
+  }
+  const seat = mode === "filer" && typeof rcDistrictForSlug === "function"
+    ? rcDistrictForSlug(profile && profile.slug) : null;
+  mapBox.hidden = !seat;
+  if (seat && typeof rcSelectDistrict === "function") rcSelectDistrict(seat.chamber, seat.district);
+}
+
 function renderOverviewSingleFiler(profile) {
   const pulseEl = document.getElementById("campaign-pulse");
   if (pulseEl) pulseEl.hidden = true;
-  if (typeof ccSetEnabled === "function") ccSetEnabled(false);
+  // The comparisons now read this committee's own money rather than the state's.
+  if (typeof ccSetScope === "function") ccSetScope("filer", profile);
+  setOverviewTiles("filer", profile);
   const partyBox = document.getElementById("party-fundraising-box");
   if (partyBox) partyBox.hidden = true;
   const racesBox = document.getElementById("races-to-watch");
@@ -2343,7 +2377,8 @@ function renderOverviewSingleFiler(profile) {
 function renderOverviewMultiFiler(profiles) {
   const pulseEl = document.getElementById("campaign-pulse");
   if (pulseEl) pulseEl.hidden = true;
-  if (typeof ccSetEnabled === "function") ccSetEnabled(false);
+  if (typeof ccSetScope === "function") ccSetScope("none");
+  setOverviewTiles("multi");
   const partyBox = document.getElementById("party-fundraising-box");
   if (partyBox) partyBox.hidden = true;
   const racesBox = document.getElementById("races-to-watch");

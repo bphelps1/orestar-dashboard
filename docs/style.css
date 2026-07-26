@@ -2302,3 +2302,21 @@ footer a:hover { color: var(--color-accent); }
   padding: 5px 9px; border: 1px solid var(--color-border, #cbd5e0);
   border-radius: var(--radius); font-size: .8rem; background: #fff; color: #4a5568;
 }
+
+/* Overview tiles: one uniform rhythm.
+   Previously each tile carried its own margin-bottom and the two that moved in
+   from other pages carried none, so the gaps ran 28 / 40 / 0 / 40 / 0 / 40.
+   A single gap also means a hidden tile leaves no orphan margin behind, which
+   matters now that tiles come and go with the filter.
+   :not([hidden]) so this never overrides the tab panel's own hiding. */
+#tab-overview:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+#tab-overview > .stat-cards,
+#tab-overview > .campaign-pulse,
+#tab-overview > .races-to-watch,
+#tab-overview > .overview-charts,
+#tab-overview > .acct-summary-details { margin-bottom: 0; }
+#tab-overview > .last-updated { margin-top: 0; }
