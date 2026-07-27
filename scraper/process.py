@@ -919,7 +919,15 @@ def scrape_account_summaries(
     *,
     cache_path: Path = DATA_DIR / "orestar_cash_balances.json",
     max_workers: int = 10,
-    max_age_days: int = 1,
+    # A full refresh is ~7,245 live page fetches, about 58 minutes. At a 1-day
+    # TTL the daily job re-scraped all of them on any day the weekly scrapers
+    # had not just run, which does not fit in its 60-minute budget — the runs
+    # on 22, 24, 25 and 27 July all died here, mid-scrape.
+    #
+    # Nothing needs it daily. These figures are the CHECK that cash-on-hand is
+    # compared against, never an input to it, and the weekly filer-metadata and
+    # earliest-balances jobs already own refreshing them.
+    max_age_days: int = 7,
 ) -> dict[str, dict]:
     """Fetch full Account Summary from ORESTAR publicAccountSummary for each filer ID.
 
