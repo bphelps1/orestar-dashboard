@@ -19,6 +19,14 @@ permissions:
   contents: write
   actions: write          # needed to retrigger itself
 
+# Shares the data-pipeline lane with the other scrapers. Without this it could
+# run alongside them, and since every one of them commits and pushes to data/,
+# two at once means a rejected push — or worse, a job that scrapes for an hour
+# and then loses its results at the very last step.
+concurrency:
+  group: data-pipeline
+  cancel-in-progress: false
+
 jobs:
   scrape:
     runs-on: ubuntu-latest
