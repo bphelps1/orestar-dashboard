@@ -24,6 +24,7 @@ from pathlib import Path
 import pandas as pd
 from rapidfuzz import fuzz, process as rfuzz_process
 
+import orestar_parse
 import supabase_sync
 
 logging.basicConfig(
@@ -36,6 +37,11 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
+
+# ORESTAR's first year of electronic filing. Committees active before it
+# carry an opening balance this dataset cannot explain; committees formed
+# after it do not, and their balances must come from transactions alone.
+ORESTAR_FIRST_YEAR = 2006
 
 ROOT          = Path(__file__).parent.parent
 RAW_DIR       = ROOT / "data" / "_raw"
@@ -964,21 +970,12 @@ def scrape_account_summaries(
         def _parse_dollar(html: str, label: str) -> float | None:
             """Extract a dollar amount following a label in ORESTAR HTML.
 
-            Handles positive ($X,XXX.XX) and negative (- $X,XXX.XX) formats.
+            The old docstring here called ($X,XXX.XX) the POSITIVE format. It
+            is ORESTAR's negative format — accounting parentheses — and reading
+            it as positive is what flipped the sign on every committee in the
+            red. See scraper/orestar_parse.py.
             """
-            # Pattern: label ... optional negative sign ... $ amount
-            pat = re.compile(
-                re.escape(label) + r".*?"
-                r"(-\s*)?\$\s*([\d,]+\.\d{2})",
-                re.DOTALL,
-            )
-            m = pat.search(html)
-            if not m:
-                return None
-            val = float(m.group(2).replace(",", ""))
-            if m.group(1) and m.group(1).strip() == "-":
-                val = -val
-            return val
+            return orestar_parse.parse_dollar(html, label)
 
         def _fetch_one(fid: str) -> tuple[str, dict | None]:
             url = (
@@ -1298,7 +1295,8 @@ def aggregate_filers(
         # This avoids error-prone back-calculation from the current year.
         orestar_info = _orestar_data.get(name)
         beginning_balances: dict[str, float] = {}
-        cash_on_hand_source = "calculated"
+        cash_on_hand_source = "calculated"   # always — see the check below
+        has_orestar_check = False
         orestar_discrepancy = 0.0
         orestar_year = 0
 
@@ -1309,12 +1307,28 @@ def aggregate_filers(
         # transactions. If the scraped "earliest year" is AFTER our first
         # transaction year, the scraper returned the current-year balance
         # (not the actual earliest), so the beginning balance should be $0.
+        # A scraped opening balance is only ever legitimate for a committee
+        # that already held money when ORESTAR began. ORESTAR launched in 2006,
+        # so accounts active before then start with a real balance that no
+        # transaction in this dataset can account for.
+        #
+        # Every committee formed in 2007 or later starts from nothing and its
+        # entire history is on file, so its balance must be CALCULATED from
+        # transactions. Accepting a scraped opening balance for one of those
+        # silently injects money the transactions never show — and it would be
+        # invisible, because the result still looks like a plausible number.
         earliest_info = _name_to_earliest.get(name)
         first_txn_year = int(sorted_years[0]) if sorted_years else 9999
         first_year_begin = 0.0
         if earliest_info:
             scraped_year = earliest_info.get("earliest_year", 9999)
-            if scraped_year <= first_txn_year:
+            if scraped_year > ORESTAR_FIRST_YEAR:
+                if earliest_info.get("beginning_balance"):
+                    log.debug(
+                        "Ignoring %s opening balance for %s: formed %d, after ORESTAR began",
+                        f"${earliest_info['beginning_balance']:,.2f}", name, scraped_year,
+                    )
+            elif scraped_year <= first_txn_year:
                 first_year_begin = earliest_info["beginning_balance"]
             else:
                 log.debug(
@@ -1329,11 +1343,16 @@ def aggregate_filers(
             running += yearly_nets.get(yr_s, 0.0)
         cash_on_hand = round(running, 2)
 
-        # Compare against ORESTAR-reported ending balance for validation
+        # Compare against ORESTAR-reported ending balance for validation.
+        #
+        # This is a CHECK, never an input: cash_on_hand above is calculated
+        # from transactions and nothing here changes it. The flag used to be
+        # set to "orestar" at this point, which read as though the figure came
+        # from ORESTAR — it never did.
         if orestar_info and orestar_info.get("year", 0) > 0:
             orestar_year = orestar_info["year"]
             orestar_ending = orestar_info.get("ending_cash_balance", 0.0)
-            cash_on_hand_source = "orestar"
+            has_orestar_check = True
             our_anchor_ending = round(
                 beginning_balances.get(str(orestar_year), 0.0)
                 + yearly_nets.get(str(orestar_year), 0.0), 2
@@ -1554,6 +1573,7 @@ def aggregate_filers(
             "total_or": total_or, "total_od": total_od,
             "cash_on_hand": cash_on_hand, "tran_count": tran_count,
             "cash_on_hand_source": cash_on_hand_source,
+            "has_orestar_check": has_orestar_check,
             "orestar_discrepancy": orestar_discrepancy,
             "orestar_year": orestar_year,
             "orestar_account_summary": _acct_summary,

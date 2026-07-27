@@ -27,6 +27,8 @@ import argparse
 import json
 import logging
 import re
+
+import orestar_parse
 import time
 from datetime import datetime
 from pathlib import Path
@@ -52,10 +54,6 @@ PREV_CLICK_WAIT = 1.5
 FILER_DELAY = 1.0
 
 _YEAR_RE = re.compile(r"Account Summary Information for the year\s+(\d{4})")
-_BEG_BAL_RE = re.compile(
-    r"Beginning Balance \(Previous Year\).*?(-\s*)?\$\s*([\d,]+\.\d{2})",
-    re.DOTALL,
-)
 
 
 def _parse_year(html: str) -> int | None:
@@ -64,44 +62,38 @@ def _parse_year(html: str) -> int | None:
 
 
 def _parse_beginning_balance(html: str) -> float:
-    m = _BEG_BAL_RE.search(html)
-    if not m:
-        return 0.0
-    val = float(m.group(2).replace(",", ""))
-    if m.group(1) and m.group(1).strip() == "-":
-        val = -val
-    return val
+    """The anchor the whole rolling cash-on-hand calculation starts from.
+
+    Worth its own function purely to mark how much rides on it: this figure
+    seeds every subsequent year's balance for the filer, so a sign error here
+    is not a display bug, it is a wrong number all the way down.
+    """
+    return orestar_parse.parse_dollar(html, "Beginning Balance (Previous Year)", 0.0)
 
 
 def _parse_dollar(html: str, label: str) -> float:
-    """Extract a dollar amount following a label in the ORESTAR HTML."""
-    pattern = re.compile(
-        rf"{re.escape(label)}.*?(-\s*)?\$\s*([\d,]+\.\d{{2}})",
-        re.DOTALL,
-    )
-    m = pattern.search(html)
-    if not m:
-        return 0.0
-    val = float(m.group(2).replace(",", ""))
-    if m.group(1) and m.group(1).strip() == "-":
-        val = -val
-    return val
+    """Extract a dollar amount following a label in the ORESTAR HTML.
+
+    Labels are passed as literals — the shared parser escapes them — so
+    "Beginning Balance (Previous Year)" is written plainly here.
+    """
+    return orestar_parse.parse_dollar(html, label, 0.0)
 
 
 def _parse_yearly_summary(html: str) -> dict:
     """Parse all Account Summary fields from an ORESTAR year page."""
     return {
-        "beginning_balance": _parse_dollar(html, "Beginning Balance \\(Previous Year\\)"),
+        "beginning_balance": _parse_dollar(html, "Beginning Balance (Previous Year)"),
         "contributions": _parse_dollar(html, "Total Contributions"),
         "expenditures": _parse_dollar(html, "Total Expenditures"),
         "other_receipts": _parse_dollar(html, "Other Receipts"),
         "other_disbursements": _parse_dollar(html, "Other Disbursements"),
         "balance_adjustments": _parse_dollar(html, "Balance Adjustments"),
         "ending_cash_balance": _parse_dollar(html, "Ending Cash Balance"),
-        "loans_received": _parse_dollar(html, "Loans Received \\(Non-Exempt\\)"),
-        "loans_received_exempt": _parse_dollar(html, "Loans Received \\(Exempt\\)"),
-        "loan_payments": _parse_dollar(html, "Loan Payments \\(Non-Exempt\\)"),
-        "loan_payments_exempt": _parse_dollar(html, "Loan Payments \\(Exempt\\)"),
+        "loans_received": _parse_dollar(html, "Loans Received (Non-Exempt)"),
+        "loans_received_exempt": _parse_dollar(html, "Loans Received (Exempt)"),
+        "loan_payments": _parse_dollar(html, "Loan Payments (Non-Exempt)"),
+        "loan_payments_exempt": _parse_dollar(html, "Loan Payments (Exempt)"),
         "inkind_contributions": _parse_dollar(html, "In-Kind Contributions"),
         "inkind_expenditures": _parse_dollar(html, "In-Kind Expenditures"),
         "accounts_receivable": _parse_dollar(html, "Accounts Receivable"),
