@@ -27,6 +27,7 @@ import argparse
 import json
 import logging
 import re
+import sys
 
 import orestar_parse
 import time
@@ -53,6 +54,10 @@ PREV_CLICK_WAIT = 1.5
 # Retries for a single Prev click. A flaky navigation must not be able to
 # pass itself off as the beginning of a committee's filing history.
 PREV_CLICK_RETRIES = 3
+
+# Fraction of a batch that may fail before the run is treated as blocked
+# rather than merely unlucky.
+BATCH_FAILURE_ABORT = 0.5
 
 # Polite delay between filers
 FILER_DELAY = 1.0
@@ -393,6 +398,24 @@ def main():
     # Write remaining count to a file for the workflow to read
     remaining_path = DATA_DIR / "earliest_balances_remaining.txt"
     remaining_path.write_text(str(still_remaining))
+
+    # A batch where nearly everything failed is not a batch that ran.
+    #
+    # On 27 July one scraped 200 filers, failed all 200 on page-load timeouts,
+    # logged them as warnings, exited 0 and retriggered itself — holding the
+    # concurrency lane and evicting a scheduled job, to correct no balances at
+    # all. ORESTAR was up; it was refusing us, most likely after the daily job
+    # had just pulled 7,245 pages through it.
+    #
+    # Failing loudly here stops the chain instead of feeding it into a wall,
+    # and the failure rate is the signal: a handful of bad filers is normal,
+    # almost none succeeding is a blocked scraper.
+    if done and failed / done >= BATCH_FAILURE_ABORT:
+        remaining_path.write_text("0")          # do not retrigger into a wall
+        log.error("%d of %d filers failed (%.0f%%). ORESTAR is refusing this "
+                  "scraper — stopping rather than retriggering.",
+                  failed, done, 100 * failed / done)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

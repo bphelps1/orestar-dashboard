@@ -14,13 +14,32 @@ on:
         description: "Force re-scrape even if cached"
         required: false
         default: "false"
+      chain_index:
+        description: "Internal: which batch of the chain this is"
+        required: false
+        default: "1"
 
 permissions:
   contents: write
   actions: write          # needed to retrigger itself
 
+# The two ORESTAR browser scrapers share a lane of their own, apart from the
+# aggregation pipeline. Two reasons, and only one of them is about safety:
+#
+#   * Concurrent pushes are already handled — scripts/push_data.sh pushes
+#     first and, if rejected, shallow-fetches the new tip, replays its own
+#     files and retries. So the shared lane was never what protected them.
+#   * Two Playwright scrapers hitting ORESTAR at once is a real risk. On
+#     27 July a balances batch failed all 200 page loads right after the daily
+#     job pulled 7,245 pages through the site. Keeping BOTH scrapers in this
+#     one lane means they can never overlap.
+#
+# What the shared lane was actually costing: GitHub keeps one pending run per
+# group, so a third arrival evicts the waiting one. The self-retriggering
+# balances chain re-claimed the lane every batch and evicted a scheduled
+# Candidate Filings run outright — zero jobs, logged as "cancelled".
 concurrency:
-  group: data-pipeline
+  group: orestar-scrape
   cancel-in-progress: false
 
 jobs:
@@ -92,13 +111,35 @@ jobs:
         run: |
           bash scripts/push_data.sh "chore: update earliest balances $(date -u +%Y-%m-%d)" data/ docs/data/
 
+      # Bounded chain. Each run hands off to the next, but only up to
+      # MAX_CHAIN batches; after that it stops and the next scheduled run picks
+      # up where it left off.
+      #
+      # Unbounded, this chain re-claimed its lane every batch for as long as
+      # work remained — hours or days — and anything queued behind it was
+      # evicted rather than delayed, because GitHub keeps only one pending run
+      # per concurrency group. Yielding costs nothing: the cache is written and
+      # pushed every batch, so progress is never lost, only paused.
+      #
+      # `success()` rather than `always()`: a cancelled or failed run must NOT
+      # spawn another. Cancelling used to fire this step anyway, so stopping
+      # the chain meant disabling the whole workflow.
       - name: Retrigger for next batch
-        if: always() && steps.remaining.outputs.remaining != '0'
+        if: success() && steps.remaining.outputs.remaining != '0'
         env:
           GH_TOKEN: ${{ github.token }}
+          MAX_CHAIN: "6"
         run: |
-          echo "Retriggering workflow for next batch..."
+          BATCH="${{ github.event.inputs.chain_index || '1' }}"
+          if [ "$BATCH" -ge "$MAX_CHAIN" ]; then
+            echo "Reached $MAX_CHAIN chained batches; yielding the lane."
+            echo "${{ steps.remaining.outputs.remaining }} filers remain — the next"
+            echo "scheduled run continues from here."
+            exit 0
+          fi
+          echo "Retriggering workflow for batch $((BATCH + 1)) of $MAX_CHAIN..."
           gh workflow run earliest-balances.yml \
             -f max_filers="${{ github.event.inputs.max_filers || '200' }}" \
-            -f force="false"
+            -f force="false" \
+            -f chain_index="$((BATCH + 1))"
           echo "Retrigger dispatched."
