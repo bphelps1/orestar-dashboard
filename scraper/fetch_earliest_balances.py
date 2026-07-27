@@ -47,8 +47,13 @@ USER_AGENT = (
     "Chrome/120.0.0.0 Safari/537.36"
 )
 
-# Wait time after initial page load (F5 bot defense)
-PAGE_RENDER_WAIT = 5
+# Seconds to let F5's JavaScript challenge resolve into the real page before
+# reloading. The challenge is quick; the old fixed 5-second sleep was both too
+# long when it had already cleared and too short when it had not.
+CHALLENGE_WAIT = 20
+# How many times to re-request a page that never gets past the challenge.
+PAGE_LOAD_ATTEMPTS = 3
+
 # Wait between "Prev" clicks
 PREV_CLICK_WAIT = 1.5
 # Retries for a single Prev click. A flaky navigation must not be able to
@@ -112,6 +117,52 @@ def _parse_yearly_summary(html: str) -> dict:
     }
 
 
+def _load_summary_page(page, url: str, filer_id: str) -> str | None:
+    """Load an Account Summary page, sitting through F5's bot challenge.
+
+    ORESTAR fronts every request with an F5/TSPD JavaScript challenge: it
+    answers 200 with a ~7 KB script that computes a token, sets a cookie and
+    re-requests the real page. The cookies carry Max-Age=30, so the challenge
+    recurs constantly rather than once per session.
+
+    The old code did `page.goto(url)` — which waits for the LOAD event — and
+    called anything else a failure. That is the wrong success condition: the
+    challenge document replaces itself mid-flight, so `load` may never fire on
+    the document being waited for, and a 30-second timeout was reported as
+    "Failed to load page" even when the browser went on to render the real
+    thing. On 27 July that turned into 200 of 200 filers "failing" while a
+    plain browser could open the very same URLs.
+
+    So: return as soon as the DOM is parsed, then wait for the thing that
+    actually matters — the year heading — reloading a few times to give the
+    challenge room. A failure now means the data genuinely never arrived.
+    """
+    for attempt in range(1, PAGE_LOAD_ATTEMPTS + 1):
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=45_000)
+        except Exception as e:
+            # Not fatal by itself — the challenge often lands the real page
+            # anyway, so fall through and check the content before judging.
+            log.debug("Filer %s: goto attempt %d raised: %s", filer_id, attempt, e)
+
+        deadline = time.time() + CHALLENGE_WAIT
+        while time.time() < deadline:
+            try:
+                html = page.content()
+            except Exception:
+                html = ""
+            if _YEAR_RE.search(html):
+                return html
+            time.sleep(0.5)
+
+        log.debug("Filer %s: challenge not cleared on attempt %d/%d",
+                  filer_id, attempt, PAGE_LOAD_ATTEMPTS)
+
+    log.warning("Filer %s: page never resolved past the bot challenge after %d attempts",
+                filer_id, PAGE_LOAD_ATTEMPTS)
+    return None
+
+
 def _scrape_filer_earliest(page, filer_id: str) -> tuple[dict | None, dict]:
     """Navigate to a filer's Account Summary and click Prev until earliest year.
 
@@ -121,14 +172,10 @@ def _scrape_filer_earliest(page, filer_id: str) -> tuple[dict | None, dict]:
     yearly = {}  # year_str → summary dict
     url = f"{BASE_URL}/publicAccountSummary.do?filerId={filer_id}"
 
-    try:
-        page.goto(url, timeout=30_000)
-        time.sleep(PAGE_RENDER_WAIT)
-    except Exception as e:
-        log.warning("Failed to load page for filer %s: %s", filer_id, e)
+    html = _load_summary_page(page, url, filer_id)
+    if html is None:
         return None, yearly
 
-    html = page.content()
     year = _parse_year(html)
     if not year:
         log.warning("No year found on page for filer %s", filer_id)
@@ -168,25 +215,32 @@ def _scrape_filer_earliest(page, filer_id: str) -> tuple[dict | None, dict]:
 
         # Retry the click: a single flaky navigation should not be allowed to
         # masquerade as the start of a committee's history.
-        clicked = False
+        # Each Prev is a fresh request, so F5 can challenge again — its cookies
+        # last 30 seconds. Waiting on "networkidle" is the same wrong success
+        # condition as before: wait for the year heading to come back instead.
+        html, new_year = None, None
         for attempt in range(PREV_CLICK_RETRIES):
             try:
                 prev_btn.click()
-                page.wait_for_load_state("networkidle", timeout=15_000)
-                time.sleep(PREV_CLICK_WAIT)
-                clicked = True
-                break
             except Exception as e:
                 log.warning("Filer %s: Prev click failed at year %d (attempt %d/%d): %s",
                             filer_id, year, attempt + 1, PREV_CLICK_RETRIES, e)
                 time.sleep(PREV_CLICK_WAIT * (attempt + 1))
-        if not clicked:
-            log.error("Filer %s: giving up at year %d — opening balance NOT trustworthy",
-                      filer_id, year)
-            break
-
-        html = page.content()
-        new_year = _parse_year(html)
+                continue
+            deadline = time.time() + CHALLENGE_WAIT
+            while time.time() < deadline:
+                try:
+                    html = page.content()
+                except Exception:
+                    html = ""
+                new_year = _parse_year(html)
+                if new_year:
+                    break
+                time.sleep(0.5)
+            if new_year:
+                break
+            log.warning("Filer %s: no year heading after Prev at %d (attempt %d/%d)",
+                        filer_id, year, attempt + 1, PREV_CLICK_RETRIES)
 
         if not new_year:
             log.error("Filer %s: lost the year after Prev click %d — opening balance "
