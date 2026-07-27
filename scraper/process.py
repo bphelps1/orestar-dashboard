@@ -38,11 +38,6 @@ log = logging.getLogger(__name__)
 # Paths
 # ---------------------------------------------------------------------------
 
-# ORESTAR's first year of electronic filing. Committees active before it
-# carry an opening balance this dataset cannot explain; committees formed
-# after it do not, and their balances must come from transactions alone.
-ORESTAR_FIRST_YEAR = 2006
-
 ROOT          = Path(__file__).parent.parent
 RAW_DIR       = ROOT / "data" / "_raw"
 DATA_DIR      = ROOT / "data"
@@ -1307,33 +1302,33 @@ def aggregate_filers(
         # transactions. If the scraped "earliest year" is AFTER our first
         # transaction year, the scraper returned the current-year balance
         # (not the actual earliest), so the beginning balance should be $0.
-        # A scraped opening balance is only ever legitimate for a committee
-        # that already held money when ORESTAR began. ORESTAR launched in 2006,
-        # so accounts active before then start with a real balance that no
-        # transaction in this dataset can account for.
+        # The anchor is the "Beginning Balance (Previous Year)" from the FIRST
+        # account statement ORESTAR holds for this committee. Read from the
+        # right page it needs no special-casing by year: a committee that
+        # predates ORESTAR shows the real money it walked in with, and one
+        # formed later shows $0, because there was nothing before.
         #
-        # Every committee formed in 2007 or later starts from nothing and its
-        # entire history is on file, so its balance must be CALCULATED from
-        # transactions. Accepting a scraped opening balance for one of those
-        # silently injects money the transactions never show — and it would be
-        # invisible, because the result still looks like a plausible number.
+        # So the only question is whether the scraper actually got to that
+        # page. `reached_earliest` answers it. Without that flag the two
+        # outcomes were indistinguishable, and a timed-out click banked
+        # whatever middle year it stopped on as the committee's opening
+        # balance — filer 142 recorded $220,614.68 from 2024 for a committee
+        # filing since 2006.
         earliest_info = _name_to_earliest.get(name)
         first_txn_year = int(sorted_years[0]) if sorted_years else 9999
         first_year_begin = 0.0
         if earliest_info:
             scraped_year = earliest_info.get("earliest_year", 9999)
-            if scraped_year > ORESTAR_FIRST_YEAR:
-                if earliest_info.get("beginning_balance"):
-                    log.debug(
-                        "Ignoring %s opening balance for %s: formed %d, after ORESTAR began",
-                        f"${earliest_info['beginning_balance']:,.2f}", name, scraped_year,
-                    )
-            elif scraped_year <= first_txn_year:
+            # Older cache entries predate the flag; fall back to the year test,
+            # which catches the same failure whenever transactions run earlier.
+            complete = earliest_info.get("reached_earliest", scraped_year <= first_txn_year)
+            if complete and scraped_year <= first_txn_year:
                 first_year_begin = earliest_info["beginning_balance"]
-            else:
-                log.debug(
-                    "Ignoring earliest balance for %s: scraped year %d > first txn year %d",
-                    name, scraped_year, first_txn_year,
+            elif earliest_info.get("beginning_balance"):
+                log.warning(
+                    "Ignoring $%.2f opening balance for %s: paging stopped at %d but "
+                    "transactions start %d — not the first statement",
+                    earliest_info["beginning_balance"], name, scraped_year, first_txn_year,
                 )
 
         # Roll forward: beginning balance for each year, then cash on hand
