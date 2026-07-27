@@ -2226,7 +2226,10 @@ function updateCohIndicator(profile) {
   const disc = orestarEnding != null ? Math.round((calcCoh - orestarEnding) * 100) / 100 : 0;
   const absDisc = Math.abs(disc);
 
-  if (src === "orestar" && absDisc > 0.01) {
+  // Gate on having an ORESTAR figure to compare against. The old test
+  // read a source label that always said the balance came from ORESTAR;
+  // it never did — the balance is calculated from transactions.
+  if (orestarEnding != null && absDisc > 0.01) {
     const severity = discrepancySeverity(absDisc);
     ind.hidden = false;
     ind.className = `coh-indicator coh-warn-${severity}`;
@@ -2278,8 +2281,8 @@ function cohIndicatorHTML(profile) {
   const orestarEnding = acct.ending_cash_balance != null ? acct.ending_cash_balance : null;
   const disc = orestarEnding != null ? Math.round((calcCoh - orestarEnding) * 100) / 100 : 0;
   const absDisc = Math.abs(disc);
-  if (src === "calculated") {
-    return '<span class="coh-indicator coh-estimated" tabindex="0" title="Estimated: no ORESTAR beginning balance data scraped yet">EST</span>';
+  if (orestarEnding == null) {
+    return '<span class="coh-indicator coh-estimated" tabindex="0" title="No ORESTAR account summary scraped yet, so this balance is unchecked">EST</span>';
   }
   if (absDisc > 0.01) {
     const severity = discrepancySeverity(absDisc);

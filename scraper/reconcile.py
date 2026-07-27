@@ -16,6 +16,8 @@ import argparse
 import json
 import logging
 import re
+
+import orestar_parse
 import sys
 import urllib.request
 from pathlib import Path
@@ -76,14 +78,7 @@ def get_orestar_account_summary(filer_id: str) -> dict | None:
         return None
 
     def parse_dollar(label):
-        pat = re.compile(re.escape(label) + r".*?(-\s*)?\$\s*([\d,]+\.\d{2})", re.DOTALL)
-        m = pat.search(html)
-        if not m:
-            return None
-        val = float(m.group(2).replace(",", ""))
-        if m.group(1) and m.group(1).strip() == "-":
-            val = -val
-        return val
+        return orestar_parse.parse_dollar(html, label)
 
     year_m = re.search(r"Account Summary Information for the year\s+(\d{4})", html)
     if not year_m:

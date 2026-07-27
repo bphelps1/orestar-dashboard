@@ -24,6 +24,7 @@ from pathlib import Path
 import pandas as pd
 from rapidfuzz import fuzz, process as rfuzz_process
 
+import orestar_parse
 import supabase_sync
 
 logging.basicConfig(
@@ -964,21 +965,12 @@ def scrape_account_summaries(
         def _parse_dollar(html: str, label: str) -> float | None:
             """Extract a dollar amount following a label in ORESTAR HTML.
 
-            Handles positive ($X,XXX.XX) and negative (- $X,XXX.XX) formats.
+            The old docstring here called ($X,XXX.XX) the POSITIVE format. It
+            is ORESTAR's negative format — accounting parentheses — and reading
+            it as positive is what flipped the sign on every committee in the
+            red. See scraper/orestar_parse.py.
             """
-            # Pattern: label ... optional negative sign ... $ amount
-            pat = re.compile(
-                re.escape(label) + r".*?"
-                r"(-\s*)?\$\s*([\d,]+\.\d{2})",
-                re.DOTALL,
-            )
-            m = pat.search(html)
-            if not m:
-                return None
-            val = float(m.group(2).replace(",", ""))
-            if m.group(1) and m.group(1).strip() == "-":
-                val = -val
-            return val
+            return orestar_parse.parse_dollar(html, label)
 
         def _fetch_one(fid: str) -> tuple[str, dict | None]:
             url = (
@@ -1298,7 +1290,8 @@ def aggregate_filers(
         # This avoids error-prone back-calculation from the current year.
         orestar_info = _orestar_data.get(name)
         beginning_balances: dict[str, float] = {}
-        cash_on_hand_source = "calculated"
+        cash_on_hand_source = "calculated"   # always — see the check below
+        has_orestar_check = False
         orestar_discrepancy = 0.0
         orestar_year = 0
 
@@ -1309,17 +1302,33 @@ def aggregate_filers(
         # transactions. If the scraped "earliest year" is AFTER our first
         # transaction year, the scraper returned the current-year balance
         # (not the actual earliest), so the beginning balance should be $0.
+        # The anchor is the "Beginning Balance (Previous Year)" from the FIRST
+        # account statement ORESTAR holds for this committee. Read from the
+        # right page it needs no special-casing by year: a committee that
+        # predates ORESTAR shows the real money it walked in with, and one
+        # formed later shows $0, because there was nothing before.
+        #
+        # So the only question is whether the scraper actually got to that
+        # page. `reached_earliest` answers it. Without that flag the two
+        # outcomes were indistinguishable, and a timed-out click banked
+        # whatever middle year it stopped on as the committee's opening
+        # balance — filer 142 recorded $220,614.68 from 2024 for a committee
+        # filing since 2006.
         earliest_info = _name_to_earliest.get(name)
         first_txn_year = int(sorted_years[0]) if sorted_years else 9999
         first_year_begin = 0.0
         if earliest_info:
             scraped_year = earliest_info.get("earliest_year", 9999)
-            if scraped_year <= first_txn_year:
+            # Older cache entries predate the flag; fall back to the year test,
+            # which catches the same failure whenever transactions run earlier.
+            complete = earliest_info.get("reached_earliest", scraped_year <= first_txn_year)
+            if complete and scraped_year <= first_txn_year:
                 first_year_begin = earliest_info["beginning_balance"]
-            else:
-                log.debug(
-                    "Ignoring earliest balance for %s: scraped year %d > first txn year %d",
-                    name, scraped_year, first_txn_year,
+            elif earliest_info.get("beginning_balance"):
+                log.warning(
+                    "Ignoring $%.2f opening balance for %s: paging stopped at %d but "
+                    "transactions start %d — not the first statement",
+                    earliest_info["beginning_balance"], name, scraped_year, first_txn_year,
                 )
 
         # Roll forward: beginning balance for each year, then cash on hand
@@ -1329,11 +1338,16 @@ def aggregate_filers(
             running += yearly_nets.get(yr_s, 0.0)
         cash_on_hand = round(running, 2)
 
-        # Compare against ORESTAR-reported ending balance for validation
+        # Compare against ORESTAR-reported ending balance for validation.
+        #
+        # This is a CHECK, never an input: cash_on_hand above is calculated
+        # from transactions and nothing here changes it. The flag used to be
+        # set to "orestar" at this point, which read as though the figure came
+        # from ORESTAR — it never did.
         if orestar_info and orestar_info.get("year", 0) > 0:
             orestar_year = orestar_info["year"]
             orestar_ending = orestar_info.get("ending_cash_balance", 0.0)
-            cash_on_hand_source = "orestar"
+            has_orestar_check = True
             our_anchor_ending = round(
                 beginning_balances.get(str(orestar_year), 0.0)
                 + yearly_nets.get(str(orestar_year), 0.0), 2
@@ -1554,6 +1568,7 @@ def aggregate_filers(
             "total_or": total_or, "total_od": total_od,
             "cash_on_hand": cash_on_hand, "tran_count": tran_count,
             "cash_on_hand_source": cash_on_hand_source,
+            "has_orestar_check": has_orestar_check,
             "orestar_discrepancy": orestar_discrepancy,
             "orestar_year": orestar_year,
             "orestar_account_summary": _acct_summary,
@@ -1885,7 +1900,21 @@ def _build_combined_csv() -> Path:
 
 
 if __name__ == "__main__":
+    import os
     import sys
+
+    # Every Supabase write in this file is a silent no-op when SUPABASE_DB_URL
+    # is unset. That is right for local runs, but in CI it meant three
+    # scheduled workflows spent an hour scraping, wrote correct JSON to the
+    # repo, exited 0 — and left the live site reading days-old data, with
+    # nothing in the log to say so. Say it loudly instead of returning quietly.
+    if not supabase_sync.sync_enabled():
+        _where = "CI" if os.environ.get("GITHUB_ACTIONS") else "this machine"
+        print("=" * 72, file=sys.stderr)
+        print(f"WARNING: SUPABASE_DB_URL is not set on {_where}.", file=sys.stderr)
+        print("         Files on disk will be updated; the LIVE SITE WILL NOT.",
+              file=sys.stderr)
+        print("=" * 72, file=sys.stderr)
     if "--supabase-full-load" in sys.argv:
         # One-time / periodic: load every transaction shard into Postgres and
         # publish the combined full-dataset CSV to Storage. Run once after the

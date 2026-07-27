@@ -27,6 +27,8 @@ import argparse
 import json
 import logging
 import re
+
+import orestar_parse
 import time
 from datetime import datetime
 from pathlib import Path
@@ -48,14 +50,14 @@ USER_AGENT = (
 PAGE_RENDER_WAIT = 5
 # Wait between "Prev" clicks
 PREV_CLICK_WAIT = 1.5
+# Retries for a single Prev click. A flaky navigation must not be able to
+# pass itself off as the beginning of a committee's filing history.
+PREV_CLICK_RETRIES = 3
+
 # Polite delay between filers
 FILER_DELAY = 1.0
 
 _YEAR_RE = re.compile(r"Account Summary Information for the year\s+(\d{4})")
-_BEG_BAL_RE = re.compile(
-    r"Beginning Balance \(Previous Year\).*?(-\s*)?\$\s*([\d,]+\.\d{2})",
-    re.DOTALL,
-)
 
 
 def _parse_year(html: str) -> int | None:
@@ -64,44 +66,38 @@ def _parse_year(html: str) -> int | None:
 
 
 def _parse_beginning_balance(html: str) -> float:
-    m = _BEG_BAL_RE.search(html)
-    if not m:
-        return 0.0
-    val = float(m.group(2).replace(",", ""))
-    if m.group(1) and m.group(1).strip() == "-":
-        val = -val
-    return val
+    """The anchor the whole rolling cash-on-hand calculation starts from.
+
+    Worth its own function purely to mark how much rides on it: this figure
+    seeds every subsequent year's balance for the filer, so a sign error here
+    is not a display bug, it is a wrong number all the way down.
+    """
+    return orestar_parse.parse_dollar(html, "Beginning Balance (Previous Year)", 0.0)
 
 
 def _parse_dollar(html: str, label: str) -> float:
-    """Extract a dollar amount following a label in the ORESTAR HTML."""
-    pattern = re.compile(
-        rf"{re.escape(label)}.*?(-\s*)?\$\s*([\d,]+\.\d{{2}})",
-        re.DOTALL,
-    )
-    m = pattern.search(html)
-    if not m:
-        return 0.0
-    val = float(m.group(2).replace(",", ""))
-    if m.group(1) and m.group(1).strip() == "-":
-        val = -val
-    return val
+    """Extract a dollar amount following a label in the ORESTAR HTML.
+
+    Labels are passed as literals — the shared parser escapes them — so
+    "Beginning Balance (Previous Year)" is written plainly here.
+    """
+    return orestar_parse.parse_dollar(html, label, 0.0)
 
 
 def _parse_yearly_summary(html: str) -> dict:
     """Parse all Account Summary fields from an ORESTAR year page."""
     return {
-        "beginning_balance": _parse_dollar(html, "Beginning Balance \\(Previous Year\\)"),
+        "beginning_balance": _parse_dollar(html, "Beginning Balance (Previous Year)"),
         "contributions": _parse_dollar(html, "Total Contributions"),
         "expenditures": _parse_dollar(html, "Total Expenditures"),
         "other_receipts": _parse_dollar(html, "Other Receipts"),
         "other_disbursements": _parse_dollar(html, "Other Disbursements"),
         "balance_adjustments": _parse_dollar(html, "Balance Adjustments"),
         "ending_cash_balance": _parse_dollar(html, "Ending Cash Balance"),
-        "loans_received": _parse_dollar(html, "Loans Received \\(Non-Exempt\\)"),
-        "loans_received_exempt": _parse_dollar(html, "Loans Received \\(Exempt\\)"),
-        "loan_payments": _parse_dollar(html, "Loan Payments \\(Non-Exempt\\)"),
-        "loan_payments_exempt": _parse_dollar(html, "Loan Payments \\(Exempt\\)"),
+        "loans_received": _parse_dollar(html, "Loans Received (Non-Exempt)"),
+        "loans_received_exempt": _parse_dollar(html, "Loans Received (Exempt)"),
+        "loan_payments": _parse_dollar(html, "Loan Payments (Non-Exempt)"),
+        "loan_payments_exempt": _parse_dollar(html, "Loan Payments (Exempt)"),
         "inkind_contributions": _parse_dollar(html, "In-Kind Contributions"),
         "inkind_expenditures": _parse_dollar(html, "In-Kind Expenditures"),
         "accounts_receivable": _parse_dollar(html, "Accounts Receivable"),
@@ -138,55 +134,86 @@ def _scrape_filer_earliest(page, filer_id: str) -> tuple[dict | None, dict]:
     # Collect the current year's data
     yearly[str(year)] = _parse_yearly_summary(html)
 
-    # Click "Prev" until we reach the earliest year (when Prev stops changing the year)
+    # Page back with "Prev" to the FIRST account statement ORESTAR holds. Its
+    # "Beginning Balance (Previous Year)" is the anchor the whole rolling
+    # cash-on-hand calculation starts from.
+    #
+    # Reaching that page is the entire point, so the two ways of stopping are
+    # kept apart. Arriving at the first statement — no Prev button left, or the
+    # year stops going down — is a RESULT. Running out of clicks, or a click
+    # that fails, is a FAILURE that happens to leave the browser on some middle
+    # year whose beginning balance is a mid-history figure, not an opening one.
+    #
+    # Both used to `break` into the same code path, so a timeout on one click
+    # recorded whatever year it stopped on as "earliest". 155 filers carry a
+    # balance collected that way, the worst of them 19 years short: filer 142
+    # stopped at 2024 and banked $220,614.68 as an opening balance for a
+    # committee that has been filing since 2006.
     prev_year = year
-    max_clicks = 30  # safety limit (covers 2006-2026 range + margin)
+    max_clicks = 30                    # 2006–2026 is 21 years, so this is slack
+    reached_earliest = False
 
     for click_num in range(max_clicks):
-        # Find Prev button
         prev_btn = page.locator('input[type="submit"][value="Prev"]').first
         if prev_btn.count() == 0:
-            log.info("Filer %s: no Prev button at year %d — this is the earliest", filer_id, year)
+            log.info("Filer %s: no Prev button at year %d — first statement reached",
+                     filer_id, year)
+            reached_earliest = True
             break
 
-        try:
-            prev_btn.click()
-            page.wait_for_load_state("networkidle", timeout=15_000)
-            time.sleep(PREV_CLICK_WAIT)
-        except Exception as e:
-            log.warning("Filer %s: Prev click failed at year %d: %s", filer_id, year, e)
+        # Retry the click: a single flaky navigation should not be allowed to
+        # masquerade as the start of a committee's history.
+        clicked = False
+        for attempt in range(PREV_CLICK_RETRIES):
+            try:
+                prev_btn.click()
+                page.wait_for_load_state("networkidle", timeout=15_000)
+                time.sleep(PREV_CLICK_WAIT)
+                clicked = True
+                break
+            except Exception as e:
+                log.warning("Filer %s: Prev click failed at year %d (attempt %d/%d): %s",
+                            filer_id, year, attempt + 1, PREV_CLICK_RETRIES, e)
+                time.sleep(PREV_CLICK_WAIT * (attempt + 1))
+        if not clicked:
+            log.error("Filer %s: giving up at year %d — opening balance NOT trustworthy",
+                      filer_id, year)
             break
 
         html = page.content()
         new_year = _parse_year(html)
 
         if not new_year:
-            log.warning("Filer %s: lost year after Prev click %d", filer_id, click_num + 1)
+            log.error("Filer %s: lost the year after Prev click %d — opening balance "
+                      "NOT trustworthy", filer_id, click_num + 1)
             break
 
         if new_year >= prev_year:
-            # Year didn't decrease — we've hit the floor
-            log.info("Filer %s: year stopped decreasing at %d (was %d) — earliest reached",
-                     filer_id, new_year, prev_year)
+            # ORESTAR's own floor: Prev no longer moves us back.
+            log.info("Filer %s: year stopped decreasing at %d — first statement reached",
+                     filer_id, new_year)
+            reached_earliest = True
             break
 
-        log.debug("Filer %s: navigated to year %d", filer_id, new_year)
-        # Collect this year's data
         yearly[str(new_year)] = _parse_yearly_summary(html)
         prev_year = new_year
         year = new_year
+    else:
+        log.error("Filer %s: still paging after %d clicks (year %d) — opening balance "
+                  "NOT trustworthy", filer_id, max_clicks, year)
 
-    # Now we're on the earliest year page — extract beginning balance
     html = page.content()
     final_year = _parse_year(html) or year
     beg_bal = _parse_beginning_balance(html)
 
-    log.info("Filer %s: earliest year = %d, beginning balance = $%.2f, years collected = %d",
-             filer_id, final_year, beg_bal, len(yearly))
+    log.info("Filer %s: earliest year = %d, beginning balance = $%.2f, years = %d, complete = %s",
+             filer_id, final_year, beg_bal, len(yearly), reached_earliest)
 
     earliest = {
         "earliest_year": final_year,
         "beginning_balance": beg_bal,
+        # Consumers must check this before using beginning_balance as an anchor.
+        "reached_earliest": reached_earliest,
         "ts": datetime.now().timestamp(),
     }
     return earliest, yearly
@@ -267,6 +294,18 @@ def main():
             or cache[fid].get("ts", 0) < cutoff
             or fid not in yearly_cache
             or not yearly_cache[fid].get("years")
+            # An entry that never reached the first statement holds a
+            # mid-history balance, not an opening one. Retry those regardless
+            # of age — freshness is not what is wrong with them.
+            #
+            # Scoped to entries carrying a non-zero balance, and to ones known
+            # to have failed. A cached $0 anchor contributes nothing whether it
+            # is trusted or not, so re-scraping all 7,366 to confirm zeros
+            # would be thousands of page loads to change no number; those pick
+            # the flag up on their normal refresh instead.
+            or cache[fid].get("reached_earliest") is False
+            or (not cache[fid].get("reached_earliest")
+                and cache[fid].get("beginning_balance"))
         ]
 
     # Total remaining (before --max-filers cap) for retrigger logic
