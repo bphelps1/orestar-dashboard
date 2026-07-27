@@ -1885,7 +1885,21 @@ def _build_combined_csv() -> Path:
 
 
 if __name__ == "__main__":
+    import os
     import sys
+
+    # Every Supabase write in this file is a silent no-op when SUPABASE_DB_URL
+    # is unset. That is right for local runs, but in CI it meant three
+    # scheduled workflows spent an hour scraping, wrote correct JSON to the
+    # repo, exited 0 — and left the live site reading days-old data, with
+    # nothing in the log to say so. Say it loudly instead of returning quietly.
+    if not supabase_sync.sync_enabled():
+        _where = "CI" if os.environ.get("GITHUB_ACTIONS") else "this machine"
+        print("=" * 72, file=sys.stderr)
+        print(f"WARNING: SUPABASE_DB_URL is not set on {_where}.", file=sys.stderr)
+        print("         Files on disk will be updated; the LIVE SITE WILL NOT.",
+              file=sys.stderr)
+        print("=" * 72, file=sys.stderr)
     if "--supabase-full-load" in sys.argv:
         # One-time / periodic: load every transaction shard into Postgres and
         # publish the combined full-dataset CSV to Storage. Run once after the

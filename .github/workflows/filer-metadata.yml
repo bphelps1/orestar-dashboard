@@ -66,6 +66,11 @@ jobs:
       - name: Re-aggregate with updated metadata
         if: always()
         run: python scraper/process.py
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_STORAGE_BUCKET: exports
 
       - name: Commit and push updated data
         if: always()
