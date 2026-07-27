@@ -19,12 +19,23 @@ permissions:
   contents: write
   actions: write          # needed to retrigger itself
 
-# Shares the data-pipeline lane with the other scrapers. Without this it could
-# run alongside them, and since every one of them commits and pushes to data/,
-# two at once means a rejected push — or worse, a job that scrapes for an hour
-# and then loses its results at the very last step.
+# The two ORESTAR browser scrapers share a lane of their own, apart from the
+# aggregation pipeline. Two reasons, and only one of them is about safety:
+#
+#   * Concurrent pushes are already handled — scripts/push_data.sh pushes
+#     first and, if rejected, shallow-fetches the new tip, replays its own
+#     files and retries. So the shared lane was never what protected them.
+#   * Two Playwright scrapers hitting ORESTAR at once is a real risk. On
+#     27 July a balances batch failed all 200 page loads right after the daily
+#     job pulled 7,245 pages through the site. Keeping BOTH scrapers in this
+#     one lane means they can never overlap.
+#
+# What the shared lane was actually costing: GitHub keeps one pending run per
+# group, so a third arrival evicts the waiting one. The self-retriggering
+# balances chain re-claimed the lane every batch and evicted a scheduled
+# Candidate Filings run outright — zero jobs, logged as "cancelled".
 concurrency:
-  group: data-pipeline
+  group: orestar-scrape
   cancel-in-progress: false
 
 jobs:
