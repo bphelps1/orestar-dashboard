@@ -30,8 +30,13 @@ import argparse
 import json
 import logging
 import re
+import sys
 import time
 from pathlib import Path
+
+# Fraction of a batch that may fail before the run is treated as blocked
+# rather than merely unlucky. Matches fetch_earliest_balances.py.
+BATCH_FAILURE_ABORT = 0.5
 
 log = logging.getLogger(__name__)
 
@@ -346,6 +351,25 @@ def main():
     remaining_path = DATA_DIR / "filer_metadata_remaining.txt"
     remaining_path.write_text(str(remaining))
     log.info("Remaining filers: %d", remaining)
+
+    # A batch that mostly failed is not a batch that ran.
+    #
+    # On 3 August this scraped 33 filers, failed 79, and exited 0 — the run
+    # showed a green tick and the only trace was one summary line buried in the
+    # log. The same guard already protects the balances scraper; this one was
+    # missed, which is precisely why nobody would have noticed 70% of a batch
+    # going missing.
+    #
+    # Errors here mean committee type, office and party did not refresh, and
+    # those feed the candidate-to-committee matching that decides who appears
+    # on the race map. Failing quietly there is expensive.
+    attempted = scraped + errors
+    if attempted and errors / attempted >= BATCH_FAILURE_ABORT:
+        remaining_path.write_text("0")          # do not retrigger into a wall
+        log.error("%d of %d filers failed (%.0f%%). Stopping rather than "
+                  "retriggering — check whether ORESTAR is refusing this scraper.",
+                  errors, attempted, 100 * errors / attempted)
+        sys.exit(1)
 
 
 def _save_cache(cache: dict):
