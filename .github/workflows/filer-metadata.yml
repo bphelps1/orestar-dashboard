@@ -59,6 +59,12 @@ jobs:
         with:
           fetch-depth: 1
 
+      # Never let two ORESTAR scrapers run at once — see
+      # .github/actions/await-orestar for why this is a runtime check rather
+      # than a concurrency group or a schedule gap.
+      - name: Wait for other ORESTAR jobs
+        uses: ./.github/actions/await-orestar
+
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
