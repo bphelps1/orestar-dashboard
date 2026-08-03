@@ -326,6 +326,12 @@ document.querySelectorAll(".admin-tab-btn").forEach(btn => {
           `<p class="empty-msg">Could not load: ${esc(e.message)}</p>`;
       });
     }
+    if (tab === "tab-balances") {
+      bdLoad().then(bdRender).catch(e => {
+        document.getElementById("bd-list").innerHTML =
+          `<p class="empty-msg">Could not load: ${esc(e.message)}</p>`;
+      });
+    }
   });
 });
 
@@ -1048,4 +1054,111 @@ function clRenderDecisions() {
 
 document.addEventListener("input", e => {
   if (e.target && e.target.id === "cl-filter") clRender(e.target.value.trim());
+});
+
+// ── Balance Discrepancies ─────────────────────────────────────────────
+//
+// Committees whose calculated cash on hand disagrees with the ending balance
+// on their own ORESTAR account summary.
+//
+// The list is precomputed into a dashboard_cache blob rather than derived
+// here: the raw material is 7,268 filer_detail rows carrying full timelines
+// and donor lists, and pulling all of that into the browser to find the ~2,700
+// that disagree would be absurd.
+//
+// Note this compares CASH ON HAND against ORESTAR's ending balance, which is
+// the same comparison the dashboard's own indicator makes. It deliberately
+// does not use the stored `orestar_discrepancy` field: that one compared a
+// single year's net against ORESTAR's ending balance, so any committee with no
+// transactions in ORESTAR's reported year appeared to be off by its entire
+// balance. 1,447 committees — 41% of everything it flagged — were wrong that
+// way, Oregon Strong among them, sitting at $889,626.78 on both sides and
+// recorded as $889,626.78 adrift.
+
+let bdRows = null;      // full row set, sorted by |delta| descending
+let bdMeta = {};
+
+const bd$ = v => (v < 0 ? "-$" : "$") + Math.abs(v).toLocaleString("en-US",
+  { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+async function bdLoad() {
+  if (bdRows) return;
+  // dashboard_cache only, deliberately no file fallback. process.py writes this
+  // blob to data/aggregated/, which is outside the served tree, so a fallback
+  // could only ever read a copy committed by hand — and a hand-copied 600 KB
+  // file that nothing refreshes goes stale silently, which is worse than an
+  // error that says what is wrong.
+  const sb = await getSupabase();
+  const { data, error } = await sb.from("dashboard_cache")
+    .select("data").eq("key", "balance_discrepancies").single();
+  if (error) {
+    throw new Error(
+      "Balance comparison has not been generated yet — it is built by the next "
+      + "data refresh. (" + error.message + ")");
+  }
+  const blob = data.data;
+  bdRows = blob.rows || [];
+  bdMeta = { checked: blob.checked || 0, flagged: blob.flagged || bdRows.length,
+             generated: blob.generated || "" };
+}
+
+function bdRender() {
+  const q    = (document.getElementById("bd-filter").value || "").trim().toLowerCase();
+  const min  = parseFloat(document.getElementById("bd-min").value) || 0.01;
+  const kind = document.getElementById("bd-kind").value;
+
+  const rows = (bdRows || []).filter(r => {
+    if (Math.abs(r.delta) < min) return false;
+    if (kind === "active"  && r.dormant) return false;
+    if (kind === "dormant" && !r.dormant) return false;
+    if (q && !(r.name || "").toLowerCase().includes(q)
+          && !String(r.filer_id || "").includes(q)) return false;
+    return true;
+  });
+
+  const agree = bdMeta.checked - bdMeta.flagged;
+  document.getElementById("bd-count").textContent =
+    `${rows.length.toLocaleString()} shown · ${bdMeta.flagged.toLocaleString()} flagged of `
+    + `${bdMeta.checked.toLocaleString()} checked · ${agree.toLocaleString()} agree`;
+
+  if (!rows.length) {
+    document.getElementById("bd-list").innerHTML =
+      '<p class="empty-msg">No committees match these filters.</p>';
+    return;
+  }
+
+  // Capped: past a few hundred rows this stops being a review tool and starts
+  // being a scrolling exercise. The filters are the way to reach the rest.
+  const CAP = 300;
+  const shown = rows.slice(0, CAP);
+  const body = shown.map(r => {
+    const sev = Math.abs(r.delta) >= 100000 ? "red"
+              : Math.abs(r.delta) >= 10000  ? "yellow" : "gray";
+    return `<tr>
+      <td><a href="../index.html?filer=${encodeURIComponent(r.slug)}" target="_blank">${esc(r.name || r.slug)}</a>
+          ${r.dormant ? '<span class="bd-tag" title="No transactions in the year ORESTAR reports">dormant</span>' : ""}</td>
+      <td class="bd-num">${bd$(r.calculated)}</td>
+      <td class="bd-num">${bd$(r.orestar)}</td>
+      <td class="bd-num bd-delta bd-${sev}">${r.delta > 0 ? "+" : ""}${bd$(r.delta)}</td>
+      <td class="bd-num">${(r.tran_count || 0).toLocaleString()}</td>
+      <td>${r.orestar_year || "—"}</td>
+    </tr>`;
+  }).join("");
+
+  document.getElementById("bd-list").innerHTML = `
+    <table class="bd-table">
+      <thead><tr>
+        <th>Committee</th><th class="bd-num">Calculated</th><th class="bd-num">ORESTAR</th>
+        <th class="bd-num">Difference</th><th class="bd-num">Txns</th><th>Yr</th>
+      </tr></thead>
+      <tbody>${body}</tbody>
+    </table>
+    ${rows.length > CAP
+      ? `<p class="section-desc">Showing the ${CAP} largest of ${rows.length.toLocaleString()} — narrow the filters to see the rest.</p>`
+      : ""}`;
+}
+
+["bd-filter", "bd-min", "bd-kind"].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener(id === "bd-filter" ? "input" : "change", bdRender);
 });

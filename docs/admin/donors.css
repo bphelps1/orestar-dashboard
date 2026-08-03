@@ -328,3 +328,24 @@
 .cl-hit span { font-size: .85rem; }
 .cl-results { max-height: 260px; overflow-y: auto; }
 .cl-none { margin-top: 8px; }
+
+/* ── Balance discrepancies ─────────────────────────────────────────── */
+.bd-select {
+  padding: 6px 10px; border: 1px solid var(--border, #cbd5e0);
+  border-radius: 6px; font-size: .85rem; background: #fff; color: #4a5568;
+}
+.bd-table { width: 100%; border-collapse: collapse; font-size: .87rem; }
+.bd-table th, .bd-table td { padding: 7px 10px; border-bottom: 1px solid #edf2f7; text-align: left; }
+.bd-table th { font-weight: 600; color: #4a5568; background: #f7fafc; position: sticky; top: 0; }
+.bd-table tbody tr:hover { background: #f7fafc; }
+.bd-num { text-align: right; font-variant-numeric: tabular-nums; }
+.bd-delta { font-weight: 600; }
+/* Severity on the difference only — the raw balances stay neutral so the eye
+   goes to the size of the disagreement, not to big numbers. */
+.bd-gray   { color: #718096; }
+.bd-yellow { color: #b7791f; }
+.bd-red    { color: #c53030; }
+.bd-tag {
+  display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 9px;
+  background: #edf2f7; color: #718096; font-size: .72rem; vertical-align: middle;
+}

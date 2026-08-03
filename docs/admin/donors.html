@@ -53,6 +53,7 @@
     <button class="admin-tab-btn" data-admin-tab="tab-entity-merge">Entity Merges</button>
     <button class="admin-tab-btn" data-admin-tab="tab-rejected">Rejected Pairs</button>
     <button class="admin-tab-btn" data-admin-tab="tab-candidate-links">Candidate Links</button>
+    <button class="admin-tab-btn" data-admin-tab="tab-balances">Balance Discrepancies</button>
   </div>
 
   <!-- Tab: Pending Review (existing content) -->
@@ -111,6 +112,40 @@
       <h2>Recorded Decisions</h2>
       <p class="section-desc">Links and "no committee" confirmations already in effect.</p>
       <div id="cl-decisions"></div>
+    </section>
+  </div>
+
+  <!-- Tab: Balance Discrepancies -->
+  <div id="tab-balances" class="admin-tab" hidden>
+    <section class="admin-section">
+      <h2>Cash on Hand vs ORESTAR</h2>
+      <p class="section-desc">
+        Every committee's calculated cash on hand, checked against the ending balance on
+        its own ORESTAR account summary. Cash on hand is always calculated from
+        transactions — ORESTAR is the check, never the input — so a gap means either our
+        transaction data is incomplete or ORESTAR's own arithmetic is.
+      </p>
+      <p class="section-desc">
+        <b>Dormant</b> committees have no transactions in the year ORESTAR reports.
+        ORESTAR carries their balance forward anyway, so a gap there usually means missing
+        history rather than something wrong today.
+      </p>
+      <div class="toolbar" style="margin-bottom:12px">
+        <input type="search" id="bd-filter" class="table-search" placeholder="Filter committees…" />
+        <select id="bd-min" class="bd-select">
+          <option value="0.01">Any difference</option>
+          <option value="1000" selected>Over $1,000</option>
+          <option value="10000">Over $10,000</option>
+          <option value="100000">Over $100,000</option>
+        </select>
+        <select id="bd-kind" class="bd-select">
+          <option value="all">All committees</option>
+          <option value="active">Actively filing only</option>
+          <option value="dormant">Dormant only</option>
+        </select>
+        <span id="bd-count" class="section-desc"></span>
+      </div>
+      <div id="bd-list"></div>
     </section>
   </div>
 
