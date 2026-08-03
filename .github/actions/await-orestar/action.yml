@@ -1,0 +1,102 @@
+name: Await ORESTAR
+description: >
+  Wait until no other ORESTAR-scraping workflow is running, so two of them never
+  hit the site at once.
+
+# Why this exists, and why it is not a concurrency group.
+#
+# Four workflows scrape ORESTAR. They cannot share one concurrency group,
+# because GitHub keeps only ONE pending run per group and cancels any earlier
+# one — so a self-retriggering chain silently evicted a scheduled job twice,
+# with zero jobs recorded and a status indistinguishable from a manual cancel.
+# Splitting the group stopped the eviction but allowed the overlap back.
+#
+# Nor is a timetable enough. Scheduled runs start a median of 71-105 minutes
+# after their cron and sometimes nearly three hours after, so a two-hour gap
+# between crons is not a two-hour gap in practice. And two of the three
+# collisions we actually saw were not schedule-driven at all: they came from
+# something dispatching a run by hand while another was live.
+#
+# Asking the API what is running right now is the only check that survives all
+# three causes, because it does not assume anything about timing.
+#
+# Deadlock is avoided by strict ordering: a run only ever waits for runs that
+# STARTED BEFORE IT. Two jobs starting together cannot each wait for the other,
+# and the older one always wins.
+
+inputs:
+  max-wait-minutes:
+    description: >
+      How long to wait before giving up and proceeding anyway. Proceeding beats
+      skipping: a skipped daily refresh means a day with no data, and the
+      scrapers' own failure guards will catch a genuinely bad overlap.
+    required: false
+    default: "45"
+  poll-seconds:
+    description: Seconds between checks.
+    required: false
+    default: "60"
+
+runs:
+  using: composite
+  steps:
+    - name: Wait for other ORESTAR jobs
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        MAX_WAIT: ${{ inputs.max-wait-minutes }}
+        POLL: ${{ inputs.poll-seconds }}
+      run: |
+        set -o pipefail
+        # Every workflow that talks to ORESTAR. A job never counts itself.
+        PEERS='.github/workflows/daily-refresh.yml
+        .github/workflows/earliest-balances.yml
+        .github/workflows/filer-metadata.yml
+        .github/workflows/candidate-filings.yml'
+
+        ME_STARTED=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+                       -q .run_started_at 2>/dev/null || echo "")
+        if [ -z "$ME_STARTED" ]; then
+          echo "::warning::Could not read this run's start time — proceeding without waiting."
+          exit 0
+        fi
+        echo "This run ($GITHUB_RUN_ID) started $ME_STARTED"
+
+        DEADLINE=$(( $(date +%s) + MAX_WAIT * 60 ))
+        while :; do
+          # Ask for the in-flight runs, then filter in shell. Deliberately not a
+          # clever jq one-liner: this decides whether two scrapers hit ORESTAR
+          # together, and it needs to be obvious on sight and testable offline.
+          #
+          # Only runs that began BEFORE this one count. That ordering is what
+          # makes two simultaneous starts impossible to deadlock — the older
+          # run always wins and the younger one waits.
+          RAW=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?status=in_progress&per_page=100" \
+                  --jq '.workflow_runs[] | [.id, .path, .run_started_at, .name] | @tsv' 2>/dev/null)
+          if [ $? -ne 0 ]; then
+            # An API hiccup must not be read as "the coast is clear" — that is
+            # the mistake that dispatched a job into a running one already.
+            echo "::warning::Could not query in-flight runs; treating as busy and retrying."
+            sleep "$POLL"; continue
+          fi
+
+          BUSY=""
+          while IFS=$'\t' read -r id path started name; do
+            [ -n "$id" ] || continue
+            [ "$id" = "$GITHUB_RUN_ID" ] && continue
+            echo "$PEERS" | tr -d ' ' | grep -qx "$path" || continue
+            [[ "$started" < "$ME_STARTED" ]] || continue
+            BUSY="$BUSY$name"$'\n'
+          done <<< "$RAW"
+
+          if [ -z "$BUSY" ]; then
+            echo "No older ORESTAR run in flight — proceeding."
+            exit 0
+          fi
+          if [ "$(date +%s)" -ge "$DEADLINE" ]; then
+            echo "::warning::Still waiting on [$(echo "$BUSY" | tr '\n' ' ')] after ${MAX_WAIT}m — proceeding anyway."
+            exit 0
+          fi
+          echo "Waiting on: $(echo "$BUSY" | tr '\n' ' ')"
+          sleep "$POLL"
+        done
