@@ -2,8 +2,18 @@ name: Scrape Filer Metadata
 
 on:
   schedule:
-    # Run weekly on Sundays at 08:00 UTC (Sun 1 AM PST)
-    - cron: "0 8 * * 0"
+    # Wednesdays at 20:00 UTC — deliberately far from everything else.
+    #
+    # This used to be Sunday 08:00, two hours after the balances scrape at
+    # 06:00. Two hours is not a gap: scheduled runs start a median of 71-105
+    # minutes late and sometimes nearly three hours late, and the balances
+    # CHAIN runs up to ~2 hours once it starts. On 2 August the two collided
+    # and this job was cancelled outright — evicted from the shared lane with
+    # zero jobs recorded, which reads exactly like someone pressed cancel.
+    #
+    # A different day puts hours of margin around the jitter instead of
+    # minutes. Nothing here is time-sensitive; it only needs to run weekly.
+    - cron: "0 20 * * 3"
   workflow_dispatch:
     inputs:
       max_filers:
