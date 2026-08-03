@@ -2262,13 +2262,23 @@ function updateCohIndicator(profile) {
     ind.addEventListener("focus", showPopover);
     ind.addEventListener("blur", hidePopover);
     ind.addEventListener("click", () => { popover.hidden = !popover.hidden; });
-  } else if (src === "calculated") {
+  } else if (orestarEnding == null) {
+    // Genuinely unchecked: no account summary on file to compare against.
+    //
+    // This used to test `src === "calculated"`, which is not the same question.
+    // Every balance is calculated from transactions — that is the design — so
+    // the label is now "calculated" for all 7,268 filers, and every one of them
+    // was being told "no ORESTAR beginning balance data scraped yet" while
+    // holding a freshly scraped summary. The check has to be whether an ORESTAR
+    // figure EXISTS, not what the source is called.
     ind.hidden = false;
     ind.className = "coh-indicator coh-estimated";
     ind.textContent = "EST";
     ind.setAttribute("tabindex", "0");
-    ind.title = "Estimated: no ORESTAR beginning balance data scraped yet. Cash on hand is calculated from transactions with a $0 starting balance.";
+    ind.title = "No ORESTAR account summary scraped yet, so this balance is unchecked.";
   } else {
+    // ORESTAR agrees with the calculation. That is the good case, and it earns
+    // silence — same as the multi-filer cards, and what .coh-ok intends.
     ind.hidden = true;
   }
 }
