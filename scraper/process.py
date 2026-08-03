@@ -1356,10 +1356,23 @@ def aggregate_filers(
             orestar_year = orestar_info["year"]
             orestar_ending = orestar_info.get("ending_cash_balance", 0.0)
             has_orestar_check = True
-            our_anchor_ending = round(
-                beginning_balances.get(str(orestar_year), 0.0)
-                + yearly_nets.get(str(orestar_year), 0.0), 2
-            )
+            # A dormant committee still gets a statement: ORESTAR carries its
+            # balance forward every year whether or not anything moves. We have
+            # no transactions for those years, so looking the year up in our
+            # own tables returned 0 and the committee appeared to be off by its
+            # entire balance. Oregon Strong sat at $889,626.78 on both sides
+            # and was recorded as $889,626.78 adrift; 1,447 committees — 41% of
+            # everything flagged — were wrong for exactly this reason.
+            #
+            # When we have no data for ORESTAR's year, our balance at the end of
+            # it is simply the balance we last rolled forward to: cash_on_hand.
+            if str(orestar_year) in beginning_balances:
+                our_anchor_ending = round(
+                    beginning_balances[str(orestar_year)]
+                    + yearly_nets.get(str(orestar_year), 0.0), 2
+                )
+            else:
+                our_anchor_ending = cash_on_hand
             orestar_discrepancy = round(our_anchor_ending - orestar_ending, 2)
 
         # Per-year discrepancy tracking: compare our rolling calculation
@@ -1667,6 +1680,45 @@ def aggregate_filers(
         "Wrote filer_index.json (%d filers) and %d filer detail files",
         len(index_rows), len(index_rows),
     )
+
+    # ── balance_discrepancies.json — where we disagree with ORESTAR ─────────
+    #
+    # Every committee is checked against its own ORESTAR account summary. Most
+    # agree; the ones that do not are worth a human look, because a gap means
+    # either our transaction data is incomplete or ORESTAR's own arithmetic is.
+    # Precomputed here rather than derived in the browser: filer_detail holds
+    # 7,268 large JSON blobs, and the admin page should not have to pull them
+    # all down to find the couple of thousand that matter.
+    _disc_rows = []
+    for _row in _filer_detail_rows:
+        _d = _row["detail"]
+        _acct = _d.get("orestar_account_summary") or {}
+        if _acct.get("ending_cash_balance") is None:
+            continue                      # never checked — not a discrepancy
+        _delta = round(_d.get("cash_on_hand", 0.0) - _acct["ending_cash_balance"], 2)
+        if abs(_delta) <= 0.01:
+            continue
+        _disc_rows.append({
+            "slug": _row["slug"], "name": _row["name"], "filer_id": _row.get("filer_id"),
+            "calculated": _d.get("cash_on_hand", 0.0),
+            "orestar": _acct["ending_cash_balance"],
+            "delta": _delta,
+            "orestar_year": _acct.get("year"),
+            "scrape_ts": _acct.get("scrape_ts"),
+            "tran_count": _d.get("tran_count", 0),
+            # A committee with no activity in ORESTAR's year is a different
+            # animal from one that is actively filing and still disagrees.
+            "dormant": str(_acct.get("year")) not in (_d.get("beginning_balances") or {}),
+        })
+    _disc_rows.sort(key=lambda r: -abs(r["delta"]))
+    _write_json("balance_discrepancies.json", {
+        "generated": datetime.now().isoformat(timespec="seconds"),
+        "checked": sum(1 for r in _filer_detail_rows
+                       if (r["detail"].get("orestar_account_summary") or {})
+                          .get("ending_cash_balance") is not None),
+        "flagged": len(_disc_rows),
+        "rows": _disc_rows,
+    })
 
     # ── by_party_type.json — Donor type composition by party by year ────────
     # Cross-references filer_index party data with per-filer donor type
