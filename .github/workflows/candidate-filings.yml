@@ -39,6 +39,13 @@ jobs:
       # than a concurrency group or a schedule gap.
       - name: Wait for other ORESTAR jobs
         uses: ./.github/actions/await-orestar
+        with:
+          # This job's own timeout is 40 minutes, so it cannot afford the
+          # default 45-minute wait — it would spend its entire budget queueing
+          # and be killed before doing any work, which is exactly what happened
+          # on 4 August. 25 leaves ample room for a job whose real work takes
+          # about two minutes.
+          max-wait-minutes: "25"
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
