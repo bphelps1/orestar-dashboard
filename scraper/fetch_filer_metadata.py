@@ -38,6 +38,18 @@ from pathlib import Path
 # rather than merely unlucky. Matches fetch_earliest_balances.py.
 BATCH_FAILURE_ABORT = 0.5
 
+# Returned when the search ran cleanly and ORESTAR simply has no committee
+# record for that filer id. Distinct from None, which means the search itself
+# did not complete.
+#
+# Not every filer id is a committee. Individuals who file independent
+# expenditures get an id and appear in transaction data — Alvin Fronsdahl,
+# Barry Fadem (National Popular Vote) — but they have no Statement of
+# Organization, so there is nothing to scrape and never will be. 79 of them sit
+# in the queue. Conflating that with failure meant they were retried on every
+# run forever, and made a healthy batch look 74% broken.
+NOT_FOUND = "__no_committee_record__"
+
 log = logging.getLogger(__name__)
 
 BASE_URL = "https://secure.sos.state.or.us/orestar"
@@ -137,7 +149,10 @@ def _scrape_filer_metadata(page, filer_id: str, first_load: bool) -> dict | None
         time.sleep(NAV_WAIT)
         text = page.inner_text("body")
 
-    return _parse_detail_text(text, filer_id)
+    parsed = _parse_detail_text(text, filer_id)
+    # Reaching here means the search completed and the page rendered; if it
+    # holds no committee record, that is an answer, not a failure.
+    return parsed if parsed is not None else NOT_FOUND
 
 
 def _parse_detail_text(text: str, filer_id: str) -> dict | None:
@@ -306,6 +321,7 @@ def main():
 
     scraped = 0
     errors = 0
+    missing = 0        # searched fine; ORESTAR has no committee record
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(
@@ -319,7 +335,15 @@ def main():
             log.info("[%d/%d] Scraping filer %s...", i + 1, len(filer_ids), fid)
             try:
                 result = _scrape_filer_metadata(page, fid, first_load=(i == 0))
-                if result:
+                if result is NOT_FOUND:
+                    # Record the absence so this filer stops being re-queued
+                    # every single run. It is a fact about the filer, not a
+                    # transient miss.
+                    cache[fid] = {"committee_type": "", "not_found": True,
+                                  "ts": time.time()}
+                    missing += 1
+                    log.info("  → no committee record on ORESTAR (not a committee)")
+                elif result:
                     result["ts"] = time.time()
                     cache[fid] = result
                     scraped += 1
@@ -329,7 +353,7 @@ def main():
                              result.get("party", ""))
                 else:
                     errors += 1
-                    log.warning("  → No metadata found for filer %s", fid)
+                    log.warning("  → Scrape did not complete for filer %s", fid)
             except Exception as e:
                 errors += 1
                 log.error("  → Error scraping filer %s: %s", fid, e)
@@ -344,7 +368,8 @@ def main():
         browser.close()
 
     _save_cache(cache)
-    log.info("Done. Scraped %d, errors %d, total cached %d", scraped, errors, len(cache))
+    log.info("Done. Scraped %d, no committee record %d, errors %d, total cached %d",
+             scraped, missing, errors, len(cache))
 
     # Write remaining count for workflow retrigger
     remaining = all_remaining - len(filer_ids)
@@ -363,7 +388,7 @@ def main():
     # Errors here mean committee type, office and party did not refresh, and
     # those feed the candidate-to-committee matching that decides who appears
     # on the race map. Failing quietly there is expensive.
-    attempted = scraped + errors
+    attempted = scraped + errors        # 'missing' is an answer, not a failure
     if attempted and errors / attempted >= BATCH_FAILURE_ABORT:
         remaining_path.write_text("0")          # do not retrigger into a wall
         log.error("%d of %d filers failed (%.0f%%). Stopping rather than "
