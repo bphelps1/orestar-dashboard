@@ -30,6 +30,14 @@ inputs:
       How long to wait before giving up and proceeding anyway. Proceeding beats
       skipping: a skipped daily refresh means a day with no data, and the
       scrapers' own failure guards will catch a genuinely bad overlap.
+
+      MUST be comfortably below the calling job's own timeout-minutes, with
+      room left for the work itself. Waiting consumes the job's budget like any
+      other step, so a wait longer than the budget kills the job before it does
+      anything — candidate-filings, with a 40-minute timeout, was cancelled at
+      exactly 40 minutes waiting on this default. Being killed while queueing
+      is a worse outcome than the overlap this avoids, since an overlapping run
+      at least finishes.
     required: false
     default: "45"
   poll-seconds:
