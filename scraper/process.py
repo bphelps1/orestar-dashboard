@@ -703,9 +703,26 @@ def aggregate(df: pd.DataFrame) -> None:
     expenditures    = df[ttype == "E"]
     other_receipts  = df[ttype == "OR"]                    # Other Receipt only (matches ORESTAR "Other Receipts" line)
     other_disburse  = df[ttype == "OD"]                    # Other Disbursement only (matches ORESTAR "Other Disbursements" line)
-    # Note: types O (Account Payable Rescinded, Cash Balance Adjustment, Loan Forgiven)
-    # and OA (Unexpended Agent Balance, Misc Account Receivable) are non-cash accounting
-    # entries that ORESTAR does NOT include in its Other Receipts or COH calculation.
+    # Note: types O (Account Payable Rescinded, Loan Forgiven) and OA (Unexpended
+    # Agent Balance, Misc Account Receivable) are non-cash accounting entries
+    # that ORESTAR does NOT include in its Other Receipts or COH calculation.
+    #
+    # "Cash Balance Adjustment" is the exception, and excluding it was wrong.
+    # ORESTAR's account summary carries a Balance Adjustments line that lands
+    # between the two subtotals and moves the ending balance directly, and
+    # these rows are its transaction-level source: summed per filer-year they
+    # reproduce that line exactly in 1,092 of 1,629 cases (67%), and no other
+    # sub_type or combination comes close.
+    #
+    # Leaving it out cost a permanent, carried-forward error. Oregon Realtors'
+    # 2015 adjustment is -$27,432.32 and its 2015 discrepancy was +$27,432 to
+    # the dollar; from 2017 on, its yearly contributions and expenditures match
+    # ORESTAR exactly while the balance stays off by a constant. 205 committees
+    # are explained by this alone.
+    #
+    # Taken from transactions rather than from the scraped summary line on
+    # purpose: cash on hand is calculated, and ORESTAR stays the check.
+    balance_adjust  = df[(ttype == "O") & (df["sub_type"].str.strip() == "Cash Balance Adjustment")]
 
     # Separate cash contributions from in-kind.
     # IMPORTANT: Use exact "In-Kind Contribution" match only. Other sub_types containing
@@ -1138,6 +1155,7 @@ def aggregate_filers(
     expend_groups   = expenditures.groupby(filer_col)
     or_groups       = other_receipts.groupby(filer_col)
     od_groups       = other_disburse.groupby(filer_col)
+    ba_groups       = balance_adjust.groupby(filer_col)
     all_groups      = df.groupby(filer_col)
 
     def get_group(groups, name):
@@ -1238,6 +1256,7 @@ def aggregate_filers(
         filer_expend  = get_group(expend_groups,  name)
         filer_or      = get_group(or_groups,      name)
         filer_od      = get_group(od_groups,      name)
+        filer_ba      = get_group(ba_groups,      name)
         filer_all     = get_group(all_groups,     name)
 
         # ── ORESTAR-matching line item definitions (empirically verified) ──────
@@ -1278,11 +1297,18 @@ def aggregate_filers(
         _or_for_coh = filer_or  # All type OR
 
         # Calculate net transactions per year for COH computation
-        def _yearly_net(contrib_df, expend_df, or_df, od_df):
-            """Return {year_str: net_cash_flow} for each year with transactions."""
+        def _yearly_net(contrib_df, expend_df, or_df, od_df, ba_df):
+            """Return {year_str: net_cash_flow} for each year with transactions.
+
+            Balance adjustments carry their own sign already (they are usually
+            negative), so they are added rather than subtracted — the same way
+            ORESTAR's summary adds its Balance Adjustments line to reach the
+            ending balance.
+            """
             nets: dict[str, float] = {}
             all_frames = []
-            for frame, sign in [(contrib_df, 1), (or_df, 1), (expend_df, -1), (od_df, -1)]:
+            for frame, sign in [(contrib_df, 1), (or_df, 1), (expend_df, -1), (od_df, -1),
+                                (ba_df, 1)]:
                 if not frame.empty and "year" in frame.columns:
                     yearly = frame.groupby("year")["amount"].sum()
                     for yr, amt in yearly.items():
@@ -1290,7 +1316,7 @@ def aggregate_filers(
                         nets[yr_s] = nets.get(yr_s, 0.0) + sign * float(amt)
             return nets
 
-        yearly_nets = _yearly_net(_c_for_coh, _e_for_coh, _or_for_coh, filer_od)
+        yearly_nets = _yearly_net(_c_for_coh, _e_for_coh, _or_for_coh, filer_od, filer_ba)
 
         # Determine beginning balances and cash-on-hand
         # Strategy: use the earliest-year beginning balance scraped directly from
