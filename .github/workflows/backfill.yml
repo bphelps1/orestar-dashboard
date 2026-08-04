@@ -45,6 +45,13 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      # Backfill is the heaviest ORESTAR consumer of the lot — it walks years of
+      # weekly windows — so it must take its turn like everything else. It was
+      # missed when this check was introduced, which also meant the other four
+      # never waited for IT.
+      - name: Wait for other ORESTAR jobs
+        uses: ./.github/actions/await-orestar
         with:
           fetch-depth: 1
 
