@@ -101,8 +101,16 @@ jobs:
             echo "is_auto=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # Gated on "auto mode found nothing", NOT on "no filer ids given".
+      #
+      # This workflow does two different jobs: a filer-targeted backfill and a
+      # window backfill across a year range. The script below already handled
+      # both, but every step required a non-empty resolved filer list, so the
+      # window branch could never execute. Dispatching it with year inputs
+      # skipped all real work and still went green — 2016 was requested, the
+      # run reported success, and not a single row was fetched.
       - name: Backfill ORESTAR data
-        if: steps.resolve.outputs.resolved != ''
+        if: (steps.resolve.outputs.resolved != '' || steps.resolve.outputs.is_auto != 'true')
         run: |
           FILER_IDS="${{ steps.resolve.outputs.resolved }}"
           if [ -n "$FILER_IDS" ]; then
@@ -134,7 +142,7 @@ jobs:
 
       - name: Check remaining windows
         id: remaining
-        if: steps.resolve.outputs.resolved != ''
+        if: (steps.resolve.outputs.resolved != '' || steps.resolve.outputs.is_auto != 'true')
         run: |
           FILER_IDS="${{ steps.resolve.outputs.resolved }}"
           if [ -n "$FILER_IDS" ]; then
@@ -150,7 +158,7 @@ jobs:
           fi
 
       - name: Process data
-        if: steps.resolve.outputs.resolved != ''
+        if: (steps.resolve.outputs.resolved != '' || steps.resolve.outputs.is_auto != 'true')
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -176,7 +184,7 @@ jobs:
           fi
 
       - name: Commit and push backfill data
-        if: "!cancelled() && steps.resolve.outputs.resolved != ''"
+        if: "!cancelled() && (steps.resolve.outputs.resolved != '' || steps.resolve.outputs.is_auto != 'true')"
         run: |
           # Dashboard reads aggregates from Supabase now — only version data/.
           FILER_IDS="${{ steps.resolve.outputs.resolved }}"
