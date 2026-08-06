@@ -921,7 +921,8 @@ def aggregate(df: pd.DataFrame) -> None:
 
     # ── per-filer index + detail files ───────────────────────────────────────
     global_coh_data = aggregate_filers(df, contributions, inkind_contribs, expenditures,
-                                       other_receipts, other_disburse, filer_col, contrib_col)
+                                       other_receipts, other_disburse, balance_adjust,
+                                       filer_col, contrib_col)
 
     # Update summary.json with correct global cash-on-hand (sum of per-filer COH)
     summary["global_cash_on_hand"] = global_coh_data["global_cash_on_hand"]
@@ -1093,6 +1094,7 @@ def aggregate_filers(
     expenditures: pd.DataFrame,    # E type
     other_receipts: pd.DataFrame,  # OR/O/OA type (e.g. Return/Refund, Misc Receipt)
     other_disburse: pd.DataFrame,  # OD type (e.g. Misc Other Disbursement)
+    balance_adjust: pd.DataFrame,  # type O "Cash Balance Adjustment" only
     filer_col: str,
     contrib_col: str,
 ) -> None:
