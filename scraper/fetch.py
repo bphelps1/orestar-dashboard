@@ -20,7 +20,7 @@ import json
 import logging
 import re
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import requests
@@ -344,6 +344,25 @@ def download_week(
 # Mode drivers
 # ---------------------------------------------------------------------------
 
+def _record_truncated(tran_type: str, day: date, rows: int) -> None:
+    """Note a window that came back at the cap and cannot be split any further.
+
+    Written to disk rather than only logged, so an incomplete window is
+    discoverable after the run ends instead of living in a CI log nobody
+    re-reads. The completeness audit reads this file.
+    """
+    path = RAW_DIR.parent / "truncated_windows.json"
+    try:
+        existing = json.loads(path.read_text()) if path.exists() else []
+    except Exception:
+        existing = []
+    entry = {"tran_type": tran_type, "date": str(day), "rows": rows,
+             "noticed": datetime.now().isoformat(timespec="seconds")}
+    if not any(e.get("tran_type") == tran_type and e.get("date") == str(day) for e in existing):
+        existing.append(entry)
+        path.write_text(json.dumps(existing, indent=1))
+
+
 def week_windows(start: date, end: date):
     """Yield (week_start, week_end) 7-day chunks covering [start, end]."""
     cur = start
@@ -373,11 +392,25 @@ def _save_fetched(fetched: set, log_file: Path = FETCHED_LOG) -> None:
 def _fetch_range(start: date, end: date, date_field: str = "filed") -> None:
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     windows = list(week_windows(start, end))
-    tasks   = [("ALL", ws, we) for ws, we in windows]
+    # One request PER TRANSACTION TYPE, not one request for all of them.
+    #
+    # An all-types request bundles every category into a single export, and a
+    # busy week overruns ORESTAR's 4,999-row cap: 2016-10-02..08 holds 6,355
+    # rows. Date-splitting is supposed to rescue that, and it partly does — an
+    # all-types fetch of that week left us with 2,224 expenditure rows, while
+    # requesting type E alone returned 2,517, matching ORESTAR's own reported
+    # count exactly. An ID-level diff put all 293 absentees in the "genuinely
+    # missing" column: not one was a superseded original.
+    #
+    # Six smaller requests are far less likely to reach the cap at all, and the
+    # per-type result is the one that provably matches ORESTAR. This is also
+    # what the original tran-date backfill did, which is why the fetch log's
+    # older entries are per-type.
+    tasks   = [(t, ws, we) for ws, we in windows for t in TRAN_TYPES]
     total   = len(tasks)
     log.info(
-        "Fetching %d windows (all types, date_field=%s)",
-        total, date_field,
+        "Fetching %d windows (%d weeks x %d types, date_field=%s)",
+        total, len(windows), len(TRAN_TYPES), date_field,
     )
 
     # Windows recorded here are skipped on every run — they have already been
@@ -409,12 +442,31 @@ def _fetch_range(start: date, end: date, date_field: str = "filed") -> None:
                 consecutive_restarts = 0
 
                 # ── Check for ORESTAR row-cap truncation ─────────────────────
+                #
+                # The check used to be skipped for single-day windows, on the
+                # apparent assumption that a day could not overrun the cap. It
+                # can: 15 filed-dates in this dataset already exceed 4,999 rows,
+                # topping out at 7,965 on 2018-10-02, and those are the counts
+                # we HOLD — the true ones are higher. Splitting bottoms out at
+                # one day, so those windows truncated with nothing logged.
+                #
+                # A single day cannot be split further by date, so detection is
+                # all we can offer here — but a named, recorded gap beats a
+                # silent one, and it gives the audit something to find.
                 span_days = (w_end - w_start).days
                 cap_hit = False
-                if result is not None and result.exists() and span_days > 0:
+                if result is not None and result.exists():
                     row_count = _validate_download(result)
                     if row_count >= ORESTAR_ROW_CAP:
-                        cap_hit = True
+                        if span_days > 0:
+                            cap_hit = True
+                        else:
+                            log.error(
+                                "TRUNCATED: %s %s returned %d rows (cap %d) and cannot be "
+                                "split further by date — this window is INCOMPLETE",
+                                tran_type, w_start, row_count, ORESTAR_ROW_CAP,
+                            )
+                            _record_truncated(tran_type, w_start, row_count)
 
                 if cap_hit:
                     half = span_days // 2
