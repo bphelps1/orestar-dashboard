@@ -201,6 +201,9 @@ def download_week(
     tran_type: str,
     raw_dir: Path,
     date_field: str = "filed",
+    amt_from: str | None = None,
+    amt_to: str | None = None,
+    payee_prefix: str | None = None,
 ) -> Path | None:
     """
     Fill the ORESTAR search form for one week, submit, then download
@@ -211,7 +214,15 @@ def download_week(
 
     Returns the path to the saved .xlsx file, or None on failure.
     """
-    filename = raw_dir / f"{tran_type}_{start.isoformat()}_{end.isoformat()}.xlsx"
+    # The narrowing dimensions belong in the filename, or two different
+    # sub-windows of the same day would collide on disk and the second would be
+    # skipped as "already downloaded".
+    _suffix = ""
+    if amt_from is not None or amt_to is not None:
+        _suffix += f"_amt{amt_from or ''}-{amt_to or ''}"
+    if payee_prefix:
+        _suffix += f"_p{payee_prefix}"
+    filename = raw_dir / f"{tran_type}_{start.isoformat()}_{end.isoformat()}{_suffix}.xlsx"
     if filename.exists():
         log.debug("Already downloaded: %s", filename.name)
         return filename
@@ -233,6 +244,16 @@ def download_week(
         else:
             page.fill('input[name="cneSearchTranFiledStartDate"]', start.strftime("%m/%d/%Y"))
             page.fill('input[name="cneSearchTranFiledEndDate"]',   end.strftime("%m/%d/%Y"))
+
+        # Narrowing filters, used only when a window has already been split as
+        # far as date and type allow.
+        if amt_from is not None:
+            page.fill('input[name="cneSearchTranAmountFrom"]', str(amt_from))
+        if amt_to is not None:
+            page.fill('input[name="cneSearchTranAmountTo"]', str(amt_to))
+        if payee_prefix:
+            page.fill('input[name="cneSearchContributorTxt"]', payee_prefix)
+            page.select_option('select[name="cneSearchContributorTxtSearchType"]', "S")
 
         # ── Submit search ─────────────────────────────────────────────────────
         page.click('input[name="search"]')
@@ -344,6 +365,81 @@ def download_week(
 # Mode drivers
 # ---------------------------------------------------------------------------
 
+# Amount bands used when a window cannot be split by date any further. Chosen
+# to match where Oregon contributions actually cluster — small recurring payroll
+# deductions dominate, so the low end needs fine bands and the top can be one
+# open bucket.
+AMOUNT_BANDS = [
+    (None, "9.99"), ("10", "14.99"), ("15", "15.99"), ("16", "19.99"),
+    ("20", "24.99"), ("25", "49.99"), ("50", "99.99"), ("100", "249.99"),
+    ("250", "999.99"), ("1000", "4999.99"), ("5000", None),
+]
+
+# Contributor-name prefixes, the last resort. A payroll batch is thousands of
+# rows sharing ONE filer and ONE amount — 4,969 rows of exactly $17.50 on
+# 2023-03-02, all from a single committee — so neither amount nor filer can
+# partition it. The contributors are all different (4,957 of them), which makes
+# their names the only dimension that splits such a batch.
+PAYEE_PREFIXES = (
+    list("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    + [str(d) for d in range(10)]
+    # Names really do start with punctuation — 92 rows in this dataset begin
+    # with one of these. A-Z0-9 alone would drop them from any narrowed window,
+    # which would be a fresh silent gap of exactly the kind this code exists to
+    # close.
+    #
+    # This list is drawn from characters actually observed in the data, so a
+    # first character nobody has seen yet would still be dropped. The real
+    # guarantee would be reconciling each sub-query's rows against the parent
+    # window's true record count, which ORESTAR prints on the results page and
+    # does NOT cap. That check is not built yet; until it is, this tier is
+    # thorough rather than provably complete.
+    + ["(", '"', "[", "'", ".", "-", "@", "?"]
+)
+
+
+def _narrow_further(tran_type, day, amt_from, amt_to, payee_prefix):
+    """Next set of sub-queries for a single-day window that still hits the cap.
+
+    Returns [] when every dimension is spent, which is the honest answer — the
+    caller then records the window as incomplete rather than pretending.
+
+    Tiers, in order:
+      1. amount bands      — splits a mixed day into ranges
+      2. contributor prefix — splits a single-amount batch, the only thing that can
+
+    Filer is not a tier. Every capped cluster measured on this data has exactly
+    one filer (4,969 rows of $17.50 on 2023-03-02, all one committee), so a
+    filer split would return the same oversized set.
+    """
+    if amt_from is None and amt_to is None:
+        return [(tran_type, day, day, af, at, None) for af, at in AMOUNT_BANDS]
+    if not payee_prefix:
+        return [(tran_type, day, day, amt_from, amt_to, pre) for pre in PAYEE_PREFIXES]
+    return []
+
+
+def _task_key(task):
+    """Log key for a task.
+
+    Un-narrowed windows keep the original 3-part key so the existing fetch log
+    (8,000+ entries) stays valid; narrowed sub-windows get a longer key.
+    """
+    tran_type, ws, we, af, at, pp = task
+    if af is None and at is None and pp is None:
+        return (tran_type, str(ws), str(we))
+    return (tran_type, str(ws), str(we), str(af), str(at), str(pp))
+
+
+def _narrowing_label(af, at, pp) -> str:
+    bits = []
+    if af is not None or at is not None:
+        bits.append(f"${af or '0'}-{at or 'max'}")
+    if pp:
+        bits.append(f"payee~{pp}*")
+    return ("  [" + ", ".join(bits) + "]") if bits else ""
+
+
 def _record_truncated(tran_type: str, day: date, rows: int) -> None:
     """Note a window that came back at the cap and cannot be split any further.
 
@@ -406,7 +502,7 @@ def _fetch_range(start: date, end: date, date_field: str = "filed") -> None:
     # per-type result is the one that provably matches ORESTAR. This is also
     # what the original tran-date backfill did, which is why the fetch log's
     # older entries are per-type.
-    tasks   = [(t, ws, we) for ws, we in windows for t in TRAN_TYPES]
+    tasks   = [(t, ws, we, None, None, None) for ws, we in windows for t in TRAN_TYPES]
     total   = len(tasks)
     log.info(
         "Fetching %d windows (%d weeks x %d types, date_field=%s)",
@@ -419,7 +515,7 @@ def _fetch_range(start: date, end: date, date_field: str = "filed") -> None:
     # each runner IP after ~25 requests.
     log_file = FETCHED_LOG_TRN if date_field == "tran" else FETCHED_LOG
     fetched = _load_fetched(log_file)
-    skipped = sum(1 for tt, ws, we in tasks if (tt, str(ws), str(we)) in fetched)
+    skipped = sum(1 for t in tasks if _task_key(t) in fetched)
     if skipped:
         log.info("Skipping %d already-fetched windows (recorded in %s)", skipped, log_file.name)
 
@@ -428,17 +524,19 @@ def _fetch_range(start: date, end: date, date_field: str = "filed") -> None:
         i = 0
         consecutive_restarts = 0
         while i < total:
-            tran_type, w_start, w_end = tasks[i]
-            key = (tran_type, str(w_start), str(w_end))
+            tran_type, w_start, w_end, amt_from, amt_to, payee_prefix = tasks[i]
+            key = _task_key(tasks[i])
 
             # Skip windows already processed in a previous run
             if key in fetched:
                 i += 1
                 continue
 
-            log.info("[%d/%d] %s  %s → %s", i + 1, total, tran_type, w_start, w_end)
+            log.info("[%d/%d] %s  %s → %s%s", i + 1, total, tran_type, w_start, w_end,
+                     _narrowing_label(amt_from, amt_to, payee_prefix))
             try:
-                result = download_week(page, context, w_start, w_end, tran_type, RAW_DIR, date_field)
+                result = download_week(page, context, w_start, w_end, tran_type, RAW_DIR,
+                                       date_field, amt_from, amt_to, payee_prefix)
                 consecutive_restarts = 0
 
                 # ── Check for ORESTAR row-cap truncation ─────────────────────
@@ -461,12 +559,33 @@ def _fetch_range(start: date, end: date, date_field: str = "filed") -> None:
                         if span_days > 0:
                             cap_hit = True
                         else:
-                            log.error(
-                                "TRUNCATED: %s %s returned %d rows (cap %d) and cannot be "
-                                "split further by date — this window is INCOMPLETE",
-                                tran_type, w_start, row_count, ORESTAR_ROW_CAP,
-                            )
-                            _record_truncated(tran_type, w_start, row_count)
+                            # Date is exhausted; narrow on another dimension.
+                            # Order: amount, then contributor name. Filer is
+                            # deliberately NOT a tier — every capped cluster
+                            # measured here belongs to a single committee, so
+                            # splitting on filer would put every row in one
+                            # bucket and change nothing.
+                            subs = _narrow_further(tran_type, w_start,
+                                                   amt_from, amt_to, payee_prefix)
+                            if subs:
+                                ins = i + 1
+                                for sub in subs:
+                                    if _task_key(sub) not in fetched:
+                                        tasks.insert(ins, sub); total += 1; ins += 1
+                                log.warning(
+                                    "Cap hit at %s %s%s — narrowing into %d sub-queries",
+                                    tran_type, w_start,
+                                    _narrowing_label(amt_from, amt_to, payee_prefix), len(subs),
+                                )
+                            else:
+                                log.error(
+                                    "TRUNCATED: %s %s%s returned %d rows (cap %d) and no "
+                                    "dimension is left to split on — INCOMPLETE",
+                                    tran_type, w_start,
+                                    _narrowing_label(amt_from, amt_to, payee_prefix),
+                                    row_count, ORESTAR_ROW_CAP,
+                                )
+                                _record_truncated(tran_type, w_start, row_count)
 
                 if cap_hit:
                     half = span_days // 2
