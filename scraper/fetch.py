@@ -64,6 +64,10 @@ REQUEST_DELAY = 1.5
 # two halves so both halves can be fetched independently.
 ORESTAR_ROW_CAP = 4999
 
+# {(type, start, end, amt_from, amt_to, payee_prefix): true_record_count}
+# Filled from each results page and flushed to disk by _flush_record_counts.
+RECORD_COUNTS: dict = {}
+
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -267,6 +271,22 @@ def download_week(
         # ── Extract session info from results page ────────────────────────────
         results_url = page.url
 
+        # ORESTAR prints the true number of matching records here, and that
+        # number is NOT capped — the page says "58366 records found ... A
+        # maximum 5000 records are displayed". It is the only source of truth
+        # for how many rows a window should yield, so capture it while we are
+        # standing on the page. RECORD_COUNTS is what the completeness
+        # verifier compares the downloaded rows against.
+        try:
+            _txt = page.inner_text("body")
+            _m = re.search(r"([\d,]+)\s+records found", _txt)
+            if _m:
+                RECORD_COUNTS[(tran_type, str(start), str(end),
+                               str(amt_from), str(amt_to), str(payee_prefix))] = \
+                    int(_m.group(1).replace(",", ""))
+        except Exception:
+            pass                      # a missing count must never fail the fetch
+
         # CSRF token from the Export link on the results page
         csrf = page.evaluate("""() => {
             const links = [...document.querySelectorAll('a[href*="OWASP_CSRFTOKEN"]')];
@@ -438,6 +458,28 @@ def _narrowing_label(af, at, pp) -> str:
     if pp:
         bits.append(f"payee~{pp}*")
     return ("  [" + ", ".join(bits) + "]") if bits else ""
+
+
+def _flush_record_counts() -> None:
+    """Persist captured record counts next to the fetch log.
+
+    Kept as a plain list of rows rather than a nested structure so
+    verify_completeness.py can read it without knowing how windows were split.
+    """
+    if not RECORD_COUNTS:
+        return
+    path = RAW_DIR.parent / "record_counts.json"
+    try:
+        existing = json.loads(path.read_text()) if path.exists() else []
+    except Exception:
+        existing = []
+    seen = {tuple(e["key"]) for e in existing}
+    for key, n in RECORD_COUNTS.items():
+        if key not in seen:
+            existing.append({"key": list(key), "reported": n})
+    path.write_text(json.dumps(existing, indent=1))
+    log.info("Recorded ORESTAR's own counts for %d windows -> %s",
+             len(RECORD_COUNTS), path.name)
 
 
 def _record_truncated(tran_type: str, day: date, rows: int) -> None:
@@ -653,6 +695,7 @@ def _fetch_range(start: date, end: date, date_field: str = "filed") -> None:
                 # Don't increment i — retry the same window with the fresh session
         browser.close()
 
+    _flush_record_counts()
     log.info("Fetch complete. Raw files in: %s", RAW_DIR)
 
 
@@ -954,8 +997,12 @@ def count_remaining(start_year: int = 2017, end_year: int | None = None,
     start = date(start_year, 1, 1)
     end   = date(end_year, 12, 31) if end_year else date.today()
     end   = min(end, date.today())
+    # MUST mirror how _fetch_range enumerates work, or the backfill chain
+    # cannot terminate. This counted ("ALL", start, end) keys while the fetcher
+    # records one key per TYPE, so the keys it looked for were never written
+    # and "remaining" stayed permanently above zero — an endless retrigger.
     windows = list(week_windows(start, end))
-    tasks = [("ALL", str(ws), str(we)) for ws, we in windows]
+    tasks = [(t, str(ws), str(we)) for ws, we in windows for t in TRAN_TYPES]
     log_file = FETCHED_LOG_TRN if date_field == "tran" else FETCHED_LOG
     fetched = _load_fetched(log_file)
     remaining = sum(1 for key in tasks if key not in fetched)
