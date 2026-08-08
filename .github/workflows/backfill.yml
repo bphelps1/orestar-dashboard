@@ -23,6 +23,10 @@ on:
         required: false
         default: ""
         type: string
+      chain_index:
+        description: "Internal: which run of the retrigger chain this is"
+        required: false
+        default: "1"
       reset_auto:
         description: "Reset auto-backfill tracking (clears the list of already-backfilled filers)"
         required: false
@@ -198,8 +202,10 @@ jobs:
           fi
           bash scripts/push_data.sh "$MSG" data/
 
+      # success(), not !cancelled(): cancelling a run used to fire this step
+      # anyway, so stopping a runaway chain meant disabling the workflow.
       - name: Re-trigger if backfill incomplete
-        if: "!cancelled()"
+        if: ${{ success() }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -231,6 +237,18 @@ jobs:
             if [ -n "${{ inputs.end_year }}" ]; then
               RETRIGGER_ARGS="$RETRIGGER_ARGS -f end_year=${{ inputs.end_year }}"
             fi
+            # Bounded, like the balances chain. An unbounded chain re-claims its
+            # concurrency lane every run, and GitHub keeps only ONE pending run per
+            # lane — so anything queued behind it is cancelled outright rather than
+            # delayed. Yielding costs nothing: every window fetched is committed, so
+            # the next scheduled or manual run picks up exactly where this stopped.
+            BATCH="${{ github.event.inputs.chain_index || '1' }}"
+            if [ "$BATCH" -ge "${MAX_CHAIN:-8}" ]; then
+              echo "Reached ${MAX_CHAIN:-8} chained runs; yielding the lane."
+              echo "$REMAINING windows remain — re-run to continue."
+              exit 0
+            fi
+            RETRIGGER_ARGS="$RETRIGGER_ARGS -f chain_index=$((BATCH + 1))"
             gh workflow run backfill.yml --ref main $RETRIGGER_ARGS
           else
             echo "Backfill complete — all windows fetched."
