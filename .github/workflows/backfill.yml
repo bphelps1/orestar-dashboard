@@ -37,8 +37,18 @@ permissions:
   contents: write
   actions: write
 
+# Backfill belongs with the other ORESTAR scrapers, not with the aggregation
+# pipeline. It sat in data-pipeline alongside daily-refresh, and because GitHub
+# keeps only ONE pending run per lane, a long backfill chain re-claiming that
+# lane every run would cancel a queued daily refresh outright rather than delay
+# it — the way a scheduled Candidate Filings run was evicted with zero jobs
+# recorded.
+#
+# In orestar-scrape it coordinates through the await-orestar check instead: a
+# runtime question about what is actually running, which delays rather than
+# evicts, and which every ORESTAR job honours.
 concurrency:
-  group: data-pipeline
+  group: orestar-scrape
   cancel-in-progress: false
 
 jobs:
@@ -243,8 +253,14 @@ jobs:
             # delayed. Yielding costs nothing: every window fetched is committed, so
             # the next scheduled or manual run picks up exactly where this stopped.
             BATCH="${{ github.event.inputs.chain_index || '1' }}"
-            if [ "$BATCH" -ge "${MAX_CHAIN:-8}" ]; then
-              echo "Reached ${MAX_CHAIN:-8} chained runs; yielding the lane."
+            # 40, not 8. The bound is a runaway-loop backstop, not lane
+            # rationing — that was the data-pipeline concern and no longer
+            # applies. At ~25 fetches per run before ORESTAR throttles, the
+            # 2006-2016 remediation is ~26 runs, so 8 stalled it a third of the
+            # way through with nothing scheduled to resume: this workflow is
+            # dispatch-only, so "yielding" meant abandoning.
+            if [ "$BATCH" -ge "${MAX_CHAIN:-40}" ]; then
+              echo "Reached ${MAX_CHAIN:-40} chained runs; stopping."
               echo "$REMAINING windows remain — re-run to continue."
               exit 0
             fi
