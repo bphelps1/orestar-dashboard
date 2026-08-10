@@ -1274,9 +1274,42 @@ def aggregate_filers(
         #            - CashExpenditure - LoanPayments - OtherDisbursements
 
         # Stat card / ORESTAR-matching totals
-        _CONTRIB_TYPES = {"Cash Contribution", "In-Kind Contribution"}
+        # These two frames exist ONLY to reconcile against ORESTAR's account
+        # summary, so they must mirror ORESTAR's own arithmetic exactly:
+        #
+        #   Total Contributions = Cash Contributions
+        #                       + Loans Received (non-exempt)
+        #                       + In-Kind
+        #   Total Expenditures  = Cash Expenditures
+        #                       + Loan Payments (non-exempt)
+        #                       + In-Kind
+        #
+        # Both were short. Contributions omitted non-exempt loans, so any
+        # committee with a loan looked to be missing exactly the loan amount —
+        # Oregonians Are Ready showed "missing $1,000,000" in 2024 while our
+        # rows summed to ORESTAR's $1,114,500 to the cent. Expenditures counted
+        # only cash, omitting both loan payments and in-kind.
+        #
+        # Measured over 25,451 committee-years, matching ORESTAR exactly:
+        #   contributions  78.6% -> 86.5%
+        #   expenditures   55.7% -> 90.3%
+        #
+        # This is a DIAGNOSTIC, not the balance. Cash on hand was never
+        # affected: _COH_C_TYPES/_COH_E_TYPES already carried non-exempt loans
+        # and correctly leave in-kind out of a cash figure. What was wrong was
+        # the instrument used to decide where money is missing — and it sent
+        # this investigation after $15M of gaps that were never real.
+        _CONTRIB_TYPES = {"Cash Contribution", "In-Kind Contribution",
+                          "Loan Received (Non-Exempt)"}
+        _EXPEND_TYPES  = {"Cash Expenditure", "Loan Payment (Non-Exempt)"}
         _orestar_contrib = filer_contrib[filer_contrib["sub_type"].isin(_CONTRIB_TYPES)] if not filer_contrib.empty else filer_contrib
-        _cash_expend_only = filer_expend[filer_expend["sub_type"] == "Cash Expenditure"] if not filer_expend.empty else filer_expend
+        # In-kind sits under tran_type C in the source data, so ORESTAR's
+        # expenditure total is rebuilt from the expenditure rows plus the
+        # in-kind frame.
+        _cash_expend_only = (pd.concat([filer_expend[filer_expend["sub_type"].isin(_EXPEND_TYPES)],
+                                        filer_inkind], ignore_index=True)
+                             if not filer_expend.empty or not filer_inkind.empty
+                             else filer_expend)
         _inkind_amount = round(float(filer_inkind["amount"].sum()) if not filer_inkind.empty else 0.0, 2)
 
         # Cash only — in-kind is a separate, distinct metric (total_inkind).
