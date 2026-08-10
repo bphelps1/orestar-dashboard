@@ -636,12 +636,23 @@ def _fetch_range(start: date, end: date, date_field: str = "filed") -> None:
                         "ORESTAR cap hit for %s %s→%s — splitting at %s",
                         tran_type, w_start, w_end, mid,
                     )
-                    sub1 = (tran_type, w_start, mid)
-                    sub2 = (tran_type, mid + timedelta(days=1), w_end)
+                    # Six fields, like every other task. When tasks grew to
+                    # carry the narrowing dimensions, this branch kept building
+                    # 3-tuples, so the first cap-triggered date split crashed
+                    # the fetcher on the next iteration:
+                    #   ValueError: not enough values to unpack (expected 6, got 3)
+                    # It broke the daily refresh outright, and the cascade test
+                    # missed it because that test only exercised a single-day
+                    # window, where the date branch never runs.
+                    #
+                    # The narrowing dimensions carry through the split: a window
+                    # already narrowed by amount stays narrowed in both halves.
+                    sub1 = (tran_type, w_start, mid, amt_from, amt_to, payee_prefix)
+                    sub2 = (tran_type, mid + timedelta(days=1), w_end,
+                            amt_from, amt_to, payee_prefix)
                     ins = i + 1
                     for sub in (sub1, sub2):
-                        sub_key = (sub[0], str(sub[1]), str(sub[2]))
-                        if sub_key not in fetched:
+                        if _task_key(sub) not in fetched:
                             tasks.insert(ins, sub)
                             total += 1
                             ins += 1
@@ -650,8 +661,8 @@ def _fetch_range(start: date, end: date, date_field: str = "filed") -> None:
                     # when the scraper stops (rate-limit) before finishing
                     # the second sub-window — the original stays "unfetched"
                     # so the next run will re-split and pick up the remainder.
-                    sub1_key = (sub1[0], str(sub1[1]), str(sub1[2]))
-                    sub2_key = (sub2[0], str(sub2[1]), str(sub2[2]))
+                    sub1_key = _task_key(sub1)
+                    sub2_key = _task_key(sub2)
                     if sub1_key in fetched and sub2_key in fetched:
                         fetched.add(key)
                         _save_fetched(fetched, log_file)
