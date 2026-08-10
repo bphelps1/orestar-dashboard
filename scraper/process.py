@@ -1306,18 +1306,19 @@ def aggregate_filers(
         # In-kind sits under tran_type C in the source data, so ORESTAR's
         # expenditure total is rebuilt from the expenditure rows plus the
         # in-kind frame.
-        # Each frame is filtered ONLY if it has rows. get_group returns a bare
-        # pd.DataFrame() — no columns at all — for a committee absent from a
-        # group, so touching ["sub_type"] on it raises KeyError. The previous
-        # form checked `expend.empty or inkind.empty`, which still indexed the
-        # expenditure frame whenever in-kind had rows and expenditures did not.
-        # That is a common shape (a committee receiving in-kind before it
-        # spends anything) and it killed the whole aggregation.
-        _expend_part = (filer_expend[filer_expend["sub_type"].isin(_EXPEND_TYPES)]
-                        if not filer_expend.empty else filer_expend)
-        _parts = [f for f in (_expend_part, filer_inkind) if not f.empty]
-        _cash_expend_only = (pd.concat(_parts, ignore_index=True) if _parts
-                             else filer_expend)
+        # Cash expenditures plus non-exempt loan payments — and deliberately
+        # NOT in-kind, which is added downstream where our_e is assembled:
+        #     our_e = _yearly_cash_exp + _yearly_inkind
+        #
+        # In-kind genuinely belongs in this comparison; ORESTAR's Total
+        # Expenditures includes it, confirmed against freshly parsed summaries
+        # (Yes on 117 2024: cash+loan 3,957,175.42 + in-kind 5,467,744.61 =
+        # 9,424,920.03, ORESTAR's figure to the cent). It was already being
+        # added there. Folding it in here as well counted it TWICE, storing
+        # 14,892,664.64 for that committee-year and inflating 9,155
+        # committee-years by $179,850,067 in total.
+        _cash_expend_only = (filer_expend[filer_expend["sub_type"].isin(_EXPEND_TYPES)]
+                             if not filer_expend.empty else filer_expend)
         _inkind_amount = round(float(filer_inkind["amount"].sum()) if not filer_inkind.empty else 0.0, 2)
 
         # Cash only — in-kind is a separate, distinct metric (total_inkind).
