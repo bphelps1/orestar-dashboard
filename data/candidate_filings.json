@@ -2,10 +2,10 @@
   "election": "2026 General Election",
   "election_id": "1453",
   "year": "2026",
-  "scraped": "2026-08-04T16:41:50Z",
+  "scraped": "2026-08-10T14:49:52Z",
   "counts": {
-    "SR": 109,
-    "SS": 30,
+    "SR": 111,
+    "SS": 31,
     "GOV": 3
   },
   "candidates": [
@@ -450,7 +450,8 @@
       "ballot_name": "Andrew Fudge",
       "party": "Republican",
       "parties": [
-        "Republican"
+        "Republican",
+        "Independent"
       ],
       "chamber": "house",
       "district": 20,
@@ -811,6 +812,21 @@
       "qualified": "Y"
     },
     {
+      "ballot_name": "Patrick Marnell",
+      "party": "Libertarian",
+      "parties": [
+        "Libertarian"
+      ],
+      "chamber": "house",
+      "district": 18,
+      "office": "house",
+      "office_district": "State Representative, 18th District",
+      "election": "2026 General Election",
+      "filing_method": "Minor Party",
+      "filing_date": "08/06/2026",
+      "qualified": "Y"
+    },
+    {
       "ballot_name": "Pam Marsh",
       "party": "Democrat",
       "parties": [
@@ -950,7 +966,8 @@
       "ballot_name": "Anna Munson",
       "party": "Republican",
       "parties": [
-        "Republican"
+        "Republican",
+        "Libertarian"
       ],
       "chamber": "house",
       "district": 19,
@@ -1160,7 +1177,8 @@
       "ballot_name": "Sue R Rieke Smith",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Independent"
       ],
       "chamber": "house",
       "district": 26,
@@ -1292,6 +1310,21 @@
       "filing_method": "Nominated",
       "filing_date": "06/25/2026",
       "qualified": "Y"
+    },
+    {
+      "ballot_name": "Brian Schimmel",
+      "party": "Independent",
+      "parties": [
+        "Independent"
+      ],
+      "chamber": "house",
+      "district": 29,
+      "office": "house",
+      "office_district": "State Representative, 29th District",
+      "election": "2026 General Election",
+      "filing_method": "Minor Party",
+      "filing_date": "08/07/2026",
+      "qualified": ""
     },
     {
       "ballot_name": "Max Sherman",
@@ -1614,7 +1647,8 @@
       "ballot_name": "Lamar Wise",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Independent"
       ],
       "chamber": "house",
       "district": 48,
@@ -1914,7 +1948,8 @@
       "ballot_name": "James I Manning Jr",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Independent"
       ],
       "chamber": "senate",
       "district": 7,
@@ -2073,6 +2108,21 @@
       "election": "2026 General Election",
       "filing_method": "Nominated",
       "filing_date": "06/25/2026",
+      "qualified": "Y"
+    },
+    {
+      "ballot_name": "Caleb Ticer",
+      "party": "Libertarian",
+      "parties": [
+        "Libertarian"
+      ],
+      "chamber": "senate",
+      "district": 6,
+      "office": "senate",
+      "office_district": "State Senator, 6th District",
+      "election": "2026 General Election",
+      "filing_method": "Minor Party",
+      "filing_date": "08/06/2026",
       "qualified": "Y"
     },
     {
