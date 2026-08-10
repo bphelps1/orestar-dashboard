@@ -10,8 +10,20 @@ on:
         description: "Max filers per batch (0 = all uncached)"
         required: false
         default: "200"
+      max_age_days:
+        description: >
+          Re-scrape any filer not refreshed within this many days. Use a small
+          value (e.g. 1) to sweep the whole set — unlike force, this CONVERGES:
+          each batch stamps its filers with a fresh timestamp, so the next
+          batch picks up the next slice and the remaining count falls to zero.
+        required: false
+        default: "30"
       force:
-        description: "Force re-scrape even if cached"
+        description: >
+          Re-scrape everything regardless of age. Does NOT chain — under force
+          every filer is selected on every run, so the remaining count never
+          drops and the chain cannot terminate. Use max_age_days for a full
+          sweep instead.
         required: false
         default: "false"
       chain_index:
@@ -79,7 +91,7 @@ jobs:
         run: |
           MAX="${{ github.event.inputs.max_filers || '200' }}"
           FORCE="${{ github.event.inputs.force || 'false' }}"
-          ARGS="--max-age-days 30"
+          ARGS="--max-age-days ${{ github.event.inputs.max_age_days || '30' }}"
           if [ "$MAX" != "0" ]; then
             ARGS="$ARGS --max-filers $MAX"
           fi
@@ -134,7 +146,12 @@ jobs:
         if: success() && steps.remaining.outputs.remaining != '0'
         env:
           GH_TOKEN: ${{ github.token }}
-          MAX_CHAIN: "6"
+          # 40, matching backfill. A full sweep is ~36 runs at 200 filers each, so a
+          # cap of 6 stopped it at 1,200 and left the rest for the weekly
+          # schedule — six weeks to finish a one-day job. Safe to raise now that
+          # this lives in the orestar-scrape lane, where a long chain delays the
+          # other scrapers via await-orestar rather than evicting anything.
+          MAX_CHAIN: "40"
         run: |
           BATCH="${{ github.event.inputs.chain_index || '1' }}"
           if [ "$BATCH" -ge "$MAX_CHAIN" ]; then
@@ -146,6 +163,7 @@ jobs:
           echo "Retriggering workflow for batch $((BATCH + 1)) of $MAX_CHAIN..."
           gh workflow run earliest-balances.yml \
             -f max_filers="${{ github.event.inputs.max_filers || '200' }}" \
+            -f max_age_days="${{ github.event.inputs.max_age_days || '30' }}" \
             -f force="false" \
             -f chain_index="$((BATCH + 1))"
           echo "Retrigger dispatched."
