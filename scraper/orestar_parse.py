@@ -36,3 +36,35 @@ def parse_dollar(html: str, label: str, default: float | None = None) -> float |
     # surrounding markup must not silently negate an otherwise positive figure.
     negative = bool(m.group(2) and m.group(2).strip() == "-") or bool(m.group(1) and m.group(4))
     return -val if negative else val
+
+def parse_dollar_between(html: str, start_label: str, end_label: str,
+                         label: str, default: float | None = None) -> float | None:
+    """Dollar amount for `label`, looked up only BETWEEN two section anchors.
+
+    ORESTAR's account summary labels both in-kind rows simply "In-Kind" — once
+    under Contributions, once under Expenditures:
+
+        Contributions
+          Cash Contributions            $0.00
+          Loans Received (non-exempt)   $0.00
+          In-Kind                       $0.00      <- contributions
+          Total Contributions           $0.00
+        Expenditures
+          Cash Expenditures         $1,440.59
+          Loan Payments (non-exempt)    $0.00
+          In-Kind                       $0.00      <- expenditures
+          Total Expenditures        $1,440.59
+
+    A plain search for "In-Kind" finds the contributions row both times, which
+    is why asking for "In-Kind Contributions" and "In-Kind Expenditures" — the
+    labels the page never uses — returned nothing at all: every one of 45,938
+    yearly records had both fields at zero while committees plainly had in-kind.
+    Scoping to the enclosing section is what tells the two rows apart.
+    """
+    a = html.find(start_label) if html else -1
+    if a == -1:
+        return default
+    b = html.find(end_label, a)
+    if b == -1:
+        return default
+    return parse_dollar(html[a:b], label, default)

@@ -108,8 +108,13 @@ def _parse_yearly_summary(html: str) -> dict:
         "loans_received_exempt": _parse_dollar(html, "Loans Received (Exempt)"),
         "loan_payments": _parse_dollar(html, "Loan Payments (Non-Exempt)"),
         "loan_payments_exempt": _parse_dollar(html, "Loan Payments (Exempt)"),
-        "inkind_contributions": _parse_dollar(html, "In-Kind Contributions"),
-        "inkind_expenditures": _parse_dollar(html, "In-Kind Expenditures"),
+        # Both rows are labelled just "In-Kind"; only the enclosing section
+        # tells them apart. Asking for labels the page never prints returned
+        # zero for all 45,938 yearly records.
+        "inkind_contributions": orestar_parse.parse_dollar_between(
+            html, "Cash Contributions", "Total Contributions", "In-Kind", 0.0),
+        "inkind_expenditures": orestar_parse.parse_dollar_between(
+            html, "Cash Expenditures", "Total Expenditures", "In-Kind", 0.0),
         "accounts_receivable": _parse_dollar(html, "Accounts Receivable"),
         "accounts_payable": _parse_dollar(html, "Accounts Payable"),
         "total_outstanding_loans": _parse_dollar(html, "Total Outstanding Loans"),
