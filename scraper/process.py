@@ -44,6 +44,14 @@ DATA_DIR      = ROOT / "data"
 # Account-summary fields that add up across committees. Used when one
 # canonical name covers several ORESTAR committees, so the comparison totals
 # describe the same set on both sides.
+# The three in-kind varieties ORESTAR recognises. All are non-cash and all
+# appear in BOTH its Total Contributions and Total Expenditures lines.
+INKIND_SUBTYPES = frozenset({
+    "In-Kind Contribution",
+    "In-Kind/Forgiven Account Payable",
+    "In-Kind/Forgiven Personal Expenditures",   # plural, as ORESTAR spells it
+})
+
 _SUMMABLE = ("ending_cash_balance", "beginning_balance", "contributions",
              "expenditures", "other_receipts", "other_disbursements",
              "balance_adjustments", "inkind_contributions",
@@ -739,12 +747,16 @@ def aggregate(df: pd.DataFrame) -> None:
     # as they are not standard in-kind contributions in ORESTAR's methodology.
     # Using str.contains("In-Kind") was a bug that inflated expenditures by $5.2M across
     # 1,483 filers without a matching contribution offset.
-    inkind_mask     = contributions["sub_type"] == "In-Kind Contribution"
+    # All three in-kind varieties, not just the plain one. This drives both the
+    # separate in-kind metric and, by inversion, the cash-only contribution
+    # figures — forgiven payables and forgiven personal expenditures are no
+    # more cash than a donated banner is.
+    inkind_mask     = contributions["sub_type"].isin(INKIND_SUBTYPES)
     cash_contribs   = contributions[~inkind_mask]
     inkind_contribs = contributions[inkind_mask]
 
     # ORESTAR-matching: Cash Contributions = Cash Contribution + In-Kind Contribution
-    _orestar_contrib_mask = contributions["sub_type"].isin({"Cash Contribution", "In-Kind Contribution"})
+    _orestar_contrib_mask = contributions["sub_type"].isin({"Cash Contribution"} | set(INKIND_SUBTYPES))
     _orestar_contribs = contributions[_orestar_contrib_mask]
     # ORESTAR-matching: Cash Expenditures = Cash Expenditure + In-Kind mirrored
     _cash_expend_mask = expenditures["sub_type"] == "Cash Expenditure"
@@ -1360,8 +1372,21 @@ def aggregate_filers(
         # and correctly leave in-kind out of a cash figure. What was wrong was
         # the instrument used to decide where money is missing — and it sent
         # this investigation after $15M of gaps that were never real.
-        _CONTRIB_TYPES = {"Cash Contribution", "In-Kind Contribution",
-                          "Loan Received (Non-Exempt)"}
+        # ORESTAR recognises THREE in-kind varieties, not one. Its Total
+        # Contributions and Total Expenditures lines both count all of them,
+        # and each lands on both sides — which is why the omission produced
+        # symmetric gaps, equal on contributions and expenditures.
+        #
+        # Friends of Sam Carpenter 2018 is the clean example: short exactly
+        # $140,060.27 on each side, matching that year's
+        # In-Kind/Forgiven Account Payable ($75,646.13) plus
+        # In-Kind/Forgiven Personal Expenditures ($64,414.14).
+        #
+        # Note the plural on the second. An earlier check of mine used the
+        # singular, matched nothing, and made this look worth one percentage
+        # point rather than six.
+        _CONTRIB_TYPES = ({"Cash Contribution", "Loan Received (Non-Exempt)"}
+                          | set(INKIND_SUBTYPES))
         _EXPEND_TYPES  = {"Cash Expenditure", "Loan Payment (Non-Exempt)"}
         _orestar_contrib = filer_contrib[filer_contrib["sub_type"].isin(_CONTRIB_TYPES)] if not filer_contrib.empty else filer_contrib
         # In-kind sits under tran_type C in the source data, so ORESTAR's
