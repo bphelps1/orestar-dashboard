@@ -41,6 +41,14 @@ log = logging.getLogger(__name__)
 ROOT          = Path(__file__).parent.parent
 RAW_DIR       = ROOT / "data" / "_raw"
 DATA_DIR      = ROOT / "data"
+# Account-summary fields that add up across committees. Used when one
+# canonical name covers several ORESTAR committees, so the comparison totals
+# describe the same set on both sides.
+_SUMMABLE = ("ending_cash_balance", "beginning_balance", "contributions",
+             "expenditures", "other_receipts", "other_disbursements",
+             "balance_adjustments", "inkind_contributions",
+             "inkind_expenditures", "loans_received", "loan_payments")
+
 AGG_DIR       = DATA_DIR / "aggregated"
 ENTITY_MAP    = Path(__file__).parent / "entity_map.json"
 REVIEW_QUEUE  = DATA_DIR / "review_queue.json"
@@ -1173,21 +1181,48 @@ def aggregate_filers(
     _filer_id_col = "filer id" if "filer id" in df.columns else None
     _orestar_data: dict[str, dict] = {}  # canonical name → full summary dict
     if _filer_id_col:
-        _name_to_fid: dict[str, str] = (
+        # EVERY filer id a canonical name covers, not just one.
+        #
+        # 265 canonical names span more than one ORESTAR committee — 554
+        # committees, 106,337 rows, $133M — usually because the committees
+        # differ only in punctuation ("Yes! Keep Our Groceries Tax Free!" vs
+        # "...Tax-Free!"). Aggregation groups by canonical NAME, so those rows
+        # are summed together; ORESTAR reports per committee.
+        #
+        # Keeping one id via drop_duplicates compared our merged totals against
+        # a single committee's summary, which reads as a huge overage that
+        # looks exactly like ORESTAR under-reporting. That one name was 78% of
+        # 2018's entire apparent gap: ours $8,632,365 against ORESTAR's
+        # $6,362,423, purely because the other committee's $4.6M was folded in
+        # on our side only.
+        _name_to_fids: dict[str, list[str]] = (
             df[[filer_col, _filer_id_col]]
             .dropna(subset=[_filer_id_col])
             .assign(_fid=lambda x: x[_filer_id_col].astype(str).str.strip())
             .query("_fid != ''")
-            .drop_duplicates(subset=[filer_col], keep="last")
-            .set_index(filer_col)["_fid"]
+            .groupby(filer_col)["_fid"]
+            .agg(lambda v: sorted(set(v)))
             .to_dict()
         )
-        unique_fids = sorted(set(_name_to_fid.values()))
+        # Kept for callers that only need a representative id.
+        _name_to_fid: dict[str, str] = {n: ids[-1] for n, ids in _name_to_fids.items()}
+        unique_fids = sorted({f for ids in _name_to_fids.values() for f in ids})
         _fid_to_summary = scrape_account_summaries(unique_fids)
-        # Map canonical name → full ORESTAR account summary
-        for canon_name, fid in _name_to_fid.items():
-            if fid in _fid_to_summary:
-                _orestar_data[canon_name] = _fid_to_summary[fid]
+        # Map canonical name → ORESTAR account summary, SUMMED over every
+        # committee the name covers, so both sides of the comparison describe
+        # the same set of committees. Single-committee names are unaffected.
+        for canon_name, fids in _name_to_fids.items():
+            parts = [_fid_to_summary[f] for f in fids if f in _fid_to_summary]
+            if not parts:
+                continue
+            if len(parts) == 1:
+                _orestar_data[canon_name] = parts[0]
+                continue
+            merged = dict(parts[0])
+            for k in _SUMMABLE:
+                merged[k] = round(sum(float(p.get(k) or 0) for p in parts), 2)
+            merged["merged_filer_ids"] = fids     # so the join is auditable
+            _orestar_data[canon_name] = merged
         log.info("ORESTAR account summaries mapped for %d / %d filers", len(_orestar_data), len(all_filer_names))
 
     # ── Load earliest-year beginning balances (from Playwright scraper) ──────
@@ -1212,11 +1247,37 @@ def aggregate_filers(
     _name_to_earliest: dict[str, dict] = {}
     _name_to_yearly: dict[str, dict] = {}  # canonical name → {yr: summary}
     if _filer_id_col:
-        for canon_name, fid in _name_to_fid.items():
-            if fid in _earliest_balances:
-                _name_to_earliest[canon_name] = _earliest_balances[fid]
-            if fid in _yearly_summaries:
-                _name_to_yearly[canon_name] = _yearly_summaries[fid].get("years", {})
+        for canon_name, fids in _name_to_fids.items():
+            # Opening balance: sum across the committees the name covers, since
+            # the rolling calculation sums their transactions.
+            begins = [_earliest_balances[f] for f in fids if f in _earliest_balances]
+            if begins:
+                if len(begins) == 1:
+                    _name_to_earliest[canon_name] = begins[0]
+                else:
+                    _name_to_earliest[canon_name] = {
+                        "earliest_year": min(b.get("earliest_year", 9999) for b in begins),
+                        "beginning_balance": round(
+                            sum(float(b.get("beginning_balance") or 0) for b in begins), 2),
+                        # Only trustworthy if EVERY part reached its first statement.
+                        "reached_earliest": all(b.get("reached_earliest") for b in begins),
+                    }
+            # Yearly summaries: add year by year across the same committees.
+            yearlies = [_yearly_summaries[f].get("years", {}) for f in fids
+                        if f in _yearly_summaries]
+            if not yearlies:
+                continue
+            if len(yearlies) == 1:
+                _name_to_yearly[canon_name] = yearlies[0]
+                continue
+            combined: dict[str, dict] = {}
+            for yr in {y for d in yearlies for y in d}:
+                rows = [d[yr] for d in yearlies if yr in d]
+                base = dict(rows[0])
+                for k in _SUMMABLE:
+                    base[k] = round(sum(float(r.get(k) or 0) for r in rows), 2)
+                combined[yr] = base
+            _name_to_yearly[canon_name] = combined
 
     # Load filer metadata (party, office, committee type) from scraper cache
     _filer_metadata_path = DATA_DIR / "filer_metadata.json"
