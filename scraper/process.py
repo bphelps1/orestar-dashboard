@@ -1223,9 +1223,27 @@ def aggregate_filers(
         # Map canonical name → ORESTAR account summary, SUMMED over every
         # committee the name covers, so both sides of the comparison describe
         # the same set of committees. Single-committee names are unaffected.
+        _partial_merge = 0
         for canon_name, fids in _name_to_fids.items():
             parts = [_fid_to_summary[f] for f in fids if f in _fid_to_summary]
             if not parts:
+                continue
+            # A name's transactions are summed across every committee it covers,
+            # so the ORESTAR side must cover the same committees or the two are
+            # not comparable. Falling back to whichever summaries happen to
+            # exist reports the missing committee's entire volume as a
+            # discrepancy: "Oregon People's Rebate" spans filers 20684 and
+            # 22517, only 22517 has a summary, and the comparison showed a
+            # $251,794 gap that was purely 20684's own contributions. Our 42
+            # rows for 22517 matched ORESTAR to the cent.
+            #
+            # 36 of 265 multi-committee names are in this state. Skipping is
+            # the honest outcome: no comparison beats a false one, and these
+            # committees simply go unchecked until their summaries are scraped.
+            if len(parts) < len(fids):
+                _partial_merge += 1
+                log.debug("Skipping ORESTAR comparison for %s — %d of %d committees "
+                          "have summaries", canon_name, len(parts), len(fids))
                 continue
             if len(parts) == 1:
                 _orestar_data[canon_name] = parts[0]
@@ -1235,6 +1253,10 @@ def aggregate_filers(
                 merged[k] = round(sum(float(p.get(k) or 0) for p in parts), 2)
             merged["merged_filer_ids"] = fids     # so the join is auditable
             _orestar_data[canon_name] = merged
+        if _partial_merge:
+            log.warning("%d canonical names skipped: they span several committees but only "
+                        "some have ORESTAR summaries — scrape the rest to compare them",
+                        _partial_merge)
         log.info("ORESTAR account summaries mapped for %d / %d filers", len(_orestar_data), len(all_filer_names))
 
     # ── Load earliest-year beginning balances (from Playwright scraper) ──────
@@ -1262,8 +1284,12 @@ def aggregate_filers(
         for canon_name, fids in _name_to_fids.items():
             # Opening balance: sum across the committees the name covers, since
             # the rolling calculation sums their transactions.
+            # Same completeness rule as the account summaries above: an anchor
+            # summed over some of a name's committees, against transactions
+            # summed over all of them, understates the opening balance by the
+            # missing committees' share and carries that error forward for ever.
             begins = [_earliest_balances[f] for f in fids if f in _earliest_balances]
-            if begins:
+            if begins and len(begins) == len(fids):
                 if len(begins) == 1:
                     _name_to_earliest[canon_name] = begins[0]
                 else:
@@ -1277,8 +1303,8 @@ def aggregate_filers(
             # Yearly summaries: add year by year across the same committees.
             yearlies = [_yearly_summaries[f].get("years", {}) for f in fids
                         if f in _yearly_summaries]
-            if not yearlies:
-                continue
+            if not yearlies or len(yearlies) < len(fids):
+                continue          # incomplete coverage — see the note above
             if len(yearlies) == 1:
                 _name_to_yearly[canon_name] = yearlies[0]
                 continue
