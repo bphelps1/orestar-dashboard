@@ -10,6 +10,14 @@ on:
         description: "Max filers per batch (0 = all uncached)"
         required: false
         default: "200"
+      filer_ids:
+        description: >
+          Space-separated filer IDs to scrape, instead of an age-based sweep.
+          For targeted repair — e.g. the committees blocking a partial-merge
+          comparison — where sweeping 7,500 filers to reach 38 is absurd.
+          Does not chain: the listed filers are scraped and the run stops.
+        required: false
+        default: ""
       max_age_days:
         description: >
           Re-scrape any filer not refreshed within this many days. Use a small
@@ -91,6 +99,16 @@ jobs:
         run: |
           MAX="${{ github.event.inputs.max_filers || '200' }}"
           FORCE="${{ github.event.inputs.force || 'false' }}"
+          FILER_IDS="${{ github.event.inputs.filer_ids }}"
+          if [ -n "$FILER_IDS" ]; then
+            # Targeted repair. --force so a cached-but-incomplete filer is
+            # actually re-read rather than skipped as fresh.
+            ARGS="--filer-ids $FILER_IDS --force"
+            echo "Targeted scrape of: $FILER_IDS"
+            xvfb-run --auto-servernum python scraper/fetch_earliest_balances.py $ARGS
+            echo "targeted=true" >> "$GITHUB_ENV"
+            exit 0
+          fi
           ARGS="--max-age-days ${{ github.event.inputs.max_age_days || '30' }}"
           if [ "$MAX" != "0" ]; then
             ARGS="$ARGS --max-filers $MAX"
@@ -143,7 +161,7 @@ jobs:
       # spawn another. Cancelling used to fire this step anyway, so stopping
       # the chain meant disabling the whole workflow.
       - name: Retrigger for next batch
-        if: success() && steps.remaining.outputs.remaining != '0'
+        if: success() && steps.remaining.outputs.remaining != '0' && env.targeted != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           # 40, matching backfill. A full sweep is ~36 runs at 200 filers each, so a
