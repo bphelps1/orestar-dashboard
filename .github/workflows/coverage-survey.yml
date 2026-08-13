@@ -88,6 +88,9 @@ jobs:
           if [ "${{ inputs.recheck }}" = "true" ]; then
             ARGS="$ARGS --recheck"
           fi
+          # Comfortably inside the job's 90-minute timeout, so the script
+          # always stops itself rather than being killed mid-run.
+          ARGS="$ARGS --max-minutes 70"
           xvfb-run --auto-servernum python scraper/survey_coverage.py $ARGS 2>&1 | tee /tmp/survey.log
 
           # How much this run actually achieved, taken from the script's own
@@ -99,8 +102,17 @@ jobs:
           echo "surveyed=${SURVEYED:-0}" >> "$GITHUB_OUTPUT"
           echo "This run surveyed ${SURVEYED:-0} committees (${REMAINING:-?} were outstanding at the start)."
 
+      # always(), NOT !cancelled().
+      #
+      # A job timeout is reported as "cancelled", so !cancelled() skips this
+      # step exactly when it matters most. The first real survey run spent 90
+      # minutes measuring 96 committees, hit the job timeout, and threw away
+      # every one of them — the script saves progress after each committee
+      # precisely so a cut-off run keeps what it learned, and then the commit
+      # step refused to run. A guard that fires on the case it was written to
+      # protect is worse than no guard.
       - name: Commit survey results
-        if: "!cancelled()"
+        if: always()
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -114,7 +126,7 @@ jobs:
           git push
 
       - name: Re-trigger if the survey is unfinished
-        if: "!cancelled()"
+        if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
