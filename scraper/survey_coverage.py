@@ -192,14 +192,29 @@ def orestar_count(page, filer_id: str, start: date, end: date) -> int | None:
     if "secure.sos.state.or.us/orestar" not in page.url:
         raise F.SessionExpiredError(f"Session expired — redirected to {page.url}")
 
-    text = page.inner_text("body")
-    m = re.search(r"([\d,]+)\s+records found", text)
-    if not m:
+    # Poll for the count instead of reading the body once.
+    #
+    # wait_for_url resolves the moment the URL changes, which is before the
+    # results have rendered. Reading inner_text right then returns a page that
+    # has no count in it yet, and this reported "no count read" for committees
+    # that were perfectly fine — filer 24173 answers "104 records found" in a
+    # browser and was skipped anyway.
+    #
+    # The flat PAGE_RENDER_WAIT this replaced was hiding the race by sleeping
+    # through it. Waiting for the content itself is the fix; it also returns as
+    # soon as the page is ready rather than always paying the full delay.
+    deadline = time.monotonic() + 20
+    text = ""
+    while time.monotonic() < deadline:
+        text = page.inner_text("body")
+        m = re.search(r"([\d,]+)\s+records found", text)
+        if m:
+            return int(m.group(1).replace(",", ""))
         # "No records found" is a real answer, not a failure.
         if "no records found" in text.lower():
             return 0
-        return None
-    return int(m.group(1).replace(",", ""))
+        page.wait_for_timeout(500)
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -286,6 +301,7 @@ def main() -> int:
     # chain both run normally.
     deadline = time.monotonic() + args.max_minutes * 60 if args.max_minutes else None
 
+    unreadable = 0
     with sync_playwright() as p:
         browser, context, page = F.setup_browser(p)
         consecutive_failures = 0
@@ -301,7 +317,12 @@ def main() -> int:
             meta = by_id.get(fid, {})
             try:
                 n = orestar_count(page, fid, date(FIRST_YEAR, 1, 1), today)
-                consecutive_failures = 0
+                # Reset only on a real read. Resetting here unconditionally
+                # counted an unreadable page as a success: the counter went to
+                # zero and straight back to one on every iteration, so the
+                # give-up threshold below could never be reached.
+                if n is not None:
+                    consecutive_failures = 0
             except F.SessionExpiredError as exc:
                 consecutive_failures += 1
                 log.warning("Blocked at filer %s (%d/2): %s — restarting browser",
@@ -323,7 +344,20 @@ def main() -> int:
             if n is None:
                 # Not recorded at all: an unknown count must never be filed as
                 # a result, or the committee is written off on a parse failure.
+                #
+                # It DOES count as a failure, though. This used to `continue`
+                # without touching the failure counter, so once something went
+                # wrong the loop tore through every remaining committee at a
+                # second each, logging 1,500 warnings and stopping for nothing.
+                # A run that cannot read any page should give up and let the
+                # next one try, not sprint to the end of the list.
+                unreadable += 1
+                consecutive_failures += 1
                 log.warning("Filer %s: no count read — leaving unsurveyed", fid)
+                if consecutive_failures >= 5:
+                    log.warning("Five committees in a row unreadable — stopping. "
+                                "%d surveyed this run.", done_this_run)
+                    break
                 continue
 
             ours = held.get(fid, 0)
@@ -348,8 +382,8 @@ def main() -> int:
         except Exception:
             pass
 
-    log.info("Surveyed %d committees this run; %d of %d recorded overall.",
-             done_this_run, len(surveyed), len(targets))
+    log.info("Surveyed %d committees this run (%d unreadable); %d of %d recorded overall.",
+             done_this_run, unreadable, len(surveyed), len(targets))
     return report()
 
 
