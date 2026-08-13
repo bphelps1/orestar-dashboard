@@ -95,15 +95,28 @@ def _flagged_committees() -> list[dict]:
     return out
 
 
-def _our_counts(filer_ids: list[str]) -> dict[str, int]:
-    """Rows we hold per filer — one query for the whole batch, not one each."""
+def _our_counts(filer_ids: list[str], start: date, end: date) -> dict[str, int]:
+    """Rows we hold per filer, over exactly the window ORESTAR is asked about.
+
+    This counted every row for a filer regardless of date, while orestar_count
+    searches 2006 → today. Any row outside that window inflated our side and so
+    understated the shortfall — Citizens for Mannix holds 4 such rows and was
+    recorded as complete at 343 vs 339, when inside the window it holds exactly
+    the 339 ORESTAR reports.
+
+    Small in this dataset (14 rows across 9 committees) but wrong in the
+    direction that hides missing data, which is the direction that matters:
+    comparing two different populations and calling the difference a finding is
+    how eight earlier "discrepancies" turned out to be nothing at all.
+    """
     conn = supabase_sync._connect()
     try:
         with conn.cursor() as cur:
             cur.execute(
                 "select filer_id, count(*) from transactions "
-                "where filer_id = any(%s) group by filer_id",
-                (list(filer_ids),),
+                "where filer_id = any(%s) and tran_date between %s and %s "
+                "group by filer_id",
+                (list(filer_ids), str(start), str(end)),
             )
             return {str(k): int(v) for k, v in cur.fetchall()}
     finally:
@@ -266,10 +279,44 @@ def main() -> int:
     ap.add_argument("--report", action="store_true", help="print findings, fetch nothing")
     ap.add_argument("--recheck", action="store_true",
                     help="re-survey committees already recorded")
+    ap.add_argument("--drop", nargs="*", metavar="FILER_ID",
+                    help="forget these committees' recorded results so they are "
+                         "surveyed again; with no ids, drops every committee "
+                         "holding rows outside the surveyed window, whose "
+                         "counts predate the date-bounded comparison")
     args = ap.parse_args()
 
     if args.report:
         return report()
+
+    if args.drop is not None:
+        surveyed = _load_survey()
+        if args.drop:
+            targets_to_drop = {str(f) for f in args.drop}
+        else:
+            # Exactly the committees the old unbounded count could have got
+            # wrong: those holding rows outside the surveyed window. Dropping
+            # only these re-surveys 3 committees instead of all 300 — the whole
+            # blast radius is 14 rows across 9 committees dataset-wide.
+            conn = supabase_sync._connect()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "select distinct filer_id from transactions "
+                        "where tran_date < %s or tran_date > current_date "
+                        "   or tran_date is null",
+                        (f"{FIRST_YEAR}-01-01",),
+                    )
+                    targets_to_drop = {str(r[0]) for r in cur.fetchall()}
+            finally:
+                conn.close()
+        gone = [f for f in targets_to_drop if f in surveyed]
+        for f in gone:
+            del surveyed[f]
+        _save_survey(surveyed)
+        log.info("Dropped %d recorded result(s) — they will be surveyed again: %s",
+                 len(gone), " ".join(sorted(gone)) or "(none were recorded)")
+        return 0
 
     flagged = _flagged_committees()
     by_id = {str(r["filer_id"]): r for r in flagged}
@@ -289,8 +336,8 @@ def main() -> int:
         log.info("Survey complete for every flagged committee.")
         return report()
 
-    held = _our_counts(todo)
     today = date.today()
+    held = _our_counts(todo, date(FIRST_YEAR, 1, 1), today)
     done_this_run = 0
 
     # Stop on our own terms, before the job's timeout stops us.
