@@ -467,6 +467,72 @@ def _save_transactions(df: pd.DataFrame) -> None:
 # Main processing pipeline
 # ---------------------------------------------------------------------------
 
+def _drop_superseded(df):
+    """Keep only the version of each transaction that ORESTAR still counts.
+
+    Two rules, and we had only the first:
+
+      1. An original replaced by an amendment is dropped. ORESTAR's Account
+         Summary counts the amendment, not the original, and the two arrive in
+         different fetch windows because they were filed on different dates.
+
+      2. Where a transaction was amended MORE THAN ONCE, only the newest
+         amendment survives. Every amendment points back at the original rather
+         than at the amendment before it, so rule 1 alone left a twice-amended
+         transaction with two live rows and a three-times-amended one with
+         three. Julie for County Commissioner holds three versions of the same
+         $167.41 contribution — same date, same amount, three filed dates — and
+         we counted all three. Dataset-wide: 160 stale rows, 68 committees,
+         $462,613, all of it inflating our side, which is the direction that
+         makes a committee look like it holds MORE than ORESTAR reports.
+
+    Lived in two places before this, copied, with the second labelled "same
+    logic as step 4b". They were the same, which is why fixing rule 2 in one
+    would have left the other wrong. Returns (df, removed_tran_ids) so callers
+    that sync to Postgres can delete what they dropped.
+    """
+    removed: set[str] = set()
+    orig_col = "original id" if "original id" in df.columns else None
+    status_col = "tran status" if "tran status" in df.columns else None
+    if not (orig_col and status_col and "tran_id" in df.columns):
+        return df, removed
+
+    # Rule 1 — originals replaced by an amendment.
+    amended = df[df[status_col] == "Amended"]
+    if not amended.empty:
+        superseded = set(
+            amended[orig_col].dropna().astype(str).str.strip()
+        ) & set(df["tran_id"].astype(str).str.strip())
+        if superseded:
+            before = len(df)
+            df = df[~df["tran_id"].astype(str).str.strip().isin(superseded)]
+            removed |= superseded
+            log.info("Removed %d superseded originals (replaced by amendments): "
+                     "%d → %d rows", before - len(df), before, len(df))
+
+    # Rule 2 — older amendments in a chain.
+    amended = df[df[status_col] == "Amended"]
+    if not amended.empty:
+        key = ["filer_id", orig_col] if "filer_id" in df.columns else [orig_col]
+        # Newest wins: filed date first, tran_id to break same-day ties.
+        order = [c for c in ("filed_date", "tran_id") if c in amended.columns]
+        ranked = amended.dropna(subset=[orig_col])
+        if order:
+            ranked = ranked.sort_values(order)
+        stale = set(
+            ranked.loc[ranked.duplicated(subset=key, keep="last"),
+                       "tran_id"].astype(str).str.strip()
+        )
+        if stale:
+            before = len(df)
+            df = df[~df["tran_id"].astype(str).str.strip().isin(stale)]
+            removed |= stale
+            log.info("Removed %d superseded amendments (kept the newest of each "
+                     "chain): %d → %d rows", before - len(df), before, len(df))
+
+    return df, removed
+
+
 def process() -> None:
     entity_map = load_entity_map()
 
@@ -484,22 +550,7 @@ def process() -> None:
         # Ensure amount is numeric for re-aggregation path
         df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0.0)
 
-        # Remove originals superseded by amendments (same logic as step 4b)
-        _orig_col = "original id" if "original id" in df.columns else None
-        _status_col = "tran status" if "tran status" in df.columns else None
-        if _orig_col and _status_col and "tran_id" in df.columns:
-            amended = df[df[_status_col] == "Amended"]
-            if not amended.empty:
-                superseded_ids = set(
-                    amended[_orig_col].dropna().astype(str).str.strip()
-                ) & set(df["tran_id"].astype(str).str.strip())
-                if superseded_ids:
-                    before = len(df)
-                    df = df[~df["tran_id"].astype(str).str.strip().isin(superseded_ids)]
-                    log.info(
-                        "Removed %d superseded originals (replaced by amendments): %d → %d rows",
-                        before - len(df), before, len(df),
-                    )
+        df, _ = _drop_superseded(df)
     else:
         # ── 2. Type coercion ─────────────────────────────────────────────────
         for col in ["tran_id", "contributor_payee", "filer", "contributor_type",
@@ -553,23 +604,7 @@ def process() -> None:
         # filed on different dates (hence fetched in different weekly windows).
         # ORESTAR's Account Summary counts only the latest version, so we must
         # drop the originals to avoid double-counting.
-        superseded_ids: set[str] = set()
-        _orig_col = "original id" if "original id" in df.columns else None
-        _status_col = "tran status" if "tran status" in df.columns else None
-        if _orig_col and _status_col and "tran_id" in df.columns:
-            amended = df[df[_status_col] == "Amended"]
-            if not amended.empty:
-                # Collect tran_ids of originals that have been superseded
-                superseded_ids = set(
-                    amended[_orig_col].dropna().astype(str).str.strip()
-                ) & set(df["tran_id"].astype(str).str.strip())
-                if superseded_ids:
-                    before = len(df)
-                    df = df[~df["tran_id"].astype(str).str.strip().isin(superseded_ids)]
-                    log.info(
-                        "Removed %d superseded originals (replaced by amendments): %d → %d rows",
-                        before - len(df), before, len(df),
-                    )
+        df, superseded_ids = _drop_superseded(df)
 
         # ── 5. Name normalization + fuzzy dedup ───────────────────────────────
         all_names = (
