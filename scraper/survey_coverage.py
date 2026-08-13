@@ -134,6 +134,32 @@ def _save_survey(surveyed: dict) -> None:
 # The one query
 # ---------------------------------------------------------------------------
 
+def _return_to_form(page) -> None:
+    """Back to the search form, without the flat seven-second sleep.
+
+    fetch.py's _return_to_search clicks Reset when it is already on the form,
+    but a survey is always standing on a results page, so it took the slow path
+    every single time: a full navigation plus PAGE_RENDER_WAIT = 7 seconds,
+    whether or not the form was ready sooner.
+
+    Polling for the form's CSRF field is both faster and more correct. The
+    sleep existed because F5's JavaScript challenge needs time to run, and
+    waiting for the element it produces handles that properly: if the challenge
+    is still going the field is not there yet and we keep waiting, and if the
+    page is ready early we proceed immediately.
+    """
+    if "gotoPublicTransactionSearch.do" not in page.url:
+        page.goto(F.SEARCH_URL, wait_until="domcontentloaded", timeout=60_000)
+    if "secure.sos.state.or.us/orestar" not in page.url:
+        raise F.SessionExpiredError(f"Session expired — redirected to {page.url}")
+    try:
+        page.wait_for_selector('input[name="OWASP_CSRFTOKEN"]', timeout=30_000)
+    except PlaywrightTimeout:
+        raise F.SessionExpiredError(
+            "Search form never rendered — F5 challenge or session expiry"
+        )
+
+
 def orestar_count(page, filer_id: str, start: date, end: date) -> int | None:
     """How many records ORESTAR holds for this filer over this range.
 
@@ -141,7 +167,7 @@ def orestar_count(page, filer_id: str, start: date, end: date) -> int | None:
     "unknown" — recording it as 0 would mark a committee complete on the
     strength of a parse failure.
     """
-    F._return_to_search(page)
+    _return_to_form(page)
     page.fill('input[name="cneSearchFilerCommitteeId"]', str(filer_id))
     page.wait_for_timeout(250)
     page.fill('input[name="cneSearchTranStartDate"]', start.strftime("%m/%d/%Y"))
@@ -209,6 +235,9 @@ def main() -> int:
     ap.add_argument("--filer-ids", nargs="*", default=None)
     ap.add_argument("--limit", type=int, default=0,
                     help="stop after this many committees (0 = until blocked)")
+    ap.add_argument("--max-minutes", type=int, default=70,
+                    help="stop after this long, so the job's own timeout never "
+                         "arrives mid-run (0 = no budget)")
     ap.add_argument("--report", action="store_true", help="print findings, fetch nothing")
     ap.add_argument("--recheck", action="store_true",
                     help="re-survey committees already recorded")
@@ -239,12 +268,25 @@ def main() -> int:
     today = date.today()
     done_this_run = 0
 
+    # Stop on our own terms, before the job's timeout stops us.
+    #
+    # A GitHub job timeout is reported as a cancellation, which skipped the
+    # commit step and discarded 90 minutes and 96 committees of measured
+    # progress. Finishing early and deliberately means the commit and the
+    # chain both run normally.
+    deadline = time.monotonic() + args.max_minutes * 60 if args.max_minutes else None
+
     with sync_playwright() as p:
         browser, context, page = F.setup_browser(p)
         consecutive_failures = 0
         for fid in todo:
             if args.limit and done_this_run >= args.limit:
                 log.info("Reached --limit %d for this run.", args.limit)
+                break
+            if deadline and time.monotonic() >= deadline:
+                log.info("Reached the %d-minute budget after %d committees — "
+                         "stopping so this run's progress is committed.",
+                         args.max_minutes, done_this_run)
                 break
             meta = by_id.get(fid, {})
             try:
