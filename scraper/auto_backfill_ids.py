@@ -60,30 +60,81 @@ if INCOMPLETE_FILE.exists():
     if deferred:
         print(f"Deferred filers (>{MAX_RETRIES} retries, skipping for now): {len(deferred)} — {sorted(deferred)}")
 
-filers = []
-for f in FILERS_DIR.glob("*.json"):
-    with open(f) as fh:
-        d = json.load(fh)
-    slug = d.get("slug", f.stem)
-    fid = slug_to_fid.get(slug)
-    if not fid or fid in already_done:
-        continue
-    disc = abs(d.get("orestar_discrepancy", 0))
-    yearly = d.get("yearly_discrepancies", {})
-    if yearly:
-        max_yearly = max(abs(v.get("discrepancy", 0)) for v in yearly.values())
-        disc = max(disc, max_yearly)
-    if disc > 0.01:
-        filers.append((disc, fid, d.get("name", "")))
+# ---------------------------------------------------------------------------
+# Priority
+# ---------------------------------------------------------------------------
+#
+# Rank by ROWS MISSING, not by dollar discrepancy.
+#
+# The dollar ranking sent the backfill after committees it could not help. Of
+# the 50 largest deltas measured by the coverage survey, 32 had nothing to
+# fetch at all: Committee for SAIF Keeping tops the list at $665,242 and holds
+# all seven of the seven transactions ORESTAR has for it. Meanwhile Oregon
+# Right to Life is $614,666 adrift and short only 42 rows, while Local 48 is
+# short 13,626. Rows missing and dollars adrift turn out to be close to
+# independent, so ranking by one to find the other never worked.
+#
+# The survey asks ORESTAR for its own record count -- one search, no export --
+# and records the shortfall. Fetching what it found missing is the only part of
+# the discrepancy a backfill can address; the rest is balance reconciliation
+# for dormant and pre-ORESTAR committees, which is a different job.
+SURVEY_FILE = Path("data/coverage_survey.json")
 
-filers.sort(reverse=True)
-batch = filers[:BATCH_SIZE]
+filers = []
+survey_rows = []
+if SURVEY_FILE.exists():
+    try:
+        survey_rows = json.loads(SURVEY_FILE.read_text())
+    except Exception as exc:
+        print(f"Could not read {SURVEY_FILE}: {exc}")
+
+if survey_rows:
+    surveyed_complete = 0
+    for r in survey_rows:
+        fid = str(r.get("filer_id") or "")
+        missing = int(r.get("missing") or 0)
+        if not fid or fid in already_done:
+            continue
+        if missing <= 0:
+            # Measured and complete. Not "not yet done" — there is nothing to
+            # fetch, so queueing it would burn a run to confirm that again.
+            surveyed_complete += 1
+            continue
+        filers.append((missing, fid, r.get("name", "")))
+    print(f"Survey covers {len(survey_rows)} committees: "
+          f"{len(filers)} short of ORESTAR, {surveyed_complete} already complete")
+    filers.sort(reverse=True)
+    batch = filers[:BATCH_SIZE]
+    unit = "rows"
+else:
+    # No survey yet — fall back to the dollar ranking so the workflow still
+    # functions, but say so, because this is the ranking that misfires.
+    print("No coverage survey found — falling back to dollar-discrepancy order. "
+          "Run the Coverage Survey workflow to target by rows actually missing.")
+    for f in FILERS_DIR.glob("*.json"):
+        with open(f) as fh:
+            d = json.load(fh)
+        slug = d.get("slug", f.stem)
+        fid = slug_to_fid.get(slug)
+        if not fid or fid in already_done:
+            continue
+        disc = abs(d.get("orestar_discrepancy", 0))
+        yearly = d.get("yearly_discrepancies", {})
+        if yearly:
+            max_yearly = max(abs(v.get("discrepancy", 0)) for v in yearly.values())
+            disc = max(disc, max_yearly)
+        if disc > 0.01:
+            filers.append((disc, fid, d.get("name", "")))
+    filers.sort(reverse=True)
+    batch = filers[:BATCH_SIZE]
+    unit = "dollars"
 
 if batch:
-    print(f"Found {len(filers)} filers with discrepancies, selecting top {len(batch)}:")
-    for disc, fid, name in batch:
+    print(f"Found {len(filers)} filers to backfill, selecting top {len(batch)} by {unit}:")
+    for score, fid, name in batch:
         retry = " (RETRY)" if fid in incomplete else ""
-        print(f"  {fid}: ${disc:,.2f} — {name}{retry}")
+        shown = f"{score:,} rows missing" if unit == "rows" else f"${score:,.2f}"
+        print(f"  {fid}: {shown} — {name}{retry}")
     OUTPUT_FILE.write_text(" ".join(fid for _, fid, _ in batch))
     # Clear retryable incomplete filers that are being retried this batch.
     # Deferred filers (>MAX_RETRIES) stay in the file with their counts.
