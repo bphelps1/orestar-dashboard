@@ -152,8 +152,18 @@ def _return_to_form(page) -> None:
         page.goto(F.SEARCH_URL, wait_until="domcontentloaded", timeout=60_000)
     if "secure.sos.state.or.us/orestar" not in page.url:
         raise F.SessionExpiredError(f"Session expired — redirected to {page.url}")
+    # state="attached", NOT the default "visible".
+    #
+    # OWASP_CSRFTOKEN is <input type="hidden">, so it is never visible and the
+    # default state can never be satisfied. The first version of this waited on
+    # the default, timed out after 30 seconds on a perfectly healthy page, and
+    # reported the timeout as "F5 challenge or session expiry" — inventing a
+    # rate limit that was not happening and surveying zero committees where the
+    # slow path had managed 96. _load_search_form gets this right by using
+    # .count(), which ignores visibility.
     try:
-        page.wait_for_selector('input[name="OWASP_CSRFTOKEN"]', timeout=30_000)
+        page.wait_for_selector('input[name="OWASP_CSRFTOKEN"]',
+                               state="attached", timeout=30_000)
     except PlaywrightTimeout:
         raise F.SessionExpiredError(
             "Search form never rendered — F5 challenge or session expiry"
