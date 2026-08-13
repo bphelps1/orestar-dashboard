@@ -1230,6 +1230,17 @@ def aggregate_filers(
     # Build canonical-name → filer-id mapping so we can look up ORESTAR data.
     _filer_id_col = "filer id" if "filer id" in df.columns else None
     _orestar_data: dict[str, dict] = {}  # canonical name → full summary dict
+    # Loaded here, ahead of the first use. The balance comparison below now
+    # derives from this file, so reading it later left _yearly_summaries
+    # unbound and killed the whole run:
+    #   UnboundLocalError: cannot access local variable '_yearly_summaries'
+    _yearly_path = DATA_DIR / "orestar_yearly_summaries.json"
+    _yearly_summaries: dict[str, dict] = {}  # filer_id → {years: {yr: {...}}, ts}
+    if _yearly_path.exists():
+        with open(_yearly_path) as f:
+            _yearly_summaries = json.load(f)
+        log.info("Loaded yearly ORESTAR summaries for %d filers", len(_yearly_summaries))
+
     if _filer_id_col:
         # EVERY filer id a canonical name covers, not just one.
         #
@@ -1329,12 +1340,6 @@ def aggregate_filers(
         log.warning("No earliest_balances.json found — beginning balances will default to $0")
 
     # Load per-year ORESTAR summaries
-    _yearly_path = DATA_DIR / "orestar_yearly_summaries.json"
-    _yearly_summaries: dict[str, dict] = {}  # filer_id → {years: {yr: {...}}, ts}
-    if _yearly_path.exists():
-        with open(_yearly_path) as f:
-            _yearly_summaries = json.load(f)
-        log.info("Loaded yearly ORESTAR summaries for %d filers", len(_yearly_summaries))
 
     # Build canonical-name → earliest balance mapping
     _name_to_earliest: dict[str, dict] = {}
