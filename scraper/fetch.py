@@ -755,6 +755,90 @@ def _fetch_range(start: date, end: date, date_field: str = "filed") -> None:
 # retry it" — conflating the two would either lose the window or spin on it.
 CAPPED = Path("__capped__")
 
+# Returned when we already hold every row ORESTAR reports for the window.
+# Also distinct from None: nothing was downloaded, but nothing needs to be.
+COMPLETE = Path("__complete__")
+
+
+# ---------------------------------------------------------------------------
+# What we already hold
+# ---------------------------------------------------------------------------
+#
+# The fetcher used to re-request every year for a filer regardless of whether
+# we already had it, because it had no way to ask. ORESTAR's results page
+# reports the true, uncapped number of matching records, so one search answers
+# "is this window already complete?" — and if it is, the multi-megabyte export
+# is pure waste. On a filer with twenty years and two bad ones that turns
+# twenty exports into two.
+#
+# Degrades to the old behaviour when there is no database to ask: a fetcher
+# that refuses to run without Postgres would be worse than one that occasionally
+# re-downloads.
+
+_HELD_CONN = None
+_HELD_UNAVAILABLE = False
+
+
+def _held_rows(filer_id, tran_type, start, end, amt_from, amt_to, payee_prefix):
+    """How many rows we hold for exactly the window ORESTAR was asked about.
+
+    Returns None when the database cannot be consulted, which callers must
+    treat as "unknown", never as zero — reading it as zero would make every
+    window look missing and re-download the entire dataset.
+
+    The filters mirror the search precisely. Filer searches fill the
+    transaction-date fields, so this counts on tran_date; counting a different
+    set would produce differences that are the checker's own fault.
+    """
+    global _HELD_CONN, _HELD_UNAVAILABLE
+    if _HELD_UNAVAILABLE:
+        return None
+    try:
+        if _HELD_CONN is None:
+            import supabase_sync
+            if not supabase_sync.sync_enabled():
+                _HELD_UNAVAILABLE = True
+                log.info("No SUPABASE_DB_URL — cannot skip windows we already hold; "
+                         "every window will be downloaded as before.")
+                return None
+            _HELD_CONN = supabase_sync._connect()
+        sql = ["select count(*) from transactions where tran_date between %s and %s",
+               "and filer_id = %s"]
+        args: list = [str(start), str(end), str(filer_id)]
+        if tran_type and tran_type != "ALL":
+            sql.append("and tran_type = %s"); args.append(tran_type)
+        if amt_from is not None:
+            sql.append("and amount >= %s"); args.append(float(amt_from))
+        if amt_to is not None:
+            sql.append("and amount <= %s"); args.append(float(amt_to))
+        if payee_prefix:
+            sql.append("and upper(contributor_payee) like %s")
+            args.append(payee_prefix.upper() + "%")
+        with _HELD_CONN.cursor() as cur:
+            cur.execute(" ".join(sql), args)
+            return cur.fetchone()[0]
+    except Exception as exc:
+        log.warning("Could not read held rows (%s) — proceeding without the skip", exc)
+        _HELD_UNAVAILABLE = True
+        _HELD_CONN = None
+        return None
+
+
+def _prior_counts() -> dict:
+    """ORESTAR counts recorded by earlier runs, keyed like RECORD_COUNTS.
+
+    Lets a window be skipped with NO request at all when a previous run already
+    learned its size and we hold that many rows. This is what makes the retrigger
+    chain converge instead of re-walking the same ground every time.
+    """
+    path = RAW_DIR.parent / "record_counts.json"
+    if not path.exists():
+        return {}
+    try:
+        return {tuple(e["key"]): int(e["reported"]) for e in json.loads(path.read_text())}
+    except Exception:
+        return {}
+
 
 def _filer_window_path(raw_dir: Path, filer_id: str, tran_type: str,
                        start: date, end: date, amt_from, amt_to, payee_prefix) -> Path:
@@ -878,6 +962,25 @@ def download_filer_window(
             _return_to_search(page)
             time.sleep(REQUEST_DELAY)
             return CAPPED
+
+        # Already have it? Then the export is pure waste.
+        #
+        # The comparison is deliberately ">=", not "==". We delete originals
+        # superseded by amendments, so holding FEWER rows than ORESTAR reports
+        # is normal and does not prove anything is missing. Treating that as
+        # "incomplete" only costs a download; treating it as "complete" could
+        # skip a window that really is short, so the conservative direction is
+        # the only safe one.
+        if reported is not None:
+            held = _held_rows(filer_id, tran_type, start, end,
+                              amt_from, amt_to, payee_prefix)
+            if held is not None and held >= reported:
+                log.info("Filer %s %s %s→%s%s: hold %d of %d — already complete, "
+                         "skipping download", filer_id, tran_type, start, end,
+                         _narrowing_label(amt_from, amt_to, payee_prefix), held, reported)
+                _return_to_search(page)
+                time.sleep(REQUEST_DELAY)
+                return COMPLETE
         csrf = page.evaluate("""() => {
             const links = [...document.querySelectorAll('a[href*="OWASP_CSRFTOKEN"]')];
             if (!links.length) return null;
@@ -969,8 +1072,12 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
     # list have no downloaded file of any kind, and filer 4572 — marked done,
     # nothing on disk — is 9,031 rows short of ORESTAR for 2023 alone.
     completed_filers: list[str] = []
+    prior_counts = _prior_counts()
+    skipped_windows = 0
 
-    log.info("Backfilling %d filers year-by-year from %d to %d", len(filer_ids), start_year, current_year)
+    log.info("Backfilling %d filers year-by-year from %d to %d (%d window counts "
+             "known from earlier runs)", len(filer_ids), start_year, current_year,
+             len(prior_counts))
 
     with sync_playwright() as p:
         browser, context, page = setup_browser(p)
@@ -991,6 +1098,23 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
             while qi < len(queue):
                 tran_type, yr_start, yr_end, af, at, pp = queue[qi]
                 year = yr_start.year
+
+                # Skip with NO request at all when an earlier run already
+                # learned this window's size and we hold that many rows. Without
+                # this the retrigger chain re-walks the same ground every run and
+                # spends its whole request budget rediscovering what it knew.
+                _pk = (tran_type, str(yr_start), str(yr_end), str(af), str(at),
+                       str(pp), str(fid))
+                _prior = prior_counts.get(_pk)
+                if _prior is not None and _prior < ORESTAR_ROW_CAP:
+                    _held = _held_rows(fid, tran_type, yr_start, yr_end, af, at, pp)
+                    if _held is not None and _held >= _prior:
+                        log.debug("Filer %s %s %s→%s: hold %d of %d from a previous "
+                                  "run — skipping entirely", fid, tran_type,
+                                  yr_start, yr_end, _held, _prior)
+                        skipped_windows += 1
+                        qi += 1
+                        continue
                 try:
                     result = download_filer_window(page, context, fid, yr_start, yr_end,
                                                    RAW_DIR, tran_type, af, at, pp)
@@ -1005,7 +1129,15 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
                         # CAPPED means ORESTAR's count already said so and no
                         # file was downloaded; a cap file left on disk by an
                         # older run reaches the same conclusion the slow way.
-                        rows = ORESTAR_ROW_CAP if result is CAPPED else _validate_download(result)
+                        # COMPLETE means we already hold every row it reports,
+                        # so there is nothing to narrow and nothing to fetch.
+                        if result is COMPLETE:
+                            rows = 0
+                            skipped_windows += 1
+                        elif result is CAPPED:
+                            rows = ORESTAR_ROW_CAP
+                        else:
+                            rows = _validate_download(result)
                         if rows >= ORESTAR_ROW_CAP:
                             subs = _narrow_filer(tran_type, yr_start, yr_end, af, at, pp)
                             if subs:
@@ -1102,9 +1234,16 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
     # backfilled_filers.txt.
     completed_path = RAW_DIR.parent / "completed_backfills.txt"
     completed_path.write_text("\n".join(completed_filers) + ("\n" if completed_filers else ""))
-    log.info("Completed %d of %d requested filers (%d incomplete, %d never reached)",
+    log.info("Completed %d of %d requested filers (%d incomplete, %d never reached); "
+             "%d windows skipped as already held",
              len(completed_filers), len(filer_ids), len(incomplete_filers),
-             len(filer_ids) - len(completed_filers) - len(incomplete_filers))
+             len(filer_ids) - len(completed_filers) - len(incomplete_filers),
+             skipped_windows)
+    if _HELD_CONN is not None:
+        try:
+            _HELD_CONN.close()
+        except Exception:
+            pass
 
     # Write incomplete filers with retry counts so auto-backfill can defer
     # filers that keep failing (e.g. huge filers that always get rate-limited).
