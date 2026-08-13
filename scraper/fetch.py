@@ -418,6 +418,46 @@ PAYEE_PREFIXES = (
 )
 
 
+def _narrow_filer(tran_type, start, end, amt_from, amt_to, payee_prefix):
+    """Next set of sub-queries for a capped FILER window.
+
+    The filer path had no cascade at all. It asked for one filer, one year, all
+    transaction types, and when that overran the cap it halved the date range —
+    and nothing else. At a single day it logged "cannot split further" and kept
+    the truncated 4,999 rows, silently.
+
+    That is where the missing data came from. Local 48 Electricians 2023 holds
+    18,968 rows in ORESTAR and 9,937 here; the shortfall is the cap, hit
+    repeatedly by a union-dues payroll batch that no date split can break up
+    because thousands of rows share one day, one filer and one amount.
+
+    The date-range path already solved this. It narrows type → date → amount →
+    contributor prefix, and that cascade is what got a 4,969-row single-amount
+    batch down to fetchable pieces. This gives the filer path the same ladder,
+    starting one rung higher: an un-typed window splits by type first, which is
+    both the cheapest split and the one ORESTAR answers most reliably.
+
+    Order: type → date → amount → contributor. Returns [] only when every
+    dimension is spent, which is the honest answer.
+    """
+    # Tier 1 — split all-types into the six real types.
+    if tran_type == "ALL":
+        return [(t, start, end, amt_from, amt_to, payee_prefix) for t in TRAN_TYPES]
+
+    # Tier 2 — halve the window. Narrowing dimensions carry through both halves.
+    span_days = (end - start).days
+    if span_days > 0:
+        mid = start + timedelta(days=span_days // 2)
+        return [
+            (tran_type, start, mid, amt_from, amt_to, payee_prefix),
+            (tran_type, mid + timedelta(days=1), end, amt_from, amt_to, payee_prefix),
+        ]
+
+    # Tiers 3 and 4 — a single day, single type. Same rungs the date-range path
+    # uses, reached through the same helper so the two can never drift apart.
+    return _narrow_further(tran_type, start, amt_from, amt_to, payee_prefix)
+
+
 def _narrow_further(tran_type, day, amt_from, amt_to, payee_prefix):
     """Next set of sub-queries for a single-day window that still hits the cap.
 
@@ -710,6 +750,27 @@ def _fetch_range(start: date, end: date, date_field: str = "filed") -> None:
     log.info("Fetch complete. Raw files in: %s", RAW_DIR)
 
 
+def _filer_window_path(raw_dir: Path, filer_id: str, tran_type: str,
+                       start: date, end: date, amt_from, amt_to, payee_prefix) -> Path:
+    """On-disk name for one filer sub-query.
+
+    The un-narrowed all-types window keeps its ORIGINAL name. Those files are
+    committed to git, and renaming them would make every past filer download
+    look absent and re-fetch from scratch. Narrowed sub-queries get the extra
+    dimensions in the name — without them two different splits of the same day
+    collide on disk and the second is skipped as "already downloaded", which is
+    the same trap download_week fell into.
+    """
+    stem = f"filer{filer_id}_{start.isoformat()}_{end.isoformat()}"
+    if tran_type != "ALL":
+        stem += f"_{tran_type}"
+    if amt_from is not None or amt_to is not None:
+        stem += f"_amt{amt_from or ''}-{amt_to or ''}"
+    if payee_prefix:
+        stem += f"_p{payee_prefix}"
+    return raw_dir / f"{stem}.xlsx"
+
+
 def download_filer_window(
     page,
     context,
@@ -717,54 +778,55 @@ def download_filer_window(
     start: date,
     end: date,
     raw_dir: Path,
+    tran_type: str = "ALL",
+    amt_from: str | None = None,
+    amt_to: str | None = None,
+    payee_prefix: str | None = None,
 ) -> Path | None:
     """
-    Download ALL transactions for a specific filer in a date range.
+    Download transactions for a specific filer in a date range.
 
-    No transaction type filter — pulls everything. If results hit
-    the 4,999 row cap, splits the window in half and retries both halves.
+    tran_type "ALL" applies no type filter. Splitting is NOT done here — the
+    caller checks the row count and queues sub-queries via _narrow_filer(). The
+    recursion this function used to do could only split on date, raised
+    SessionExpiredError to signal an ordinary partial result, and returned None
+    on success in one branch and a path in another; the queue driver in
+    backfill_filers() handles all four narrowing tiers with one code path.
     """
-    filename = raw_dir / f"filer{filer_id}_{start.isoformat()}_{end.isoformat()}.xlsx"
+    filename = _filer_window_path(raw_dir, filer_id, tran_type, start, end,
+                                  amt_from, amt_to, payee_prefix)
     if filename.exists():
         rows = _validate_download(filename)
-        if rows >= 0 and rows < ORESTAR_ROW_CAP:
+        if rows >= 0:
+            # A cap file is returned too, not skipped: the driver reads its row
+            # count and narrows. Previously this branch tried to resume the
+            # split itself and could return a path having downloaded nothing.
             log.debug("Already downloaded: %s (%d rows)", filename.name, rows)
             return filename
-        if rows >= ORESTAR_ROW_CAP:
-            # Previously hit the cap — skip download, go straight to split
-            span_days = (end - start).days
-            if span_days > 1:
-                mid = start + timedelta(days=span_days // 2)
-                log.info("Resuming split for filer %s %s→%s at %s (cap file exists)",
-                         filer_id, start, end, mid)
-                # Note: recursive calls may return None on successful splits
-                # (cap file → split → all leaves exist). Only treat as failure
-                # if no files exist for the sub-window after the call.
-                download_filer_window(page, context, filer_id, start, mid, raw_dir)
-                half1_files = list(raw_dir.glob(f"filer{filer_id}_{start.isoformat()}_*.xlsx"))
-                if not half1_files:
-                    raise SessionExpiredError(
-                        f"Split window failed for filer {filer_id} {start}→{mid} — incomplete download"
-                    )
-                time.sleep(REQUEST_DELAY)
-                download_filer_window(page, context, filer_id, mid + timedelta(days=1), end, raw_dir)
-                half2_files = list(raw_dir.glob(f"filer{filer_id}_{mid + timedelta(days=1):%Y-%m-%d}_*.xlsx"))
-                if not half2_files:
-                    raise SessionExpiredError(
-                        f"Split window failed for filer {filer_id} {mid+timedelta(days=1)}→{end} — incomplete download"
-                    )
-                return filename  # return the cap file path to signal success
 
     try:
         _return_to_search(page)
 
-        # Fill filer committee ID (no transaction type = all types)
+        # Fill filer committee ID
         page.fill('input[name="cneSearchFilerCommitteeId"]', str(filer_id))
         page.wait_for_timeout(300)
+
+        if tran_type != "ALL":
+            page.select_option('select[name="cneSearchTranType"]', tran_type)
+            page.wait_for_timeout(600)
 
         # Transaction date range
         page.fill('input[name="cneSearchTranStartDate"]', start.strftime("%m/%d/%Y"))
         page.fill('input[name="cneSearchTranEndDate"]', end.strftime("%m/%d/%Y"))
+
+        # Narrowing filters, used only once type and date are spent.
+        if amt_from is not None:
+            page.fill('input[name="cneSearchTranAmountFrom"]', str(amt_from))
+        if amt_to is not None:
+            page.fill('input[name="cneSearchTranAmountTo"]', str(amt_to))
+        if payee_prefix:
+            page.fill('input[name="cneSearchContributorTxt"]', payee_prefix)
+            page.select_option('select[name="cneSearchContributorTxtSearchType"]', "S")
 
         # Submit
         page.click('input[name="search"]')
@@ -777,6 +839,19 @@ def download_filer_window(
 
         # Extract CSRF + session for Excel export
         results_url = page.url
+
+        # ORESTAR's own record count for this query — uncapped, and the only
+        # thing that can tell us afterwards whether the cascade actually got
+        # everything. The filer path never captured it, which is why the
+        # shortfalls here had to be measured by hand in a browser.
+        try:
+            _m = re.search(r"([\d,]+)\s+records found", page.inner_text("body"))
+            if _m:
+                RECORD_COUNTS[(tran_type, str(start), str(end), str(amt_from),
+                               str(amt_to), str(payee_prefix), str(filer_id))] = \
+                    int(_m.group(1).replace(",", ""))
+        except Exception:
+            pass                      # a missing count must never fail the fetch
         csrf = page.evaluate("""() => {
             const links = [...document.querySelectorAll('a[href*="OWASP_CSRFTOKEN"]')];
             if (!links.length) return null;
@@ -820,42 +895,13 @@ def download_filer_window(
             _return_to_search(page)
             return None
 
-        log.info("Filer %s %s→%s: %d rows (%d bytes)",
-                 filer_id, start, end, row_count, filename.stat().st_size)
+        log.info("Filer %s %s %s→%s%s: %d rows (%d bytes)",
+                 filer_id, tran_type, start, end,
+                 _narrowing_label(amt_from, amt_to, payee_prefix),
+                 row_count, filename.stat().st_size)
 
-        # Row-cap check — split window and recurse
-        if row_count >= ORESTAR_ROW_CAP:
-            span_days = (end - start).days
-            if span_days <= 1:
-                log.warning("Row cap hit on a single day for filer %s on %s — cannot split further",
-                            filer_id, start)
-                _return_to_search(page)
-                return filename
-
-            mid = start + timedelta(days=span_days // 2)
-            log.warning("Row cap hit for filer %s %s→%s — splitting at %s",
-                         filer_id, start, end, mid)
-            # Keep the cap file on disk so resume logic can skip re-downloading
-            _return_to_search(page)
-            download_filer_window(page, context, filer_id, start, mid, raw_dir)
-            half1_files = list(raw_dir.glob(f"filer{filer_id}_{start.isoformat()}_*.xlsx"))
-            if not half1_files:
-                log.warning("First half failed for filer %s %s→%s — skipping second half",
-                            filer_id, start, mid)
-                raise SessionExpiredError(
-                    f"Split window failed for filer {filer_id} {start}→{mid} — incomplete download"
-                )
-            time.sleep(REQUEST_DELAY)
-            download_filer_window(page, context, filer_id, mid + timedelta(days=1), end, raw_dir)
-            half2_files = list(raw_dir.glob(f"filer{filer_id}_{mid + timedelta(days=1):%Y-%m-%d}_*.xlsx"))
-            if not half2_files:
-                log.warning("Second half failed for filer %s %s→%s — incomplete download",
-                            filer_id, mid + timedelta(days=1), end)
-                raise SessionExpiredError(
-                    f"Split window failed for filer {filer_id} {mid+timedelta(days=1)}→{end} — incomplete download"
-                )
-            return None
-
+        # No cap handling here — the driver reads the row count off the returned
+        # file and queues the next narrowing tier.
         _return_to_search(page)
         time.sleep(REQUEST_DELAY)
         return filename
@@ -897,13 +943,54 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
         for fid in filer_ids:
             log.info("=== Backfilling filer %s ===", fid)
             filer_had_error = False
-            for year in range(start_year, current_year + 1):
-                yr_start = date(year, 1, 1)
-                yr_end = date(year, 12, 31) if year < current_year else date.today()
+            # One queue per filer, seeded with the un-narrowed year windows.
+            # Capped windows push their own sub-queries in front of the rest,
+            # so a year that needs splitting is finished before the next year
+            # starts and a rate-limit stop leaves whole years done rather than
+            # half a cascade.
+            queue = [("ALL", date(year, 1, 1),
+                      date(year, 12, 31) if year < current_year else date.today(),
+                      None, None, None)
+                     for year in range(start_year, current_year + 1)]
+            qi = 0
+            while qi < len(queue):
+                tran_type, yr_start, yr_end, af, at, pp = queue[qi]
+                year = yr_start.year
                 try:
-                    result = download_filer_window(page, context, fid, yr_start, yr_end, RAW_DIR)
+                    result = download_filer_window(page, context, fid, yr_start, yr_end,
+                                                   RAW_DIR, tran_type, af, at, pp)
                     if result is not None:
                         consecutive_failures = 0
+
+                        # Cap check — the whole point of this rewrite. A window
+                        # at the cap is NOT a completed window; it is a
+                        # truncated one, and until now the filer path kept it
+                        # and moved on.
+                        rows = _validate_download(result)
+                        if rows >= ORESTAR_ROW_CAP:
+                            subs = _narrow_filer(tran_type, yr_start, yr_end, af, at, pp)
+                            if subs:
+                                log.warning(
+                                    "Cap hit for filer %s %s %s→%s%s (%d rows) — "
+                                    "narrowing into %d sub-queries",
+                                    fid, tran_type, yr_start, yr_end,
+                                    _narrowing_label(af, at, pp), rows, len(subs),
+                                )
+                                queue[qi + 1:qi + 1] = subs
+                            else:
+                                log.error(
+                                    "TRUNCATED: filer %s %s %s%s returned %d rows "
+                                    "(cap %d) and no dimension is left — INCOMPLETE",
+                                    fid, tran_type, yr_start,
+                                    _narrowing_label(af, at, pp), rows, ORESTAR_ROW_CAP,
+                                )
+                                _record_truncated(f"filer{fid}:{tran_type}", yr_start, rows)
+                    else:
+                        # A window that returned nothing is not done. Leave it
+                        # unmarked so the next run retries it, and flag the
+                        # filer so auto-backfill does not tick it off.
+                        filer_had_error = True
+                    qi += 1
                 except SessionExpiredError:
                     filer_had_error = True
                     log.warning("Session expired during filer %s year %d — restarting browser", fid, year)
@@ -912,11 +999,20 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
                     except Exception:
                         pass
                     browser, context, page = setup_browser(p)
-                    # Retry this year once with fresh session
+                    # Retry this window once with a fresh session — carrying the
+                    # narrowing dimensions. The retry used to drop them and
+                    # re-request the un-narrowed window, which put a capped
+                    # result back on disk under the un-narrowed name and undid
+                    # the split it was retrying.
                     try:
-                        result = download_filer_window(page, context, fid, yr_start, yr_end, RAW_DIR)
+                        result = download_filer_window(page, context, fid, yr_start, yr_end,
+                                                       RAW_DIR, tran_type, af, at, pp)
                         if result is not None:
                             consecutive_failures = 0
+                            # Deliberately no qi += 1: re-enter on the same
+                            # window so the cap check runs against the file we
+                            # just fetched. It is on disk now, so this costs a
+                            # validate, not a request.
                             continue
                     except Exception as exc:
                         log.error("Failed filer %s year %d after restart: %s", fid, year, exc)
@@ -924,6 +1020,7 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
                     if consecutive_failures >= 2:
                         log.warning("Rate-limited — stopping filer %s at year %d", fid, year)
                         break
+                    qi += 1
                 except Exception as exc:
                     filer_had_error = True
                     log.error("Failed filer %s year %d: %s", fid, year, exc)
@@ -931,10 +1028,13 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
                     if consecutive_failures >= 2:
                         log.warning("Rate-limited — stopping filer %s at year %d", fid, year)
                         break
+                    qi += 1
             else:
-                # All years completed without breaking — filer is done
+                # Queue drained without breaking — filer is done
                 if not filer_had_error:
-                    log.info("Filer %s: all years downloaded successfully", fid)
+                    log.info("Filer %s: all %d windows downloaded successfully", fid, len(queue))
+                if filer_had_error:
+                    incomplete_filers.append(fid)
                 continue
 
             # Broke out of year loop — filer is incomplete
@@ -951,6 +1051,11 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
                 )
                 break
         browser.close()
+
+    # Persist ORESTAR's own counts so verify_completeness can check this run's
+    # windows. Only _fetch_range flushed them, so every filer-targeted fetch
+    # threw its counts away and left nothing to verify against.
+    _flush_record_counts()
 
     # Write incomplete filers with retry counts so auto-backfill can defer
     # filers that keep failing (e.g. huge filers that always get rate-limited).
