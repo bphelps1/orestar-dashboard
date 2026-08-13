@@ -955,22 +955,26 @@ def download_filer_window(
         # whose contents we already had. Skipping them roughly doubles the
         # useful windows per run, and requests-before-block is the binding
         # constraint on this whole recovery.
-        if reported is not None and reported >= ORESTAR_ROW_CAP:
-            log.info("Filer %s %s %s→%s%s: %d records — over the cap, narrowing "
-                     "without downloading", filer_id, tran_type, start, end,
-                     _narrowing_label(amt_from, amt_to, payee_prefix), reported)
-            _return_to_search(page)
-            time.sleep(REQUEST_DELAY)
-            return CAPPED
-
-        # Already have it? Then the export is pure waste.
+        # Completeness BEFORE the cap, and the order matters enormously.
         #
-        # The comparison is deliberately ">=", not "==". We delete originals
-        # superseded by amendments, so holding FEWER rows than ORESTAR reports
-        # is normal and does not prove anything is missing. Treating that as
-        # "incomplete" only costs a download; treating it as "complete" could
-        # skip a window that really is short, so the conservative direction is
-        # the only safe one.
+        # These checks used to run the other way round, so a window over the cap
+        # was narrowed before anyone asked whether we needed it. Local 48 holds
+        # 8,000-22,000 rows in every single year, so every year window is over
+        # the cap: the backfill split years we already held in full into dozens
+        # of sub-queries each, and a whole run's request budget disappeared into
+        # 2006-2009 without downloading a single row.
+        #
+        # Being over the cap only matters if the data is actually wanted. If we
+        # already hold everything ORESTAR reports for the window, there is
+        # nothing to fetch and nothing to narrow — one search settles it.
+        #
+        # The comparison is deliberately ">=", not "==". We delete originals and
+        # older amendments that ORESTAR no longer counts, so holding FEWER rows
+        # than it reports is normal and does not prove anything is missing.
+        # Treating that as "incomplete" only costs a download; treating it as
+        # "complete" could skip a window that really is short, so the
+        # conservative direction is the only safe one.
+        held = None
         if reported is not None:
             held = _held_rows(filer_id, tran_type, start, end,
                               amt_from, amt_to, payee_prefix)
@@ -981,6 +985,15 @@ def download_filer_window(
                 _return_to_search(page)
                 time.sleep(REQUEST_DELAY)
                 return COMPLETE
+
+        if reported is not None and reported >= ORESTAR_ROW_CAP:
+            log.info("Filer %s %s %s→%s%s: %d records, hold %s — over the cap, "
+                     "narrowing without downloading", filer_id, tran_type, start, end,
+                     _narrowing_label(amt_from, amt_to, payee_prefix), reported,
+                     "unknown" if held is None else f"{held}")
+            _return_to_search(page)
+            time.sleep(REQUEST_DELAY)
+            return CAPPED
         csrf = page.evaluate("""() => {
             const links = [...document.querySelectorAll('a[href*="OWASP_CSRFTOKEN"]')];
             if (!links.length) return null;
