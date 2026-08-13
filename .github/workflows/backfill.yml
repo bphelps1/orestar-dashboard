@@ -141,18 +141,36 @@ jobs:
       - name: Track successfully backfilled filers (auto mode)
         if: "!cancelled() && steps.resolve.outputs.is_auto == 'true' && steps.resolve.outputs.resolved != ''"
         run: |
-          # Mark filers as done ONLY if they're not in incomplete_backfills.txt
+          # Mark done ONLY what the scraper reports it actually finished.
+          #
+          # This used to walk the REQUESTED filer list and tick off anything not
+          # named in incomplete_backfills.txt. That is wrong whenever the run
+          # stops early: fetch.py breaks out of the filer loop after two
+          # consecutive failures, and the filers it never reached appear in
+          # neither list — so they were marked backfilled without a single
+          # request being made for them. A ten-filer batch that stopped after
+          # three recorded all ten as done.
+          #
+          # It is not a hypothetical. 3,639 of the 4,128 filers on the tracking
+          # list have no downloaded file at all, and filer 4572 — marked done,
+          # nothing on disk — turned out to be 9,031 rows short of ORESTAR for
+          # 2023 alone.
           TRACKING_FILE="data/backfilled_filers.txt"
-          INCOMPLETE_FILE="data/incomplete_backfills.txt"
+          COMPLETED_FILE="data/completed_backfills.txt"
           touch "$TRACKING_FILE"
-          for fid in ${{ steps.resolve.outputs.resolved }}; do
-            if [ -f "$INCOMPLETE_FILE" ] && grep -q "^${fid}\b" "$INCOMPLETE_FILE"; then
-              echo "  ⚠ Filer $fid incomplete — will retry"
-              continue
-            fi
+          if [ ! -f "$COMPLETED_FILE" ]; then
+            echo "No completed_backfills.txt — the fetch step recorded nothing as finished."
+            echo "Marking nothing done; every requested filer will be retried."
+            exit 0
+          fi
+          while read -r fid; do
+            [ -z "$fid" ] && continue
             grep -qx "$fid" "$TRACKING_FILE" || echo "$fid" >> "$TRACKING_FILE"
             echo "  ✓ Tracked filer $fid"
-          done
+          done < "$COMPLETED_FILE"
+          requested=$(echo "${{ steps.resolve.outputs.resolved }}" | wc -w)
+          finished=$(grep -c . "$COMPLETED_FILE" || true)
+          echo "Finished $finished of $requested requested filers; the rest stay queued."
 
       - name: Check remaining windows
         id: remaining
