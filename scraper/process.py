@@ -952,6 +952,44 @@ def aggregate(df: pd.DataFrame) -> None:
     log.info("Aggregation complete. JSON files written to %s", AGG_DIR)
 
 
+def _latest_year_summaries(yearly: dict, filer_ids: list[str]) -> dict:
+    """Newest year's account summary per filer, keyed as the balance
+    comparison expects.
+
+    The yearly file names fields as ORESTAR labels them (contributions,
+    expenditures, other_receipts); the balance comparison inherited
+    orestar_-prefixed names from the scraper it replaces. Mapped here so the
+    consumers stay untouched.
+    """
+    out: dict[str, dict] = {}
+    for fid in filer_ids:
+        years = (yearly.get(str(fid)) or {}).get("years", {})
+        if not years:
+            continue
+        yr = max(years)                      # string years sort correctly
+        y = years[yr]
+        out[str(fid)] = {
+            "year": int(yr),
+            "beginning_balance": float(y.get("beginning_balance") or 0),
+            "ending_cash_balance": float(y.get("ending_cash_balance") or 0),
+            "orestar_contributions": float(y.get("contributions") or 0),
+            "orestar_expenditures": float(y.get("expenditures") or 0),
+            "orestar_other_receipts": float(y.get("other_receipts") or 0),
+            "orestar_other_disbursements": float(y.get("other_disbursements") or 0),
+            "balance_adjustments": float(y.get("balance_adjustments") or 0),
+            "inkind_contributions": float(y.get("inkind_contributions") or 0),
+            "inkind_expenditures": float(y.get("inkind_expenditures") or 0),
+            "loans_received": float(y.get("loans_received") or 0),
+            "loans_received_exempt": float(y.get("loans_received_exempt") or 0),
+            "loan_payments": float(y.get("loan_payments") or 0),
+            "loan_payments_exempt": float(y.get("loan_payments_exempt") or 0),
+            "accounts_receivable": float(y.get("accounts_receivable") or 0),
+            "accounts_payable": float(y.get("accounts_payable") or 0),
+            "scrape_ts": (yearly.get(str(fid)) or {}).get("ts", 0),
+        }
+    return out
+
+
 def scrape_account_summaries(
     filer_ids: list[str],
     *,
@@ -1219,7 +1257,28 @@ def aggregate_filers(
         # Kept for callers that only need a representative id.
         _name_to_fid: dict[str, str] = {n: ids[-1] for n, ids in _name_to_fids.items()}
         unique_fids = sorted({f for ids in _name_to_fids.values() for f in ids})
-        _fid_to_summary = scrape_account_summaries(unique_fids)
+        # Derived from the yearly summaries rather than scraped again.
+        #
+        # Two caches were reading the SAME ORESTAR page. scrape_account_summaries
+        # took the current year into orestar_cash_balances.json;
+        # fetch_earliest_balances takes every year into
+        # orestar_yearly_summaries.json. The yearly file is a strict superset —
+        # 7,518 filers against 7,383, and nothing in the other file is absent
+        # from it.
+        #
+        # Keeping both meant they drifted. The cash-balances cache was last
+        # written 2026-03-26..04-04 while the yearly file is current, so every
+        # balance comparison — the whole discrepancy tab — was measuring today's
+        # transactions against ORESTAR figures four months old. 359 of 3,666
+        # same-year balances disagreed purely from that lag.
+        #
+        # It also carried the in-kind bug fixed in #56: it asks for "In-Kind
+        # Contributions", a label the page never prints, so its in-kind fields
+        # are zero for every filer.
+        #
+        # Dropping it removes ~7,245 page fetches (about 58 minutes) from the
+        # daily refresh, which is the step that used to blow the job's budget.
+        _fid_to_summary = _latest_year_summaries(_yearly_summaries, unique_fids)
         # Map canonical name → ORESTAR account summary, SUMMED over every
         # committee the name covers, so both sides of the comparison describe
         # the same set of committees. Single-committee names are unaffected.
