@@ -125,6 +125,14 @@ jobs:
       # run reported success, and not a single row was fetched.
       - name: Backfill ORESTAR data
         if: (steps.resolve.outputs.resolved != '' || steps.resolve.outputs.is_auto != 'true')
+        env:
+          # Read-only use: the fetcher asks how many rows we already hold for a
+          # window so it can skip downloading one we have in full. ORESTAR
+          # reports the true count on the results page, so one search settles it
+          # — and skipping the export is what makes the request budget go far
+          # enough to matter. Without this the step simply downloads everything,
+          # as it did before.
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           FILER_IDS="${{ steps.resolve.outputs.resolved }}"
           if [ -n "$FILER_IDS" ]; then
