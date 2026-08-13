@@ -44,16 +44,23 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)-8s  %(
 log = logging.getLogger(__name__)
 
 
-def _held(cur, tran_type, start, end, amt_from, amt_to, payee_prefix, date_field) -> int:
+def _held(cur, tran_type, start, end, amt_from, amt_to, payee_prefix, date_field,
+          filer_id=None) -> int:
     """How many rows we hold for exactly the window ORESTAR was asked about.
 
     The filters must mirror the search precisely — a verifier that counts a
     slightly different set reports differences that are its own fault, which is
     worse than no verifier at all.
     """
-    col = "tran_date" if date_field == "tran" else "filed_date"
+    # A filer-targeted window is always searched by transaction date — the
+    # filer backfill fills cneSearchTranStartDate, never the filed-date pair.
+    # Counting those against filed_date would compare two different sets and
+    # blame the difference on missing rows.
+    col = "tran_date" if (date_field == "tran" or filer_id) else "filed_date"
     sql = [f"select count(*) from transactions where {col} between %s and %s"]
     args: list = [start, end]
+    if filer_id not in (None, "None", ""):
+        sql.append("and filer_id = %s"); args.append(str(filer_id))
     if tran_type and tran_type != "ALL":
         sql.append("and tran_type = %s"); args.append(tran_type)
     if amt_from not in (None, "None"):
@@ -87,16 +94,19 @@ def main() -> int:
     findings, complete, checked_rows = [], 0, 0
     for entry in rows:
         key = entry["key"]
-        tran_type, start, end, amt_from, amt_to, payee_prefix = (list(key) + [None] * 6)[:6]
+        # Filer-targeted windows carry a 7th element. Older entries have six,
+        # and the padding keeps them reading exactly as before.
+        (tran_type, start, end, amt_from, amt_to,
+         payee_prefix, filer_id) = (list(key) + [None] * 7)[:7]
         reported = int(entry["reported"])
         held = _held(cur, tran_type, start, end, amt_from, amt_to, payee_prefix,
-                     args.date_field)
+                     args.date_field, filer_id)
         checked_rows += reported
         gap = reported - held
         if gap >= args.min_gap:
             findings.append({"type": tran_type, "start": start, "end": end,
                              "amt_from": amt_from, "amt_to": amt_to,
-                             "payee_prefix": payee_prefix,
+                             "payee_prefix": payee_prefix, "filer_id": filer_id,
                              "orestar": reported, "held": held, "missing": gap})
         else:
             complete += 1
@@ -115,6 +125,7 @@ def main() -> int:
         for f in findings[:15]:
             w = f["start"] if f["start"] == f["end"] else f"{f['start']}..{f['end']}"
             extra = ""
+            if f.get("filer_id") not in (None, "None"): extra += f" filer{f['filer_id']}"
             if f["amt_from"] not in (None, "None"): extra += f" ${f['amt_from']}-{f['amt_to']}"
             if f["payee_prefix"] not in (None, "None"): extra += f" ~{f['payee_prefix']}*"
             print(f"    {f['type'] or '-':5} {(w + extra)[:24]:24} "
