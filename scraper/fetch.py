@@ -750,6 +750,12 @@ def _fetch_range(start: date, end: date, date_field: str = "filed") -> None:
     log.info("Fetch complete. Raw files in: %s", RAW_DIR)
 
 
+# Returned when ORESTAR's own count says the window is over the cap, so no
+# export was requested. Distinct from None, which means "the request failed,
+# retry it" — conflating the two would either lose the window or spin on it.
+CAPPED = Path("__capped__")
+
+
 def _filer_window_path(raw_dir: Path, filer_id: str, tran_type: str,
                        start: date, end: date, amt_from, amt_to, payee_prefix) -> Path:
     """On-disk name for one filer sub-query.
@@ -844,14 +850,34 @@ def download_filer_window(
         # thing that can tell us afterwards whether the cascade actually got
         # everything. The filer path never captured it, which is why the
         # shortfalls here had to be measured by hand in a browser.
+        reported = None
         try:
             _m = re.search(r"([\d,]+)\s+records found", page.inner_text("body"))
             if _m:
+                reported = int(_m.group(1).replace(",", ""))
                 RECORD_COUNTS[(tran_type, str(start), str(end), str(amt_from),
-                               str(amt_to), str(payee_prefix), str(filer_id))] = \
-                    int(_m.group(1).replace(",", ""))
+                               str(amt_to), str(payee_prefix), str(filer_id))] = reported
         except Exception:
             pass                      # a missing count must never fail the fetch
+
+        # The count is on the page BEFORE we export, and it tells us the export
+        # will be truncated. Downloading it anyway buys nothing: the first 4,999
+        # rows come back again under a narrower query, and the window has to be
+        # split regardless.
+        #
+        # It is most of the work. The Local 48 run managed 24 windows in 8.6
+        # minutes before F5 cut it off; 12 were capped, and they accounted for
+        # 34.7 MB of the 40.4 MB downloaded — 86% of the bytes spent on files
+        # whose contents we already had. Skipping them roughly doubles the
+        # useful windows per run, and requests-before-block is the binding
+        # constraint on this whole recovery.
+        if reported is not None and reported >= ORESTAR_ROW_CAP:
+            log.info("Filer %s %s %s→%s%s: %d records — over the cap, narrowing "
+                     "without downloading", filer_id, tran_type, start, end,
+                     _narrowing_label(amt_from, amt_to, payee_prefix), reported)
+            _return_to_search(page)
+            time.sleep(REQUEST_DELAY)
+            return CAPPED
         csrf = page.evaluate("""() => {
             const links = [...document.querySelectorAll('a[href*="OWASP_CSRFTOKEN"]')];
             if (!links.length) return null;
@@ -975,7 +1001,11 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
                         # at the cap is NOT a completed window; it is a
                         # truncated one, and until now the filer path kept it
                         # and moved on.
-                        rows = _validate_download(result)
+                        #
+                        # CAPPED means ORESTAR's count already said so and no
+                        # file was downloaded; a cap file left on disk by an
+                        # older run reaches the same conclusion the slow way.
+                        rows = ORESTAR_ROW_CAP if result is CAPPED else _validate_download(result)
                         if rows >= ORESTAR_ROW_CAP:
                             subs = _narrow_filer(tran_type, yr_start, yr_end, af, at, pp)
                             if subs:
