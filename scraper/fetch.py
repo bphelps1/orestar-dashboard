@@ -934,6 +934,15 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
     current_year = date.today().year
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     incomplete_filers: list[str] = []
+    # Filers this run actually FINISHED. The caller cannot infer this from the
+    # list it passed in: when the loop below stops early on rate-limiting, the
+    # filers it never reached are neither completed nor "incomplete" — they are
+    # untouched. The workflow used to mark every requested filer done unless it
+    # appeared in incomplete_backfills.txt, so a batch of ten that stopped after
+    # three recorded all ten as backfilled. 3,639 of the 4,128 filers on that
+    # list have no downloaded file of any kind, and filer 4572 — marked done,
+    # nothing on disk — is 9,031 rows short of ORESTAR for 2023 alone.
+    completed_filers: list[str] = []
 
     log.info("Backfilling %d filers year-by-year from %d to %d", len(filer_ids), start_year, current_year)
 
@@ -1033,7 +1042,8 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
                 # Queue drained without breaking — filer is done
                 if not filer_had_error:
                     log.info("Filer %s: all %d windows downloaded successfully", fid, len(queue))
-                if filer_had_error:
+                    completed_filers.append(fid)
+                else:
                     incomplete_filers.append(fid)
                 continue
 
@@ -1056,6 +1066,15 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
     # windows. Only _fetch_range flushed them, so every filer-targeted fetch
     # threw its counts away and left nothing to verify against.
     _flush_record_counts()
+
+    # What this run finished, for the workflow to tick off. Rewritten each run,
+    # never appended: it describes THIS run, and the durable record is
+    # backfilled_filers.txt.
+    completed_path = RAW_DIR.parent / "completed_backfills.txt"
+    completed_path.write_text("\n".join(completed_filers) + ("\n" if completed_filers else ""))
+    log.info("Completed %d of %d requested filers (%d incomplete, %d never reached)",
+             len(completed_filers), len(filer_ids), len(incomplete_filers),
+             len(filer_ids) - len(completed_filers) - len(incomplete_filers))
 
     # Write incomplete filers with retry counts so auto-backfill can defer
     # filers that keep failing (e.g. huge filers that always get rate-limited).
