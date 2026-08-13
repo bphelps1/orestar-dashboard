@@ -116,6 +116,13 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          # A run that measured nothing writes no file, and `git add` on a
+          # missing path exits 128 under `bash -e` — so the step that exists to
+          # save progress failed the whole job for the crime of having none.
+          if [ ! -f data/coverage_survey.json ]; then
+            echo "No survey file — this run measured nothing to commit."
+            exit 0
+          fi
           git add data/coverage_survey.json
           if git diff --staged --quiet; then
             echo "No survey progress to commit."
