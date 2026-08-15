@@ -663,17 +663,22 @@ def process() -> None:
     # ── 9. Aggregate JSON files ───────────────────────────────────────────────
     aggregate(df)
 
-    # ── 10. Delete raw Excel files (keep filer-targeted for backfill resume) ──
+    # ── 10. Delete raw Excel files ────────────────────────────────────────────
+    #
+    # Filer-targeted files used to be kept here so a backfill could resume from
+    # them. They were committed to git to survive between runners, and git keeps
+    # every version of every one forever: 10,205 files and an 80 GB repository,
+    # against a 100 GB hard limit that would have stopped every push at once.
+    #
+    # Nothing needs them now. The rows are in the year shards and in Postgres,
+    # and the fetcher decides what to skip from ORESTAR's own record counts plus
+    # what the database holds — both of which outlive any file on disk.
     deleted = 0
-    kept = 0
     for f in RAW_DIR.glob("*.xlsx"):
-        if f.name.startswith("filer"):
-            kept += 1
-        else:
-            f.unlink()
-            deleted += 1
-    if deleted or kept:
-        log.info("Deleted %d raw Excel files, kept %d filer-targeted files", deleted, kept)
+        f.unlink()
+        deleted += 1
+    if deleted:
+        log.info("Deleted %d raw Excel files (merged and synced)", deleted)
 
 
 # ---------------------------------------------------------------------------
@@ -2287,19 +2292,43 @@ if __name__ == "__main__":
             if "filed_date" in df.columns:
                 _fd = pd.to_datetime(df["filed_date"], format="mixed", dayfirst=False, errors="coerce")
                 df["filed_date"] = _fd.dt.strftime("%Y-%m-%d").fillna(df["filed_date"])
+                df, _superseded = _drop_superseded(df)
                 _save_transactions(df)
             else:
                 log.warning("No filed_date column — cannot split by year")
-            # Clean up raw files — keep filer-targeted files so incomplete
-            # downloads can resume on the next run (the fetch skips existing files)
+
+            # Push the freshly-merged rows to Postgres NOW, not on tomorrow's
+            # daily refresh.
+            #
+            # This used to write year shards and stop, which made the database
+            # lag the shards by up to a day. That was tolerable when raw Excel
+            # files were kept on disk as the resume record — but those files are
+            # the reason the repository reached 80 GB, and the fetcher's
+            # "do we already hold this window?" check reads POSTGRES. Leaving
+            # the database behind would make that check answer "no" for rows we
+            # had just downloaded, and the next chain run would fetch them all
+            # over again.
+            try:
+                _new_ids = set(new_df["tran_id"].astype(str).str.strip())
+                _changed = df[df["tran_id"].astype(str).str.strip().isin(_new_ids)]
+                supabase_sync.upsert_transactions(_changed)
+                if _superseded:
+                    supabase_sync.delete_transactions(_superseded)
+                log.info("Synced %d merged rows to Postgres", len(_changed))
+            except Exception as e:
+                log.warning("merge-only transaction sync failed: %s", e)
+
+            # Raw files are now disposable. Every one of them has been merged
+            # into the year shards and pushed to Postgres, and the fetcher
+            # decides what to skip from ORESTAR's record counts plus what the
+            # database holds — not from what happens to be left on disk.
+            #
+            # Keeping them cost 10,205 committed files and 80 GB of repository,
+            # because git retains every version of every one forever.
             cleaned = 0
-            kept = 0
             for f in RAW_DIR.glob("*.xls*"):
-                if f.name.startswith("filer"):
-                    kept += 1
-                else:
-                    f.unlink()
-                    cleaned += 1
-            log.info("Merge complete. Cleaned %d raw files, kept %d filer-targeted files for resume.", cleaned, kept)
+                f.unlink()
+                cleaned += 1
+            log.info("Merge complete. Cleaned %d raw files (all merged and synced).", cleaned)
     else:
         process()
