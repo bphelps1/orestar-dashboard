@@ -255,7 +255,7 @@ jobs:
               exit 0
             fi
             echo "Re-triggering auto backfill for next batch..."
-            gh workflow run backfill.yml --ref main -f filer_ids=auto
+            bash scripts/dispatch_retry.sh backfill.yml --ref main -f filer_ids=auto
             exit 0
           fi
 
@@ -291,7 +291,7 @@ jobs:
               exit 0
             fi
             RETRIGGER_ARGS="$RETRIGGER_ARGS -f chain_index=$((BATCH + 1))"
-            gh workflow run backfill.yml --ref main $RETRIGGER_ARGS
+            bash scripts/dispatch_retry.sh backfill.yml --ref main $RETRIGGER_ARGS
           else
             echo "Backfill complete — all windows fetched."
           fi

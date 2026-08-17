@@ -178,7 +178,7 @@ jobs:
           then
             NEXT=$((CHAIN + 1))
             echo "Chaining run $NEXT..."
-            gh workflow run coverage-survey.yml --ref ${{ github.ref_name }} \
+            bash scripts/dispatch_retry.sh coverage-survey.yml --ref ${{ github.ref_name }} \
               -f chain_index="$NEXT" \
               -f limit="${{ inputs.limit }}" \
               -f filer_ids="${{ inputs.filer_ids }}"
