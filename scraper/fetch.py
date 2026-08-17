@@ -1119,7 +1119,7 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
                 _pk = (tran_type, str(yr_start), str(yr_end), str(af), str(at),
                        str(pp), str(fid))
                 _prior = prior_counts.get(_pk)
-                if _prior is not None and _prior < ORESTAR_ROW_CAP:
+                if _prior is not None:
                     _held = _held_rows(fid, tran_type, yr_start, yr_end, af, at, pp)
                     if _held is not None and _held >= _prior:
                         log.debug("Filer %s %s %s→%s: hold %d of %d from a previous "
@@ -1128,6 +1128,32 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
                         skipped_windows += 1
                         qi += 1
                         continue
+
+                    # A recorded cap is as durable a fact as a recorded count.
+                    #
+                    # Capped windows used to be excluded from this skip, so every
+                    # run re-asked ORESTAR about a window it had already measured,
+                    # got the same "over the cap" answer, and rebuilt the same
+                    # narrowing tree. With 48 capped windows recorded for Local 48,
+                    # that consumed the entire per-run request budget before
+                    # reaching any window small enough to download: 59 consecutive
+                    # runs, every one of them green, and not one row recovered.
+                    #
+                    # Knowing a window is over the cap is exactly what is needed to
+                    # narrow it, so narrow it and spend the request on a sub-window
+                    # nobody has measured yet. Completeness is still checked first,
+                    # because an over-cap window we already hold in full needs
+                    # neither a download nor a split.
+                    if _prior >= ORESTAR_ROW_CAP:
+                        subs = _narrow_filer(tran_type, yr_start, yr_end, af, at, pp)
+                        if subs:
+                            log.debug("Filer %s %s %s→%s: %d records recorded earlier "
+                                      "— narrowing without asking again", fid,
+                                      tran_type, yr_start, yr_end, _prior)
+                            queue[qi + 1:qi + 1] = subs
+                            skipped_windows += 1
+                            qi += 1
+                            continue
                 try:
                     result = download_filer_window(page, context, fid, yr_start, yr_end,
                                                    RAW_DIR, tran_type, af, at, pp)
