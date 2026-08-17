@@ -2,9 +2,9 @@
   "election": "2026 General Election",
   "election_id": "1453",
   "year": "2026",
-  "scraped": "2026-08-10T14:49:52Z",
+  "scraped": "2026-08-17T14:03:50Z",
   "counts": {
-    "SR": 111,
+    "SR": 112,
     "SS": 31,
     "GOV": 3
   },
@@ -1177,8 +1177,7 @@
       "ballot_name": "Sue R Rieke Smith",
       "party": "Democrat",
       "parties": [
-        "Democrat",
-        "Independent"
+        "Democrat"
       ],
       "chamber": "house",
       "district": 26,
@@ -1187,6 +1186,21 @@
       "election": "2026 General Election",
       "filing_method": "Nominated",
       "filing_date": "06/25/2026",
+      "qualified": "Y"
+    },
+    {
+      "ballot_name": "Sue Rieke Smith",
+      "party": "Independent",
+      "parties": [
+        "Independent"
+      ],
+      "chamber": "house",
+      "district": 26,
+      "office": "house",
+      "office_district": "State Representative, 26th District",
+      "election": "2026 General Election",
+      "filing_method": "Minor Party",
+      "filing_date": "08/07/2026",
       "qualified": "Y"
     },
     {
@@ -1324,7 +1338,7 @@
       "election": "2026 General Election",
       "filing_method": "Minor Party",
       "filing_date": "08/07/2026",
-      "qualified": ""
+      "qualified": "Y"
     },
     {
       "ballot_name": "Max Sherman",
