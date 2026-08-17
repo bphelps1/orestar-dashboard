@@ -179,7 +179,7 @@ jobs:
             exit 0
           fi
           echo "Retriggering workflow for batch $((BATCH + 1)) of $MAX_CHAIN..."
-          gh workflow run earliest-balances.yml \
+          bash scripts/dispatch_retry.sh earliest-balances.yml \
             -f max_filers="${{ github.event.inputs.max_filers || '200' }}" \
             -f max_age_days="${{ github.event.inputs.max_age_days || '30' }}" \
             -f force="false" \

@@ -122,7 +122,7 @@ jobs:
           echo "Filers remaining: $REMAINING"
           if [ -n "$REMAINING" ] && [ "$REMAINING" -gt 0 ] 2>/dev/null; then
             echo "Retriggering workflow for next batch..."
-            gh workflow run filer-metadata.yml \
+            bash scripts/dispatch_retry.sh filer-metadata.yml \
               -f max_filers="${{ github.event.inputs.max_filers || '500' }}" \
               -f force="false"
             echo "Retrigger dispatched."
