@@ -21,7 +21,7 @@
 set -uo pipefail
 
 ATTEMPTS="${PLAYWRIGHT_INSTALL_ATTEMPTS:-3}"
-ATTEMPT_TIMEOUT="${PLAYWRIGHT_INSTALL_TIMEOUT:-300}"
+ATTEMPT_TIMEOUT="${PLAYWRIGHT_INSTALL_TIMEOUT:-420}"
 BACKOFF=(10 30)
 
 # `timeout` is GNU coreutils: present on the ubuntu runners, absent on a stock
@@ -45,6 +45,28 @@ run_install() {
   fi
 }
 
+# Clear what a killed attempt leaves behind.
+#
+# `--with-deps` shells out to apt-get, and timeout(1) signals only the command
+# it launched — not that command's children. So a timed-out attempt left an
+# orphaned apt-get still holding /var/lib/apt/lists/lock, and every retry then
+# died in under a second with:
+#
+#     E: Could not get lock /var/lib/apt/lists/lock. It is held by process 3464
+#
+# The retry could not possibly have succeeded; it turned one slow failure into
+# three instant ones and reported "3 attempts" as though they were independent.
+# Nothing here runs in the success path, and every step tolerates being a no-op
+# on a runner where apt was never touched.
+clear_apt_state() {
+  command -v apt-get >/dev/null 2>&1 || return 0
+  echo "Clearing any apt state left by the killed attempt..."
+  sudo pkill -9 -x apt-get   >/dev/null 2>&1 || true
+  sudo pkill -9 -x dpkg      >/dev/null 2>&1 || true
+  sudo rm -f /var/lib/apt/lists/lock /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || true
+  sudo dpkg --configure -a   >/dev/null 2>&1 || true
+}
+
 for attempt in $(seq 1 "$ATTEMPTS"); do
   echo "Installing Playwright chromium (attempt ${attempt}/${ATTEMPTS}, ${ATTEMPT_TIMEOUT}s cap)..."
   # rc is captured in the else branch on purpose. After `if cmd; then ... fi`,
@@ -62,6 +84,7 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     echo "Attempt ${attempt} failed with exit ${rc}."
   fi
   if [ "$attempt" -lt "$ATTEMPTS" ]; then
+    clear_apt_state
     delay="${BACKOFF[$((attempt - 1))]:-30}"
     echo "Retrying in ${delay}s..."
     sleep "$delay"

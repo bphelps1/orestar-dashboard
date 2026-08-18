@@ -83,7 +83,7 @@ jobs:
         # Bounded and retried: a hung install held the ORESTAR lane for 3 hours
         # against the job's 300-minute timeout. 18 minutes is the backstop for
         # the script's own 3 x 300s cap.
-        timeout-minutes: 18
+        timeout-minutes: 25
         run: bash scripts/install_playwright.sh
 
       - name: Install Xvfb (virtual display for headed browser)
