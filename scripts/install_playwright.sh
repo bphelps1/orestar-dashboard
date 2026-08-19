@@ -37,12 +37,52 @@ if [ -z "$TIMEOUT_BIN" ]; then
   echo "note: no timeout(1) available — retrying without a per-attempt cap."
 fi
 
-run_install() {
+# Two ways to install, cheapest first.
+#
+# `--with-deps` runs a full apt-get update + install on EVERY run, to add system
+# libraries that ubuntu-latest already ships. That apt cycle — not the browser
+# download — is what has broken this pipeline four times in three days, most
+# recently by exceeding 420 seconds on three consecutive attempts. The browser
+# download itself has never been the slow part.
+#
+# So: fetch the browser alone, then prove it actually launches. If it does, apt
+# was never needed and the step costs seconds. If it does not, fall back to the
+# apt path — we then pay that cost only on a runner that genuinely requires it,
+# instead of on all of them.
+#
+# The smoke test is the point. Dropping --with-deps on faith would trade a loud,
+# early failure for a missing-library crash in the middle of a scrape; launching
+# a browser and closing it answers the question here, where it is cheap.
+_cap() {
   if [ -n "$TIMEOUT_BIN" ]; then
-    "$TIMEOUT_BIN" --kill-after=30s "${ATTEMPT_TIMEOUT}s" python -m playwright install chromium --with-deps
+    "$TIMEOUT_BIN" --kill-after=30s "${ATTEMPT_TIMEOUT}s" "$@"
   else
-    python -m playwright install chromium --with-deps
+    "$@"
   fi
+}
+
+browser_launches() {
+  python - <<'SMOKE' >/dev/null 2>&1
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    b = p.chromium.launch(args=["--no-sandbox", "--disable-dev-shm-usage"])
+    b.close()
+SMOKE
+}
+
+run_install() {
+  # 1. Browser only — no apt.
+  if _cap python -m playwright install chromium; then
+    if browser_launches; then
+      echo "Browser installed and launches; system deps already present (no apt needed)."
+      return 0
+    fi
+    echo "Browser installed but will not launch — falling back to --with-deps."
+  else
+    echo "Browser-only install failed — falling back to --with-deps."
+  fi
+  # 2. The expensive path, only for runners that need it.
+  _cap python -m playwright install chromium --with-deps
 }
 
 # Clear what a killed attempt leaves behind.
