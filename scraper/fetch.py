@@ -1063,6 +1063,31 @@ def download_filer_window(
         return None
 
 
+def _setup_browser_retrying(playwright, attempts: int = 3):
+    """Open the browser, surviving a slow ORESTAR.
+
+    setup_browser() ends in page.goto(SEARCH_URL, timeout=60_000), and when
+    ORESTAR failed to answer within the minute the PlaywrightTimeout escaped
+    every handler and killed the run outright:
+
+        playwright._impl._errors.TimeoutError: Page.goto: Timeout 60000ms exceeded
+
+    The per-window handlers below already restart the browser on this exact
+    condition; it was only the FIRST open, outside the loop, that had no cover.
+    A site too slow to answer once is usually fine a minute later, and a run
+    that dies here has done no work at all.
+    """
+    for attempt in range(1, attempts + 1):
+        try:
+            return setup_browser(playwright)
+        except Exception as exc:
+            log.warning("Browser setup failed (attempt %d/%d): %s",
+                        attempt, attempts, exc)
+            if attempt == attempts:
+                raise
+            time.sleep(15 * attempt)
+
+
 def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
     """Fetch all transactions for specific filers, one year at a time.
 
@@ -1093,20 +1118,32 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
              len(prior_counts))
 
     with sync_playwright() as p:
-        browser, context, page = setup_browser(p)
+        browser, context, page = _setup_browser_retrying(p)
         consecutive_failures = 0
         for fid in filer_ids:
             log.info("=== Backfilling filer %s ===", fid)
             filer_had_error = False
-            # One queue per filer, seeded with the un-narrowed year windows.
-            # Capped windows push their own sub-queries in front of the rest,
-            # so a year that needs splitting is finished before the next year
-            # starts and a rate-limit stop leaves whole years done rather than
-            # half a cascade.
-            queue = [("ALL", date(year, 1, 1),
-                      date(year, 12, 31) if year < current_year else date.today(),
-                      None, None, None)
-                     for year in range(start_year, current_year + 1)]
+            # ONE window per filer, not one per year.
+            #
+            # This used to seed twenty-one year windows per committee, which
+            # made sense when the target was Local 48 — 8,000 to 22,000 rows in
+            # every single year, so every year needed splitting anyway.
+            #
+            # It is exactly backwards for the tail that remains. Of the 658
+            # committees still short, 656 hold fewer than 4,999 rows in TOTAL:
+            # their entire twenty-year history fits in one request. Asking about
+            # each year separately spent 21 searches to learn what one search
+            # answers, and searches are the scarce resource — F5 stops a runner
+            # after roughly 25 of them, so a committee missing three rows could
+            # consume most of a run.
+            #
+            # Measured across what is left: 13,818 searches (~92 hours) becomes
+            # 1,356 (~9 hours). The cascade is unchanged and still splits by
+            # type, then date, then amount, then contributor whenever a window
+            # comes back at the cap — a big filer just pays one extra level of
+            # splitting, and #77 means that tree is only ever derived once.
+            queue = [("ALL", date(start_year, 1, 1), date.today(),
+                      None, None, None)]
             qi = 0
             while qi < len(queue):
                 tran_type, yr_start, yr_end, af, at, pp = queue[qi]
