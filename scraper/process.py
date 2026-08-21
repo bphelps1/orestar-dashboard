@@ -1833,8 +1833,37 @@ def aggregate_filers(
                 delta_end = round(our_end - (orestar_end or 0), 2) if orestar_end is not None else None
                 delta_beg = round(our_begin - (orestar_beg or 0), 2) if orestar_beg is not None else None
 
+                # How much ORESTAR says the balance MOVED this year, against
+                # how much our transactions say it moved.
+                #
+                # delta_end below cannot answer "is this year's data right?",
+                # because our_end is built on OUR rolled-forward beginning
+                # balance: one bad year in 2008 makes every year after it look
+                # wrong, and the real culprit is indistinguishable from its
+                # eighteen innocent successors.
+                #
+                # ORESTAR states a beginning AND an ending balance for every
+                # year, so the difference between them is that year's movement
+                # as the audited record has it — with no dependence on anything
+                # earlier. Comparing our own net against it isolates the single
+                # year, which is what makes it possible to say WHERE our
+                # transaction history diverges rather than merely that it does.
+                #
+                # Both sides include balance adjustments: yearly_nets is built
+                # with filer_ba, and ORESTAR's ending reflects adjustments too,
+                # so the two definitions match.
+                orestar_movement = (
+                    round((orestar_end or 0) - (orestar_beg or 0), 2)
+                    if orestar_end is not None and orestar_beg is not None else None
+                )
+                delta_movement = (
+                    round(round(our_net, 2) - orestar_movement, 2)
+                    if orestar_movement is not None else None
+                )
+
                 # Include if any line-item delta exceeds $0.01
-                deltas = [d for d in [delta_c, delta_e, delta_or, delta_od, delta_end, delta_beg] if d is not None]
+                deltas = [d for d in [delta_c, delta_e, delta_or, delta_od, delta_end,
+                                      delta_beg, delta_movement] if d is not None]
                 if any(abs(d) > 0.01 for d in deltas):
                     yearly_discrepancies[yr_s] = {
                         "our_begin": our_begin,
@@ -1855,6 +1884,11 @@ def aggregate_filers(
                         "delta_other_receipts": delta_or,
                         "delta_other_disbursements": delta_od,
                         "delta_begin": delta_beg,
+                        # The drift-free pair: what ORESTAR says this year moved,
+                        # and how far our transactions are from that. Unlike
+                        # `discrepancy`, these do not inherit earlier years' error.
+                        "orestar_movement": orestar_movement,
+                        "delta_movement": delta_movement,
                         "discrepancy": delta_end,
                     }
 
