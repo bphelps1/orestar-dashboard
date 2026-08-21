@@ -1010,6 +1010,19 @@ def _latest_year_summaries(yearly: dict, filer_ids: list[str]) -> dict:
         y = years[yr]
         out[str(fid)] = {
             "year": int(yr),
+            # When this summary was captured, carried down from the FILER level.
+            #
+            # The yearly file stores ts once per filer — {"years": {...}, "ts": …}
+            # — not inside each year, so lifting only the year dict dropped it and
+            # `orestar_info.get("ts", 0)` found nothing. 7,297 of 7,299 account
+            # summaries reached the site with no timestamp at all.
+            #
+            # That is not cosmetic: without it there is no way to tell "ORESTAR's
+            # figure is older than our transactions" from "our figures are wrong",
+            # which is exactly the question the 2026 balance divergence turns on.
+            # The popover already tries to show "Scraped: …" and has been printing
+            # the epoch.
+            "ts": float((yearly.get(str(fid)) or {}).get("ts") or 0),
             "beginning_balance": float(y.get("beginning_balance") or 0),
             "ending_cash_balance": float(y.get("ending_cash_balance") or 0),
             "orestar_contributions": float(y.get("contributions") or 0),
@@ -2301,6 +2314,33 @@ def aggregate_filers(
     # ── activity_snapshot.json — Campaign Pulse module data ────────────────
     from generate_activity_snapshot import generate as _gen_snapshot
     _snapshot = _gen_snapshot(agg_dir=AGG_DIR, filers_dir=filers_dir)
+
+    # Carry forward what this generator does not build.
+    #
+    # legislative_map has TWO producers. generate_activity_snapshot builds it
+    # from the filing roster; refresh_legislative_map rebuilds the same key and
+    # adds district_history, the per-district prior-cycle results the race map
+    # renders under "Previous cycles".
+    #
+    # Rewriting the whole key here silently deleted that history on every daily
+    # refresh. racemap.js reads it, refresh_legislative_map writes it, and
+    # nothing errored — the panel simply showed nothing for all but the few
+    # hours between a candidate-filings run and the next refresh. The feature
+    # has never worked in the normal course of a day.
+    #
+    # Preserving a key the current generator cannot produce is the fix: the
+    # daily refresh has no candidate-filing or election-results data in hand,
+    # so it is in no position to replace it.
+    try:
+        _prev_snap = supabase_sync.get_dashboard_cache("activity_snapshot") or {}
+        _prev_hist = ((_prev_snap.get("legislative_map") or {}).get("district_history"))
+        if _prev_hist and "district_history" not in (_snapshot.get("legislative_map") or {}):
+            _snapshot.setdefault("legislative_map", {})["district_history"] = _prev_hist
+            log.info("Preserved district_history for %d chamber(s) from the previous snapshot",
+                     len(_prev_hist))
+    except Exception as e:
+        log.warning("Could not preserve district_history: %s", e)
+
     _write_json("activity_snapshot.json", _snapshot)
     log.info(
         "Wrote activity_snapshot.json (%d candidates)",
