@@ -1638,6 +1638,9 @@ def aggregate_filers(
         # from transactions and nothing here changes it. The flag used to be
         # set to "orestar" at this point, which read as though the figure came
         # from ORESTAR — it never did.
+        is_closed = False
+        closed_since = None
+        closed_final_balance = None
         if orestar_info and orestar_info.get("year", 0) > 0:
             orestar_year = orestar_info["year"]
             orestar_ending = orestar_info.get("ending_cash_balance", 0.0)
@@ -1691,6 +1694,30 @@ def aggregate_filers(
                     orestar_year = _anchor
                     orestar_ending = float(
                         _all_years[str(_anchor)].get("ending_cash_balance") or 0.0
+                    )
+
+            # Closed: ORESTAR's most recent statements are entirely blank —
+            # no activity AND no cash balance.
+            #
+            # This is the strongest signal the record offers that a committee
+            # is finished. It is deliberately NOT the same as dormant: a
+            # dormant committee has ORESTAR carrying a real balance forward
+            # year after year (Oregon Strong, $889,626.78), which is a
+            # committee holding money and filing nothing. A blank statement
+            # says the opposite — nothing held, nothing moved.
+            #
+            # Requiring the cash balance to be zero is what separates them,
+            # and it is why "no contributions or expenditures this year" is not
+            # sufficient on its own.
+            if _all_years:
+                _yrs = sorted((y for y in _all_years if str(y).isdigit()), key=int)
+                _live_yrs = [y for y in _yrs if _has_activity(_all_years[y])]
+                if _live_yrs and _yrs and _yrs[-1] != _live_yrs[-1]:
+                    _blank_from = _yrs[_yrs.index(_live_yrs[-1]) + 1]
+                    is_closed = True
+                    closed_since = int(_blank_from)
+                    closed_final_balance = float(
+                        _all_years[_live_yrs[-1]].get("ending_cash_balance") or 0.0
                     )
             # A dormant committee still gets a statement: ORESTAR carries its
             # balance forward every year whether or not anything moves. We have
@@ -1927,6 +1954,11 @@ def aggregate_filers(
             "cash_on_hand_source": cash_on_hand_source,
             "has_orestar_check": has_orestar_check,
             "orestar_discrepancy": orestar_discrepancy,
+            # Surfaced on the site as a "Closed" label, so a reader can
+            # tell a finished committee from one that is merely quiet.
+            "closed": is_closed,
+            "closed_since": closed_since,
+            "closed_final_balance": closed_final_balance,
             "orestar_year": orestar_year,
             "orestar_account_summary": _acct_summary,
             "orestar_yearly": _name_to_yearly.get(name, {}),
@@ -2045,6 +2077,11 @@ def aggregate_filers(
             # A committee with no activity in ORESTAR's year is a different
             # animal from one that is actively filing and still disagrees.
             "dormant": str(_acct.get("year")) not in (_d.get("beginning_balances") or {}),
+            # A closed committee's discrepancy is a different kind of thing
+            # from an active one's, and the Admin tab should say so rather
+            # than listing them side by side as if equivalent.
+            "closed": bool(_d.get("closed")),
+            "closed_since": _d.get("closed_since"),
         })
     _disc_rows.sort(key=lambda r: -abs(r["delta"]))
     _write_json("balance_discrepancies.json", {

@@ -2226,6 +2226,38 @@ function updateCohIndicator(profile) {
   const disc = orestarEnding != null ? Math.round((calcCoh - orestarEnding) * 100) / 100 : 0;
   const absDisc = Math.abs(disc);
 
+  // A closed committee gets a plain label, not a warning triangle.
+  //
+  // ORESTAR keeps issuing an annual Account Summary after a committee stops
+  // operating, and those statements are entirely blank — no activity and no
+  // cash balance. That is the record saying the committee is finished, so a
+  // leftover difference against our transaction history is expected rather
+  // than alarming, and flagging it as a discrepancy told readers a committee
+  // had a problem when it simply no longer exists.
+  //
+  // Note this is NOT the same as dormant: a dormant committee has ORESTAR
+  // carrying a real balance forward while filing nothing, which IS worth a
+  // warning. The zero cash balance is the difference.
+  if (profile.closed) {
+    ind.hidden = false;
+    ind.className = "coh-indicator coh-closed";
+    ind.textContent = "Closed";
+    ind.setAttribute("tabindex", "0");
+    const since = profile.closed_since ? ` since ${profile.closed_since}` : "";
+    const finalBal = profile.closed_final_balance != null
+      ? ` Its last reported balance was ${fmt$(profile.closed_final_balance)}.`
+      : "";
+    ind.setAttribute(
+      "title",
+      `ORESTAR reports no activity and a $0.00 balance for this committee${since}.` +
+      finalBal +
+      (absDisc > 0.01
+        ? ` The ${fmt$(absDisc)} shown here is what our transaction history still carries; a closed committee's records often omit the final disbursement.`
+        : "")
+    );
+    return;
+  }
+
   // Gate on having an ORESTAR figure to compare against. The old test
   // read a source label that always said the balance came from ORESTAR;
   // it never did — the balance is calculated from transactions.
@@ -2291,6 +2323,14 @@ function cohIndicatorHTML(profile) {
   const orestarEnding = acct.ending_cash_balance != null ? acct.ending_cash_balance : null;
   const disc = orestarEnding != null ? Math.round((calcCoh - orestarEnding) * 100) / 100 : 0;
   const absDisc = Math.abs(disc);
+  // Same rule as updateCohIndicator: a finished committee is labelled, not
+  // warned about. Kept in step with that function deliberately — two badges
+  // describing the same balance differently is worse than either alone.
+  if (profile.closed) {
+    const since = profile.closed_since ? ` since ${profile.closed_since}` : "";
+    const tip = `ORESTAR reports no activity and a $0.00 balance for this committee${since}.`;
+    return `<span class="coh-indicator coh-closed" tabindex="0" title="${esc(tip)}">Closed</span>`;
+  }
   if (orestarEnding == null) {
     return '<span class="coh-indicator coh-estimated" tabindex="0" title="No ORESTAR account summary scraped yet, so this balance is unchecked">EST</span>';
   }

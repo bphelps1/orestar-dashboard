@@ -548,6 +548,13 @@ main {
 .coh-indicator.coh-estimated {
   background: #e2e8f0; color: #4a5568; border: 1px solid #cbd5e0;
 }
+/* Closed: a statement of fact, not a warning. Deliberately neutral — the
+   amber and red above mean "something may be wrong here", and a finished
+   committee is not wrong. */
+.coh-indicator.coh-closed {
+  background: #edf2f7; color: #4a5568; border: 1px solid #cbd5e0;
+  font-weight: 600; letter-spacing: 0.02em;
+}
 
 /* ── Discrepancy Popover ────────────────────────────────────────────────── */
 .disc-popover {
