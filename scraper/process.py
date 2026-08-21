@@ -1642,6 +1642,56 @@ def aggregate_filers(
             orestar_year = orestar_info["year"]
             orestar_ending = orestar_info.get("ending_cash_balance", 0.0)
             has_orestar_check = True
+
+            # Anchor on the last year ORESTAR reports ACTIVITY in, not merely
+            # the last year it issued a statement.
+            #
+            # ORESTAR keeps producing an annual Account Summary after a
+            # committee stops operating, and those trailing statements are
+            # entirely zero — every line, including the ending balance. The
+            # cash-balances file stores the LATEST year, so for a wound-down
+            # committee the check was comparing our full-history balance
+            # against a blank form.
+            #
+            # Citizens for Mannix is the clearest case. Its real history is all
+            # there in ORESTAR:
+            #
+            #     2006  ending $568.75    contributions $186,050
+            #     2007  ending $1,560.47  contributions $205,940
+            #     2008  ending $106.66    contributions $645,535
+            #     2009  ending $2,600.66  contributions $56,941
+            #     2010  ending $0.00      contributions $12,451   <- wound down
+            #     2011-2015                                        <- empty stubs
+            #
+            # We anchored on 2015 and recorded the committee as $299,796 adrift.
+            # 253 committees carry $1.66M of "discrepancy" for this reason, and
+            # a re-scrape confirmed the zeros are real rather than a scraping
+            # gap — the statements genuinely are blank, so the fix belongs here
+            # rather than in the scraper.
+            #
+            # A year that ends at zero after real activity is a perfectly good
+            # anchor: that IS the committee's closing balance. Only years with
+            # no activity at all are skipped.
+            _all_years = _name_to_yearly.get(name, {})
+            if _all_years:
+                def _has_activity(y: dict) -> bool:
+                    return any(abs(float(y.get(k) or 0)) > 0 for k in
+                               ("contributions", "expenditures", "other_receipts",
+                                "other_disbursements", "beginning_balance",
+                                "ending_cash_balance", "loans_received",
+                                "loan_payments", "balance_adjustments"))
+                _live = sorted((int(y) for y, v in _all_years.items()
+                                if str(y).isdigit() and _has_activity(v)))
+                if _live and _live[-1] < orestar_year:
+                    _anchor = _live[-1]
+                    log.debug(
+                        "%s: ORESTAR's %d statement is blank — anchoring on %d instead",
+                        name, orestar_year, _anchor,
+                    )
+                    orestar_year = _anchor
+                    orestar_ending = float(
+                        _all_years[str(_anchor)].get("ending_cash_balance") or 0.0
+                    )
             # A dormant committee still gets a statement: ORESTAR carries its
             # balance forward every year whether or not anything moves. We have
             # no transactions for those years, so looking the year up in our
