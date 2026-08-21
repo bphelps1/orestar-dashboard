@@ -355,6 +355,27 @@ def full_reload_transactions(shard_dir: Path) -> None:
 
 
 # ── Dashboard aggregate blobs ────────────────────────────────────────────────
+def get_dashboard_cache(key: str):
+    """Read one dashboard_cache entry, or None.
+
+    Needed so a producer can carry forward a key it does not itself build.
+    activity_snapshot has two writers, and the one without district_history was
+    overwriting the one with it on every refresh.
+    """
+    if not sync_enabled():
+        return None
+    try:
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute("select data from dashboard_cache where key = %s", (key,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            d = row[0]
+            return json.loads(d) if isinstance(d, str) else d
+    except Exception:
+        return None
+
+
 def upsert_dashboard_cache(key: str, data) -> None:
     if not sync_enabled():
         return
