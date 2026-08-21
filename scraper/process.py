@@ -1611,6 +1611,10 @@ def aggregate_filers(
         earliest_info = _name_to_earliest.get(name)
         first_txn_year = int(sorted_years[0]) if sorted_years else 9999
         first_year_begin = 0.0
+        # Whether our pre-statement transactions agree with the opening balance
+        # ORESTAR states. None when the question does not arise.
+        opening_reconciles = None
+        opening_our_prior_net = None
         if earliest_info:
             scraped_year = earliest_info.get("earliest_year", 9999)
             # Older cache entries predate the flag; fall back to the year test,
@@ -1618,6 +1622,43 @@ def aggregate_filers(
             complete = earliest_info.get("reached_earliest", scraped_year <= first_txn_year)
             if complete and scraped_year <= first_txn_year:
                 first_year_begin = earliest_info["beginning_balance"]
+            elif (complete and scraped_year > first_txn_year
+                  and earliest_info.get("beginning_balance") is not None):
+                # ORESTAR's first statement postdates our first transaction.
+                #
+                # Both figures describe the same money and they disagree, so
+                # one of them has to be chosen rather than quietly averaged by
+                # accident. ORESTAR's is the bank position it certified at the
+                # time; ours is whatever pre-statement rows happen to be in the
+                # transaction record, and those are systematically partial —
+                # ORESTAR's transaction search returns back-dated entries filed
+                # later, but its account summaries only begin in 2006, so the
+                # early rows are contributions whose matching expenditures were
+                # never filed as transactions.
+                #
+                # Measured on all five committees in this position, our
+                # pre-statement net exceeds ORESTAR's stated opening in four:
+                # Citizens for Mannix holds $150,000 of 2003-04 contributions
+                # and NO expenditures against a stated opening of $203.84. We
+                # were carrying $149,796 of money that had already been spent.
+                #
+                # So: take ORESTAR's figure as the anchor and drop the
+                # pre-statement rows it already accounts for, rather than
+                # trusting a record we can prove is incomplete.
+                _pre = round(sum(yearly_nets.get(str(y), 0.0)
+                                 for y in range(first_txn_year, scraped_year)), 2)
+                first_year_begin = earliest_info["beginning_balance"]
+                opening_reconciles = abs(_pre - first_year_begin) <= 0.01
+                opening_our_prior_net = _pre
+                for _y in range(first_txn_year, scraped_year):
+                    yearly_nets.pop(str(_y), None)
+                log.info(
+                    "%s: anchoring on ORESTAR's %d opening $%.2f; our %d-%d rows "
+                    "net $%.2f (%s) and are superseded by it",
+                    name, scraped_year, first_year_begin, first_txn_year,
+                    scraped_year - 1, _pre,
+                    "reconciles" if opening_reconciles else "does NOT reconcile",
+                )
             elif earliest_info.get("beginning_balance"):
                 log.warning(
                     "Ignoring $%.2f opening balance for %s: paging stopped at %d but "
@@ -1631,6 +1672,12 @@ def aggregate_filers(
             beginning_balances[yr_s] = round(running, 2)
             running += yearly_nets.get(yr_s, 0.0)
         cash_on_hand = round(running, 2)
+
+        # --- signature of the per-year deltas -------------------------------
+        # Computed after the yearly loop below fills yearly_discrepancies;
+        # declared here so the record above always has a value.
+        discrepancy_signature = None
+        discrepancy_first_bad_year = None
 
         # Compare against ORESTAR-reported ending balance for validation.
         #
@@ -1945,6 +1992,24 @@ def aggregate_filers(
                 "scrape_ts": orestar_info.get("ts", 0),
             }
 
+        # Classify the per-year deltas now that the loop above has filled them.
+        _dvals = [round(float(v.get("discrepancy", 0) or 0), 2)
+                  for _, v in sorted(yearly_discrepancies.items())]
+        if len(_dvals) >= 2:
+            if max(_dvals) - min(_dvals) <= 0.01:
+                # Same every year: the years reconcile, the start does not.
+                discrepancy_signature = "opening_balance"
+            else:
+                discrepancy_signature = "missing_transactions"
+                # Name the first year the delta moves — that is where rows went
+                # missing, and it turns "this committee is off by $X" into
+                # somewhere to look.
+                _yrs = sorted(yearly_discrepancies)
+                for _i in range(1, len(_yrs)):
+                    if abs(_dvals[_i] - _dvals[_i - 1]) > 0.01:
+                        discrepancy_first_bad_year = int(_yrs[_i])
+                        break
+
         detail = {
             "name": name, "slug": slug,
             "total_in": total_in, "total_inkind": total_inkind,
@@ -1963,6 +2028,26 @@ def aggregate_filers(
             "orestar_account_summary": _acct_summary,
             "orestar_yearly": _name_to_yearly.get(name, {}),
             "yearly_discrepancies": yearly_discrepancies,
+            # What KIND of problem this committee has, read off the shape of
+            # the per-year deltas rather than their size.
+            #
+            # A discrepancy that is the SAME every year means each year's
+            # activity reconciles and the divergence predates all of them —
+            # the opening balance is wrong. One that CHANGES in a given year
+            # means transactions are missing in that year, and names the year.
+            #
+            # Citizens for Mannix is $299,796.16 adrift in 2006, 2007, 2008,
+            # 2009 and 2010 — identical to the cent. Its 2006+ row count
+            # matches ORESTAR exactly (339), so nothing is missing; it starts
+            # from the wrong place. Across everything flagged, 201 committees
+            # ($2.6M) carry a constant offset against 101 ($1.2M) that vary,
+            # so most of what survived the row recovery was never fetchable.
+            "discrepancy_signature": discrepancy_signature,
+            "discrepancy_first_bad_year": discrepancy_first_bad_year,
+            # Surfaced so a reader can see WHY the opening balance was
+            # taken from ORESTAR rather than from our own rows.
+            "opening_reconciles": opening_reconciles,
+            "opening_our_prior_net": opening_our_prior_net,
             "beginning_balances": beginning_balances,
             "timeline": timeline,
             "top_donors": top_donors_list,
@@ -2082,6 +2167,11 @@ def aggregate_filers(
             # than listing them side by side as if equivalent.
             "closed": bool(_d.get("closed")),
             "closed_since": _d.get("closed_since"),
+            # "opening_balance" or "missing_transactions" — the Admin tab can
+            # then group by the kind of problem instead of listing an
+            # undifferentiated dollar figure per committee.
+            "signature": _d.get("discrepancy_signature"),
+            "first_bad_year": _d.get("discrepancy_first_bad_year"),
         })
     _disc_rows.sort(key=lambda r: -abs(r["delta"]))
     _write_json("balance_discrepancies.json", {
