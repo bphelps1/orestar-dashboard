@@ -2,9 +2,9 @@
   "election": "2026 General Election",
   "election_id": "1453",
   "year": "2026",
-  "scraped": "2026-08-17T14:03:50Z",
+  "scraped": "2026-08-21T23:44:51Z",
   "counts": {
-    "SR": 112,
+    "SR": 114,
     "SS": 31,
     "GOV": 3
   },
@@ -296,6 +296,21 @@
       "qualified": "Y"
     },
     {
+      "ballot_name": "Timothy L Dehne",
+      "party": "Pacific Green",
+      "parties": [
+        "Pacific Green"
+      ],
+      "chamber": "house",
+      "district": 11,
+      "office": "house",
+      "office_district": "State Representative, 11th District",
+      "election": "2026 General Election",
+      "filing_method": "Minor Party",
+      "filing_date": "08/20/2026",
+      "qualified": ""
+    },
+    {
       "ballot_name": "April Dobson",
       "party": "Democrat",
       "parties": [
@@ -497,7 +512,8 @@
       "ballot_name": "Dacia Grayber",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Independent"
       ],
       "chamber": "house",
       "district": 28,
@@ -566,6 +582,21 @@
       "election": "2026 General Election",
       "filing_method": "Nominated",
       "filing_date": "06/25/2026",
+      "qualified": "Y"
+    },
+    {
+      "ballot_name": "Pat Hubbell",
+      "party": "Independent",
+      "parties": [
+        "Independent"
+      ],
+      "chamber": "house",
+      "district": 40,
+      "office": "house",
+      "office_district": "State Representative, 40th District",
+      "election": "2026 General Election",
+      "filing_method": "Minor Party",
+      "filing_date": "08/17/2026",
       "qualified": "Y"
     },
     {
@@ -951,7 +982,8 @@
       "ballot_name": "Lesly M Munoz",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Independent"
       ],
       "chamber": "house",
       "district": 22,
@@ -1284,7 +1316,8 @@
       "ballot_name": "Hank Sanders",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Independent"
       ],
       "chamber": "house",
       "district": 52,
@@ -1737,7 +1770,8 @@
       "ballot_name": "Nicole Bassett",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Independent"
       ],
       "chamber": "senate",
       "district": 26,
@@ -1872,7 +1906,8 @@
       "ballot_name": "Brad Hicks",
       "party": "Republican",
       "parties": [
-        "Republican"
+        "Republican",
+        "Libertarian"
       ],
       "chamber": "senate",
       "district": 3,
@@ -2173,7 +2208,8 @@
       "ballot_name": "Christine Drazan",
       "party": "Republican",
       "parties": [
-        "Republican"
+        "Republican",
+        "Libertarian"
       ],
       "chamber": "statewide",
       "district": null,
