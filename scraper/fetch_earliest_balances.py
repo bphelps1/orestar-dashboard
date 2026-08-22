@@ -122,6 +122,31 @@ def _parse_yearly_summary(html: str) -> dict:
     }
 
 
+def _safe_content(page, tries: int = 6, pause: float = 0.5) -> str:
+    """page.content() that survives the challenge re-navigating underneath it.
+
+    F5 replaces the document mid-flight — that is the whole mechanism of the
+    bot challenge — so reading content is inherently racy:
+
+        playwright._impl._errors.Error: Page.content: Unable to retrieve
+        content because the page is navigating and changing the content
+
+    The two reads inside the challenge-wait loops already tolerated this, since
+    a failed read there simply costs another half-second pass. The read AFTER
+    the paging loop did not, so an unlucky moment raised out of the scraper and
+    ended a chained sweep with 565 filers left to do.
+
+    Returning "" on exhaustion matches the callers, which already treat empty
+    content as "did not resolve" rather than as an answer.
+    """
+    for _ in range(tries):
+        try:
+            return page.content()
+        except Exception:
+            time.sleep(pause)
+    return ""
+
+
 def _load_summary_page(page, url: str, filer_id: str) -> str | None:
     """Load an Account Summary page, sitting through F5's bot challenge.
 
@@ -266,7 +291,7 @@ def _scrape_filer_earliest(page, filer_id: str) -> tuple[dict | None, dict]:
         log.error("Filer %s: still paging after %d clicks (year %d) — opening balance "
                   "NOT trustworthy", filer_id, max_clicks, year)
 
-    html = page.content()
+    html = _safe_content(page)
     final_year = _parse_year(html) or year
     beg_bal = _parse_beginning_balance(html)
 
