@@ -113,7 +113,11 @@ jobs:
             echo "targeted=true" >> "$GITHUB_ENV"
             exit 0
           fi
-          ARGS="--max-age-days ${{ github.event.inputs.max_age_days || '30' }}"
+          # Comfortably inside the job's 180-minute timeout, so the script
+          # always stops itself rather than being cancelled. A cancelled step
+          # fails the success() gate on the retrigger, which is how a sweep of
+          # 5,454 filers previously did one partial batch and stopped.
+          ARGS="--max-age-days ${{ github.event.inputs.max_age_days || '30' }} --max-minutes 150"
           if [ "$MAX" != "0" ]; then
             ARGS="$ARGS --max-filers $MAX"
           fi

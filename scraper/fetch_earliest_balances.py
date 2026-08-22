@@ -299,6 +299,12 @@ def main():
         description="Scrape earliest-year beginning balances from ORESTAR Account Summary pages."
     )
     parser.add_argument(
+        "--max-minutes", type=int, default=0,
+        help="stop after this long so the JOB's timeout never arrives mid-run "
+             "(0 = no budget). A cancelled step is not a successful one, and the "
+             "retrigger is gated on success, so a timeout silently ends the chain.",
+    )
+    parser.add_argument(
         "--filer-ids", nargs="+",
         help="Specific filer IDs to scrape (default: all from ORESTAR cache)",
     )
@@ -405,7 +411,24 @@ def main():
 
         done = 0
         failed = 0
+        # Stop on our own terms, before the job's timeout stops us.
+        #
+        # This sweep has no natural end inside one run — it walks thousands of
+        # filers — so it ran until the job's 180-minute limit cancelled it. A
+        # cancelled step is not a successful one, and "Retrigger for next batch"
+        # is gated on success(), so the chain ended with 5,454 filers still to
+        # do and nothing scheduled to resume. One partial batch, then silence.
+        #
+        # Finishing early and deliberately keeps the step successful, which is
+        # what lets the chain continue. The gate stays as it is on purpose:
+        # success() is also how cancelling a runaway chain stops it.
+        _deadline = time.time() + args.max_minutes * 60 if args.max_minutes else None
         for fid in ids_to_fetch:
+            if _deadline and time.time() >= _deadline:
+                log.info("Reached the %d-minute budget after %d filers — stopping so "
+                         "this run counts as successful and the chain continues.",
+                         args.max_minutes, done)
+                break
             result, yearly_data = _scrape_filer_earliest(page, fid)
             done += 1
 
