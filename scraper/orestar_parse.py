@@ -28,7 +28,22 @@ def parse_dollar(html: str, label: str, default: float | None = None) -> float |
     `label` is treated as a literal, so callers pass "Beginning Balance
     (Previous Year)" rather than a pre-escaped pattern.
     """
-    m = re.search(re.escape(label) + r".*?" + _AMOUNT, html or "", re.DOTALL)
+    # IGNORECASE, because ORESTAR's casing is not what a caller guesses.
+    #
+    # The page prints "Loans Received (non-exempt)"; every caller asked for
+    # "Loans Received (Non-Exempt)". A case-sensitive literal matched nothing,
+    # and parse_dollar returns the default rather than raising — so all four
+    # loan fields read $0.00 in all 46,945 yearly records, silently, forever.
+    #
+    # That is the same failure as the in-kind labels in #56, and it produced a
+    # $3.08M phantom discrepancy across 66 committees in 2006 that was twice
+    # explained away as a difference between ORESTAR's accounting and ours.
+    # There is no difference: we were not reading the figures.
+    #
+    # Matching case-insensitively removes the whole class rather than the four
+    # instances of it. No label on this page differs only by case.
+    m = re.search(re.escape(label) + r".*?" + _AMOUNT, html or "",
+                  re.DOTALL | re.IGNORECASE)
     if not m:
         return default
     val = float(m.group(3).replace(",", ""))
