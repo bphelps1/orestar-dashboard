@@ -43,6 +43,10 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--min", type=float, default=0.01,
                     help="only count years off by at least this much")
+    ap.add_argument("--include-artifacts", action="store_true",
+                    help="count filing-period artifacts as divergence too "
+                         "(they reconcile on ORESTAR's own basis, so they are "
+                         "excluded by default)")
     ap.add_argument("--json", dest="json_out")
     args = ap.parse_args()
 
@@ -52,6 +56,8 @@ def main() -> int:
     rows = cur.fetchall()
     conn.close()
 
+    artifacts = 0
+    artifact_amt = 0.0
     by_year_count: Counter = Counter()
     by_year_amt: defaultdict = defaultdict(float)
     offenders = []
@@ -69,6 +75,13 @@ def main() -> int:
             if abs(dm) < args.min:
                 matched += 1
                 continue
+            # A divergence that reconciles on ORESTAR's own filing basis is a
+            # period-boundary effect, not missing data. Counting it as a gap is
+            # what made 2006 look like a $3.17M hole three separate times.
+            if d.get("attribution_artifact") and not args.include_artifacts:
+                artifacts += 1
+                artifact_amt += abs(dm)
+                continue
             by_year_count[yr] += 1
             by_year_amt[yr] += abs(dm)
             offenders.append({
@@ -84,6 +97,7 @@ def main() -> int:
     print()
     print(f"  committee-years with both figures : {checked:,}")
     print(f"  our transactions agree            : {matched:,}  ({100*matched/checked:.1f}%)" if checked else "")
+    print(f"  filing-period artifacts (excluded): {artifacts:,}  ${artifact_amt:,.0f}")
     print(f"  DIVERGE                           : {len(offenders):,}")
     print(f"  total absolute divergence         : ${total:,.0f}")
 

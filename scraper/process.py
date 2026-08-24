@@ -1591,6 +1591,38 @@ def aggregate_filers(
 
         yearly_nets = _yearly_net(_c_for_coh, _e_for_coh, _or_for_coh, filer_od, filer_ba)
 
+        # The same nets, attributed by FILING year instead of transaction year.
+        #
+        # ORESTAR's annual statement covers what was FILED in that period, and
+        # for most years filing follows activity closely enough that the two
+        # bases agree. 2006 is the exception and a large one: ORESTAR launched,
+        # committees entered years of accumulated activity, and essentially all
+        # of it carries a 2006 transaction date with a 2007 filing date. Every
+        # one of Citizens for Mannix's 2006 loans -- $309,000 across five rows
+        # -- was filed in January 2007.
+        #
+        # Measured over the 73 committees that diverge in 2006: attributing by
+        # transaction date reconciles NONE of them and leaves $2,872,708;
+        # attributing by filing date reconciles 22 exactly and leaves $200,041.
+        #
+        # This is NOT used as the primary basis, because the same measurement
+        # says filing date is worse in most other years -- 2025 goes from $18K
+        # to $147K, 2026 from $1.0M to $1.3M. It is computed alongside so a
+        # divergence that DISAPPEARS under the filing basis can be recognised
+        # for what it is: a period-boundary effect, not missing data.
+        _filed_frames = []
+        for _f, _sign in [(_c_for_coh, 1), (_or_for_coh, 1), (_e_for_coh, -1),
+                          (filer_od, -1), (filer_ba, 1)]:
+            if not _f.empty and "filed_date" in _f.columns:
+                _g = _f.copy()
+                _g["_fy"] = pd.to_datetime(_g["filed_date"], errors="coerce").dt.year
+                _filed_frames.append((_g.dropna(subset=["_fy"]), _sign))
+        yearly_nets_filed: dict[str, float] = {}
+        for _g, _sign in _filed_frames:
+            for _yr, _amt in _g.groupby("_fy")["amount"].sum().items():
+                _k = str(int(_yr))
+                yearly_nets_filed[_k] = yearly_nets_filed.get(_k, 0.0) + _sign * float(_amt)
+
         # Determine beginning balances and cash-on-hand
         # Strategy: use the earliest-year beginning balance scraped directly from
         # ORESTAR (via Playwright), then roll forward through yearly transaction nets.
@@ -1874,6 +1906,28 @@ def aggregate_filers(
                     if orestar_movement is not None else None
                 )
 
+                # Does this divergence disappear if the year is read the way
+                # ORESTAR's statement is assembled — by what was FILED in it?
+                #
+                # If so it is a period-boundary effect, not missing data: the
+                # transactions exist on both sides, they simply fall on
+                # different sides of a year line. Marking that is what stops
+                # 2006 being re-investigated as a data gap, which has now
+                # happened three times, each with a different wrong
+                # explanation attached (pre-ORESTAR boundary, loan treatment,
+                # a parse bug).
+                our_net_filed = round(yearly_nets_filed.get(yr_s, 0.0), 2)
+                delta_movement_filed = (
+                    round(our_net_filed - orestar_movement, 2)
+                    if orestar_movement is not None else None
+                )
+                attribution_artifact = bool(
+                    delta_movement is not None
+                    and delta_movement_filed is not None
+                    and abs(delta_movement) > 0.01
+                    and abs(delta_movement_filed) <= max(1.0, abs(delta_movement) * 0.05)
+                )
+
                 # Include if any line-item delta exceeds $0.01
                 deltas = [d for d in [delta_c, delta_e, delta_or, delta_od, delta_end,
                                       delta_beg, delta_movement] if d is not None]
@@ -1902,6 +1956,12 @@ def aggregate_filers(
                         # `discrepancy`, these do not inherit earlier years' error.
                         "orestar_movement": orestar_movement,
                         "delta_movement": delta_movement,
+                        # Same year read on ORESTAR's own basis. When this
+                        # reconciles and delta_movement does not, the year is a
+                        # filing-period boundary artifact rather than a gap.
+                        "our_net_filed": our_net_filed,
+                        "delta_movement_filed": delta_movement_filed,
+                        "attribution_artifact": attribution_artifact,
                         "discrepancy": delta_end,
                     }
 
