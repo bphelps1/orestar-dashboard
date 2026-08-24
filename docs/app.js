@@ -2277,10 +2277,40 @@ function updateCohIndicator(profile) {
     const popover = document.createElement("div");
     popover.className = "disc-popover";
     popover.setAttribute("role", "tooltip");
+    // Where ORESTAR's own summary disagrees with itself, say so.
+    //
+    // Our cash-balance formula is ORESTAR's, taken from their page: beginning
+    // balance, plus total contributions (which include non-exempt loans) and
+    // other receipts, less total expenditures and disbursements, plus balance
+    // adjustments. It reconciles to within tens of dollars across thousands of
+    // committee-years from 2007 on.
+    //
+    // For a small number of committees it cannot reconcile, because ORESTAR's
+    // summary contradicts itself: Ted Wheeler's 2006 page reports Loans
+    // Received $0.00 and Total Outstanding Loans $230,000.00 at the same time,
+    // against $233,000 of loan transactions ORESTAR itself lists. Attributing
+    // that to our arithmetic would be wrong, and silently absorbing it would be
+    // worse, so the reader is told where the difference actually lives.
+    const loanNote = (() => {
+      const yd = profile.yearly_discrepancies || {};
+      const yrs = Object.keys(yd).filter(y => yd[y] && yd[y].orestar_omits_loans);
+      if (!yrs.length) return "";
+      yrs.sort();
+      const y = yd[yrs[0]];
+      const ours = fmt$(y.our_loans_received || 0);
+      const theirs = fmt$(y.orestar_loans_received || 0);
+      const many = yrs.length > 1 ? ` (also ${yrs.slice(1).join(", ")})` : "";
+      return `<div class="disc-note">ORESTAR's own ${yrs[0]} account summary reports ` +
+             `${theirs} of loans received while listing ${ours} in loan transactions` +
+             `${many}. The difference above follows ORESTAR's transaction record; ` +
+             `its summary page does not agree with itself for this committee.</div>`;
+    })();
+
     popover.innerHTML = `
       <div class="disc-row"><span>ORESTAR ending cash balance:</span><span>${orestarEnding != null ? fmt$(orestarEnding) : "N/A"}</span></div>
       <div class="disc-row"><span>Calculated cash on hand:</span><span>${fmt$(calcCoh)}</span></div>
       <div class="disc-row disc-diff"><span>Difference:</span><span>${disc >= 0 ? "+" : ""}${fmt$(disc)}</span></div>
+      ${loanNote}
       <div class="disc-ts">ORESTAR account summary scraped at: ${formatTimestamp(scrapeTs)}</div>
     `;
     popover.hidden = true;

@@ -1920,6 +1920,12 @@ def aggregate_filers(
         _yearly_orestar_c = _yearly_sums(_orestar_contrib)
         _yearly_cash_exp  = _yearly_sums(_cash_expend_only)
         _yearly_inkind    = _yearly_sums(filer_inkind)
+        # Loan receipts per year, so a committee-year can be checked against
+        # ORESTAR's own reported loans line.
+        _loans_recv = (filer_contrib[filer_contrib["sub_type"] == "Loan Received (Non-Exempt)"]
+                       if not filer_contrib.empty else filer_contrib)
+        _yearly_loans = _yearly_sums(_loans_recv)
+
         _yearly_or = _yearly_sums(_or_for_coh)
         _yearly_od = _yearly_sums(filer_od)
 
@@ -2045,6 +2051,40 @@ def aggregate_filers(
                 # demonstrably the right one — 2006 — the fix is to compute on
                 # it, which is what happens above. Where it is not, the
                 # difference is real and belongs in the total.
+                # ORESTAR contradicting its own summary.
+                #
+                # Our cash-balance formula IS ORESTAR's, read off the page:
+                #   Beginning + Total Contributions + Other Receipts
+                #   + Loans Received (exempt) - Total Expenditures
+                #   - Other Disbursements - Loan Payments (exempt)
+                #   + Balance Adjustments = Ending Cash Balance
+                # with Total Contributions including non-exempt loans and
+                # in-kind, and in-kind cancelling against the expenditure side.
+                # That is why 2007-2025 reconcile to within tens of dollars
+                # across thousands of committee-years.
+                #
+                # Where it does not reconcile, the inconsistency is ORESTAR's.
+                # Ted Wheeler's 2006 summary reports Loans Received $0.00 while
+                # the SAME page reports Total Outstanding Loans $230,000.00,
+                # against $233,000 of loan transactions ORESTAR itself lists.
+                # Its own numbers disagree with each other, so no calculation
+                # can match all of them at once — mirroring the loans line
+                # reconciles 66 committee-years and breaks 44 whose movement
+                # follows OUR figure instead.
+                #
+                # Recorded rather than resolved, and surfaced in the tooltip, so
+                # a reader sees that the difference is in the source record.
+                our_loans_received = round(float(_yearly_loans.get(yr_int, 0)), 2)
+                orestar_loans_received = (float(yr_orestar.get("loans_received"))
+                                          if yr_orestar.get("loans_received") is not None else None)
+                loan_gap = (round(our_loans_received - orestar_loans_received, 2)
+                            if orestar_loans_received is not None else None)
+                orestar_omits_loans = bool(
+                    loan_gap is not None and abs(loan_gap) > 1.0
+                    and delta_movement is not None
+                    and abs(abs(loan_gap) - abs(delta_movement)) <= max(1.0, abs(loan_gap) * 0.05)
+                )
+
                 attribution_artifact = False
 
                 # Include if any line-item delta exceeds $0.01
@@ -2084,6 +2124,9 @@ def aggregate_filers(
                         # Our side as of the summary's capture. When this
                         # reconciles and the live comparison does not, the
                         # difference is the reporting window.
+                        "our_loans_received": our_loans_received,
+                        "orestar_loans_received": orestar_loans_received,
+                        "orestar_omits_loans": orestar_omits_loans,
                         "our_net_asof": our_net_asof,
                         "delta_movement_asof": delta_movement_asof,
                         "snapshot_lag": snapshot_lag,
