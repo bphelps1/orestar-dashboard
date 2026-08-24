@@ -1628,6 +1628,40 @@ def aggregate_filers(
         # ORESTAR (via Playwright), then roll forward through yearly transaction nets.
         # This avoids error-prone back-calculation from the current year.
         orestar_info = _orestar_data.get(name)
+
+        # Our net as it stood WHEN THE SUMMARY WAS CAPTURED.
+        #
+        # An account summary is a snapshot; transactions keep arriving. Comparing
+        # today's transactions against a summary scraped days ago produces a
+        # divergence that is neither side's fault, and that accounted for 95% of
+        # the 2026 gap — $3,473,683 across 465 committees fell to $189,706 once
+        # the summaries were re-scraped, and it began climbing again immediately
+        # because committees kept filing.
+        #
+        # Re-scraping cannot fix this; it only resets the clock. The fix is to
+        # compare like with like: restrict our side to rows that had been FILED
+        # by the moment ORESTAR's figure was taken. If the two agree as of that
+        # instant, the data is sound and the visible difference is only the
+        # window between then and now.
+        #
+        # Rows are cut by filed_date rather than tran_date because a summary can
+        # only reflect what had been filed when it was read.
+        _asof_ts = float((orestar_info or {}).get("ts") or 0)
+        yearly_nets_asof: dict[str, float] = {}
+        if _asof_ts:
+            _asof_cut = pd.Timestamp(datetime.fromtimestamp(_asof_ts))
+            for _f, _sign in [(_c_for_coh, 1), (_or_for_coh, 1), (_e_for_coh, -1),
+                              (filer_od, -1), (filer_ba, 1)]:
+                if _f.empty or "year" not in _f.columns or "filed_date" not in _f.columns:
+                    continue
+                _g = _f.copy()
+                _g["_fd"] = pd.to_datetime(_g["filed_date"], errors="coerce")
+                _g = _g[_g["_fd"].notna() & (_g["_fd"] <= _asof_cut)]
+                if _g.empty:
+                    continue
+                for _yr, _amt in _g.groupby("year")["amount"].sum().items():
+                    _k = str(int(_yr))
+                    yearly_nets_asof[_k] = yearly_nets_asof.get(_k, 0.0) + _sign * float(_amt)
         beginning_balances: dict[str, float] = {}
         cash_on_hand_source = "calculated"   # always — see the check below
         has_orestar_check = False
@@ -1921,6 +1955,23 @@ def aggregate_filers(
                     round(our_net_filed - orestar_movement, 2)
                     if orestar_movement is not None else None
                 )
+                # Same year, but our side frozen to the summary's capture time.
+                our_net_asof = (round(yearly_nets_asof.get(yr_s, 0.0), 2)
+                                if _asof_ts else None)
+                delta_movement_asof = (
+                    round(our_net_asof - orestar_movement, 2)
+                    if our_net_asof is not None and orestar_movement is not None else None
+                )
+                # Reconciles as of the capture, diverges now => the gap is the
+                # reporting window, not the data. Regenerates every day by
+                # design, so it is not something to chase.
+                snapshot_lag = bool(
+                    delta_movement is not None
+                    and delta_movement_asof is not None
+                    and abs(delta_movement) > 0.01
+                    and abs(delta_movement_asof) <= max(1.0, abs(delta_movement) * 0.05)
+                )
+
                 attribution_artifact = bool(
                     delta_movement is not None
                     and delta_movement_filed is not None
@@ -1962,6 +2013,12 @@ def aggregate_filers(
                         "our_net_filed": our_net_filed,
                         "delta_movement_filed": delta_movement_filed,
                         "attribution_artifact": attribution_artifact,
+                        # Our side as of the summary's capture. When this
+                        # reconciles and the live comparison does not, the
+                        # difference is the reporting window.
+                        "our_net_asof": our_net_asof,
+                        "delta_movement_asof": delta_movement_asof,
+                        "snapshot_lag": snapshot_lag,
                         "discrepancy": delta_end,
                     }
 

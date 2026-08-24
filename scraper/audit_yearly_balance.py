@@ -58,6 +58,8 @@ def main() -> int:
 
     artifacts = 0
     artifact_amt = 0.0
+    lags = 0
+    lag_amt = 0.0
     by_year_count: Counter = Counter()
     by_year_amt: defaultdict = defaultdict(float)
     offenders = []
@@ -82,6 +84,12 @@ def main() -> int:
                 artifacts += 1
                 artifact_amt += abs(dm)
                 continue
+            # Reconciled at the moment ORESTAR's figure was taken; the visible
+            # difference is only the window since. Regenerates daily by design.
+            if d.get("snapshot_lag") and not args.include_artifacts:
+                lags += 1
+                lag_amt += abs(dm)
+                continue
             by_year_count[yr] += 1
             by_year_amt[yr] += abs(dm)
             offenders.append({
@@ -98,6 +106,7 @@ def main() -> int:
     print(f"  committee-years with both figures : {checked:,}")
     print(f"  our transactions agree            : {matched:,}  ({100*matched/checked:.1f}%)" if checked else "")
     print(f"  filing-period artifacts (excluded): {artifacts:,}  ${artifact_amt:,.0f}")
+    print(f"  snapshot lag (excluded)           : {lags:,}  ${lag_amt:,.0f}")
     print(f"  DIVERGE                           : {len(offenders):,}")
     print(f"  total absolute divergence         : ${total:,.0f}")
 
