@@ -2327,3 +2327,16 @@ footer a:hover { color: var(--color-accent); }
 #tab-overview > .overview-charts,
 #tab-overview > .acct-summary-details { margin-bottom: 0; }
 #tab-overview > .last-updated { margin-top: 0; }
+
+/* Note inside the discrepancy popover: says where a difference actually
+   originates when ORESTAR's own summary contradicts itself. Muted rather than
+   alarming — it is an explanation, not a second warning. */
+.disc-note {
+  margin: 8px 0 4px;
+  padding: 8px;
+  border-left: 3px solid #cbd5e0;
+  background: #f7fafc;
+  color: #4a5568;
+  font-size: 0.85em;
+  line-height: 1.45;
+}
