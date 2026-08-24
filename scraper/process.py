@@ -1610,6 +1610,46 @@ def aggregate_filers(
         # to $147K, 2026 from $1.0M to $1.3M. It is computed alongside so a
         # divergence that DISAPPEARS under the filing basis can be recognised
         # for what it is: a period-boundary effect, not missing data.
+        # Candidate rules for which rows ORESTAR's 2006 statement counts.
+        #
+        # Computed HERE, from the same frames and the same sign convention as
+        # yearly_nets, because every attempt to reimplement this net in ad-hoc
+        # SQL has produced a different number — once by $457,723 on a single
+        # committee, and once making a diverging committee appear to reconcile.
+        # A candidate basis is only meaningful if it differs from the live
+        # figure in the basis alone.
+        #
+        # 2006 is the only year in question: our figures match ORESTAR from
+        # 2007 on, often to within tens of dollars across a hundred committees.
+        def _net_2006(row_filter):
+            total = 0.0
+            for _f, _sign in [(_c_for_coh, 1), (_or_for_coh, 1), (_e_for_coh, -1),
+                              (filer_od, -1), (filer_ba, 1)]:
+                if _f.empty or "year" not in _f.columns:
+                    continue
+                _g = _f[_f["year"] == 2006]
+                if _g.empty:
+                    continue
+                _g = row_filter(_g)
+                if _g is None or _g.empty:
+                    continue
+                total += _sign * float(_g["amount"].sum())
+            return round(total, 2)
+
+        def _filed_by(frame, cutoff):
+            if "filed_date" not in frame.columns:
+                return None
+            _fd = pd.to_datetime(frame["filed_date"], errors="coerce")
+            return frame[_fd.notna() & (_fd <= pd.Timestamp(cutoff))]
+
+        basis_2006 = {
+            "tran_2006": _net_2006(lambda g: g),
+            "tran_2006_filed_by_2006": _net_2006(lambda g: _filed_by(g, "2006-12-31")),
+            "tran_2006_filed_by_2007_01_31": _net_2006(lambda g: _filed_by(g, "2007-01-31")),
+            "tran_2006_filed_by_2007_06_30": _net_2006(lambda g: _filed_by(g, "2007-06-30")),
+            "tran_2006_filed_by_2007_12_31": _net_2006(lambda g: _filed_by(g, "2007-12-31")),
+        }
+
         _filed_frames = []
         for _f, _sign in [(_c_for_coh, 1), (_or_for_coh, 1), (_e_for_coh, -1),
                           (filer_od, -1), (filer_ba, 1)]:
@@ -1895,27 +1935,31 @@ def aggregate_filers(
                 our_e  = round(float(_yearly_cash_exp.get(yr_int, 0)) + float(_yearly_inkind.get(yr_int, 0)), 2)
                 our_or = round(float(_yearly_or.get(yr_int, 0)), 2)
                 our_od = round(float(_yearly_od.get(yr_int, 0)), 2)
-                # ORESTAR's 2006 statements are assembled on a FILING basis.
+                # Transaction basis, for every year including 2006.
                 #
-                # Not an assumption and not a tolerance: measured. Across every
-                # committee-year we hold both figures for, attributing 2006 by
-                # filing date takes the divergence from $3,179,739 to $205,541,
-                # while the same change makes every OTHER year far worse — 2015
-                # from $100 to $632,052, 2018 from $39 to $457,858. Our numbers
-                # already agree with ORESTAR to within tens of dollars from 2007
-                # on, so the transaction basis is right there and wrong in 2006.
+                # 2006 was briefly switched to the FILING basis, because the
+                # committees that diverge there reconcile under it: Citizens for
+                # Mannix's whole 2006 loan book — $309,000 across five rows —
+                # carries 2006 transaction dates and 2007-01 filing dates, and
+                # ORESTAR's 2006 statement reports only the $159,000 filed on
+                # the 29th.
                 #
-                # The cause is visible at row level. ORESTAR launched in 2006,
-                # committees entered years of accumulated activity, and it was
-                # filed in the following January: every one of Citizens for
-                # Mannix's 2006 loans — $309,000 across five rows — carries a
-                # 2006 transaction date and a 2007-01 filing date, and ORESTAR's
-                # 2006 statement reports only the $159,000 filed on the 29th.
+                # That switch was reverted. It was measured only on the 74
+                # committee-years ALREADY diverging, where it looked like a drop
+                # from $3.18M to $205K. Applied to everyone it took 2006 from 73
+                # affected committees to 513 — 426 of them newly wrong by under
+                # $5,000 each — because ORESTAR's 2006 statement is not uniformly
+                # filing-based. Committees that filed contemporaneously agree on
+                # both bases; late filers follow the filing; and committees with
+                # 2005 activity filed in 2006 are broken BY the filing basis.
                 #
-                # So 2006 is computed the way ORESTAR computes it, rather than
-                # computed differently and then excused.
-                our_net = (yearly_nets_filed.get(yr_s, 0.0) if yr_s == "2006"
-                           else yearly_nets.get(yr_s, 0.0))
+                # Trading $690K of concentrated, explainable error for small
+                # errors across 440 additional committees is the worse deal, and
+                # it is still not what ORESTAR does. The rule ORESTAR actually
+                # applied in its first year is not yet known; see
+                # audit_2006_basis.py, which measures it per committee instead
+                # of assuming it.
+                our_net = yearly_nets.get(yr_s, 0.0)
                 our_end = round(our_begin + our_net, 2)
 
                 orestar_end = yr_orestar.get("ending_cash_balance")
@@ -2216,6 +2260,10 @@ def aggregate_filers(
             "orestar_account_summary": _acct_summary,
             "orestar_yearly": _name_to_yearly.get(name, {}),
             "yearly_discrepancies": yearly_discrepancies,
+            # Candidate 2006 bases, on the pipeline's own definition, so the
+            # rule ORESTAR actually applied can be identified by measurement
+            # rather than guessed at a fifth time.
+            "basis_2006": basis_2006,
             # What KIND of problem this committee has, read off the shape of
             # the per-year deltas rather than their size.
             #
