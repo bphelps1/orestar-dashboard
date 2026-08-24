@@ -1895,7 +1895,27 @@ def aggregate_filers(
                 our_e  = round(float(_yearly_cash_exp.get(yr_int, 0)) + float(_yearly_inkind.get(yr_int, 0)), 2)
                 our_or = round(float(_yearly_or.get(yr_int, 0)), 2)
                 our_od = round(float(_yearly_od.get(yr_int, 0)), 2)
-                our_net = yearly_nets.get(yr_s, 0.0)
+                # ORESTAR's 2006 statements are assembled on a FILING basis.
+                #
+                # Not an assumption and not a tolerance: measured. Across every
+                # committee-year we hold both figures for, attributing 2006 by
+                # filing date takes the divergence from $3,179,739 to $205,541,
+                # while the same change makes every OTHER year far worse — 2015
+                # from $100 to $632,052, 2018 from $39 to $457,858. Our numbers
+                # already agree with ORESTAR to within tens of dollars from 2007
+                # on, so the transaction basis is right there and wrong in 2006.
+                #
+                # The cause is visible at row level. ORESTAR launched in 2006,
+                # committees entered years of accumulated activity, and it was
+                # filed in the following January: every one of Citizens for
+                # Mannix's 2006 loans — $309,000 across five rows — carries a
+                # 2006 transaction date and a 2007-01 filing date, and ORESTAR's
+                # 2006 statement reports only the $159,000 filed on the 29th.
+                #
+                # So 2006 is computed the way ORESTAR computes it, rather than
+                # computed differently and then excused.
+                our_net = (yearly_nets_filed.get(yr_s, 0.0) if yr_s == "2006"
+                           else yearly_nets.get(yr_s, 0.0))
                 our_end = round(our_begin + our_net, 2)
 
                 orestar_end = yr_orestar.get("ending_cash_balance")
@@ -1965,19 +1985,23 @@ def aggregate_filers(
                 # Reconciles as of the capture, diverges now => the gap is the
                 # reporting window, not the data. Regenerates every day by
                 # design, so it is not something to chase.
-                snapshot_lag = bool(
-                    delta_movement is not None
-                    and delta_movement_asof is not None
-                    and abs(delta_movement) > 0.01
-                    and abs(delta_movement_asof) <= max(1.0, abs(delta_movement) * 0.05)
-                )
+                # Same reasoning. The as-of figures are kept because they are
+                # genuinely informative — they say how much of a difference the
+                # reporting window accounts for — but they do not excuse it.
+                # Measured, the window explains little of what is left in 2026:
+                # $241,675 live against $214,909 as-of.
+                snapshot_lag = False
 
-                attribution_artifact = bool(
-                    delta_movement is not None
-                    and delta_movement_filed is not None
-                    and abs(delta_movement) > 0.01
-                    and abs(delta_movement_filed) <= max(1.0, abs(delta_movement) * 0.05)
-                )
+                # Deliberately NOT flagging "this would reconcile on another
+                # basis" as an explanation.
+                #
+                # That is a suppression mechanism wearing a classifier's clothes:
+                # it leaves the calculation disagreeing with ORESTAR and hides
+                # the difference behind a tolerance. Where another basis is
+                # demonstrably the right one — 2006 — the fix is to compute on
+                # it, which is what happens above. Where it is not, the
+                # difference is real and belongs in the total.
+                attribution_artifact = False
 
                 # Include if any line-item delta exceeds $0.01
                 deltas = [d for d in [delta_c, delta_e, delta_or, delta_od, delta_end,
