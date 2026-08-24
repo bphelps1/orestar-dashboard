@@ -77,19 +77,12 @@ def main() -> int:
             if abs(dm) < args.min:
                 matched += 1
                 continue
-            # A divergence that reconciles on ORESTAR's own filing basis is a
-            # period-boundary effect, not missing data. Counting it as a gap is
-            # what made 2006 look like a $3.17M hole three separate times.
-            if d.get("attribution_artifact") and not args.include_artifacts:
-                artifacts += 1
-                artifact_amt += abs(dm)
-                continue
-            # Reconciled at the moment ORESTAR's figure was taken; the visible
-            # difference is only the window since. Regenerates daily by design.
-            if d.get("snapshot_lag") and not args.include_artifacts:
-                lags += 1
-                lag_amt += abs(dm)
-                continue
+            # No exclusions. An earlier version dropped any year that would
+            # reconcile on a different basis, which left the calculation
+            # disagreeing with ORESTAR and hid the difference behind a 5%
+            # tolerance. Where another basis is right, process.py now computes
+            # on it (2006, filing basis); where it is not, the difference is
+            # real and is counted here.
             by_year_count[yr] += 1
             by_year_amt[yr] += abs(dm)
             offenders.append({
@@ -105,8 +98,6 @@ def main() -> int:
     print()
     print(f"  committee-years with both figures : {checked:,}")
     print(f"  our transactions agree            : {matched:,}  ({100*matched/checked:.1f}%)" if checked else "")
-    print(f"  filing-period artifacts (excluded): {artifacts:,}  ${artifact_amt:,.0f}")
-    print(f"  snapshot lag (excluded)           : {lags:,}  ${lag_amt:,.0f}")
     print(f"  DIVERGE                           : {len(offenders):,}")
     print(f"  total absolute divergence         : ${total:,.0f}")
 
