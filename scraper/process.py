@@ -1669,6 +1669,61 @@ def aggregate_filers(
         # This avoids error-prone back-calculation from the current year.
         orestar_info = _orestar_data.get(name)
 
+        # Count loan principal as cash only where ORESTAR counts it.
+        #
+        # A loan received is not automatically the committee's money. Ted
+        # Wheeler's 2006 statement records $233,000 of loans and reports
+        # Loans Received $0.00 in the cash section, Total Outstanding Loans
+        # $230,000 under Financial Status, and an ending cash balance of
+        # $1,819.65 — against $107.90 of cash expenditures that year. Had that
+        # $233,000 been cash, it would still have been sitting there. It never
+        # entered the account; the candidate's spending was recorded as a loan
+        # to the committee.
+        #
+        # We added it anyway, so his balance ran $233,000 high — and kept
+        # running high forever, because ORESTAR carries its own (loan-free)
+        # ending forward every year. Measured today: our $234,530.14 against
+        # ORESTAR's $1,530.14, a gap equal to the 2006 loans to the cent.
+        #
+        # The rule is NOT "ignore loans". In most years ORESTAR does count them
+        # and the money genuinely arrives: Wheeler's 2010, 2011, 2020 and 2021
+        # loans all appear in ORESTAR's own figures and match our rows exactly.
+        # Excluding loans wholesale was measured across all 46,761
+        # committee-years and breaks 2,581 of them, taking the residual from
+        # $3.55M to $24.36M.
+        #
+        # So ORESTAR's own reported figure decides, per committee-year. It
+        # agrees with our transaction rows 738 times and disagrees 123, almost
+        # all of them in 2006 (65, $2,228,906).
+        #
+        # Guarded on scrape freshness, because before the #90 parser fix this
+        # field read $0.00 on EVERY record — substituting a false zero would
+        # wipe genuine loans from 33,889 committee-years. Where the summary
+        # predates the fix, our own figure stands.
+        _LOAN_FIELD_TRUSTWORTHY_FROM = 1787500800.0
+        _sum_ts = float((orestar_info or {}).get("ts") or 0)
+        if _sum_ts >= _LOAN_FIELD_TRUSTWORTHY_FROM:
+            _our_loans_by_year = {}
+            if not filer_contrib.empty and "year" in filer_contrib.columns:
+                _lr = filer_contrib[filer_contrib["sub_type"] == "Loan Received (Non-Exempt)"]
+                if not _lr.empty:
+                    _our_loans_by_year = _lr.groupby("year")["amount"].sum().to_dict()
+            _their_years = _name_to_yearly.get(name, {})
+            for _yr_s in list(yearly_nets):
+                _ty = _their_years.get(_yr_s)
+                if not _ty:
+                    continue
+                _theirs = _ty.get("loans_received")
+                if _theirs is None:
+                    continue
+                try:
+                    _ours = float(_our_loans_by_year.get(int(_yr_s), 0.0))
+                except (TypeError, ValueError):
+                    continue
+                _adj = round(float(_theirs) - _ours, 2)
+                if abs(_adj) > 0.01:
+                    yearly_nets[_yr_s] = round(yearly_nets[_yr_s] + _adj, 2)
+
         # Our net as it stood WHEN THE SUMMARY WAS CAPTURED.
         #
         # An account summary is a snapshot; transactions keep arriving. Comparing
