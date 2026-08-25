@@ -2218,12 +2218,51 @@ def aggregate_filers(
         tl_df = pd.concat([c_monthly, i_monthly, li_monthly, ce_monthly, ik_monthly,
                            lo_monthly, or_monthly, od_monthly,
                            count_monthly_filer], axis=1).fillna(0).sort_index()
+        # The timeline must carry the SAME loan figures the balance was built
+        # from, because the browser recomputes cash on hand from these rows:
+        #
+        #     netFlow = totalIn + totalLoansIn + totalOR
+        #             - totalOut - totalLoansOut - totalOD
+        #
+        # so a correction applied only to yearly_nets is silently undone on
+        # render. Ted Wheeler's stored balance was $1,530.14, matching ORESTAR
+        # to the cent, while the page displayed $726,880 with a red discrepancy
+        # warning — the client re-adding the loan principal the server had just
+        # removed.
+        #
+        # Scaled proportionally within the year, so a month keeps its share of
+        # whatever ORESTAR reports for that year. Where ORESTAR reports nothing
+        # (2006 for 65 committees) every month goes to zero, which is the point.
+        _loan_scale: dict[int, float] = {}
+        if _sum_ts >= _LOAN_FIELD_TRUSTWORTHY_FROM:
+            _their_years_tl = _name_to_yearly.get(name, {})
+            _ours_tl = {}
+            if not filer_contrib.empty and "year" in filer_contrib.columns:
+                _lr_tl = filer_contrib[filer_contrib["sub_type"] == "Loan Received (Non-Exempt)"]
+                if not _lr_tl.empty:
+                    _ours_tl = _lr_tl.groupby("year")["amount"].sum().to_dict()
+            for _y, _ours_amt in _ours_tl.items():
+                _ty = _their_years_tl.get(str(int(_y)))
+                if not _ty or _ty.get("loans_received") is None:
+                    continue
+                _ours_amt = float(_ours_amt)
+                if abs(_ours_amt) <= 0.01:
+                    continue
+                _loan_scale[int(_y)] = float(_ty["loans_received"]) / _ours_amt
+
+        def _scaled_loans(month_key, raw):
+            try:
+                _y = int(str(month_key)[:4])
+            except (TypeError, ValueError):
+                return raw
+            return raw * _loan_scale.get(_y, 1.0)
+
         timeline = [
             {
                 "month": m,
                 "contributions":       round(float(row.get("contributions",       0)), 2),
                 "inkind":              round(float(row.get("inkind",              0)), 2),
-                "loans_received":      round(float(row.get("loans_received",      0)), 2),
+                "loans_received":      round(_scaled_loans(m, float(row.get("loans_received", 0))), 2),
                 "expenditures":        round(float(row.get("cash_exp", 0)) + float(row.get("inkind_exp", 0)), 2),
                 "loan_payments":       round(float(row.get("loan_payments",       0)), 2),
                 "other_receipts":      round(float(row.get("other_receipts",      0)), 2),
