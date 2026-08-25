@@ -1981,6 +1981,26 @@ def aggregate_filers(
                        if not filer_contrib.empty else filer_contrib)
         _yearly_loans = _yearly_sums(_loans_recv)
 
+        # Per-year loan scaling, shared by the balance, the timeline and this
+        # comparison so all three treat loan principal identically.
+        _coh_loan_scale: dict[int, float] = {}
+        if _sum_ts >= _LOAN_FIELD_TRUSTWORTHY_FROM:
+            _their_yrs_cmp = _name_to_yearly.get(name, {})
+            for _y, _amt in (_yearly_loans or {}).items():
+                _ty = _their_yrs_cmp.get(str(int(_y)))
+                if not _ty or _ty.get("loans_received") is None:
+                    continue
+                _amt = float(_amt)
+                if abs(_amt) <= 0.01:
+                    continue
+                _coh_loan_scale[int(_y)] = float(_ty["loans_received"]) / _amt
+
+        def _loan_scale_for_year(_y):
+            try:
+                return _coh_loan_scale.get(int(_y), 1.0)
+            except (TypeError, ValueError):
+                return 1.0
+
         _yearly_or = _yearly_sums(_or_for_coh)
         _yearly_od = _yearly_sums(filer_od)
 
@@ -1992,7 +2012,22 @@ def aggregate_filers(
 
                 yr_int = int(yr_s) if yr_s.isdigit() else None
                 our_begin = beginning_balances.get(yr_s, 0.0)
-                our_c  = round(float(_yearly_orestar_c.get(yr_int, 0)), 2)
+                # Contributions on the same basis as the balance and the stat
+                # card: loan principal counted the way ORESTAR counts it.
+                #
+                # _orestar_contrib includes loans received, so this line was
+                # comparing our raw loan figure against ORESTAR's reported one
+                # while every other line — and the balance itself — already used
+                # theirs. Wheeler's 2006 read ours $235,500 against ORESTAR
+                # $2,500, the difference being exactly his ten loan rows, on a
+                # year where the ending balance matched to the cent.
+                #
+                # It also left the page disagreeing with itself: since #99 the
+                # timeline and the Contributions card carry the adjusted figure,
+                # so the row below the card contradicted it.
+                our_c  = round(float(_yearly_orestar_c.get(yr_int, 0))
+                               - float(_yearly_loans.get(yr_int, 0))
+                               + float(_yearly_loans.get(yr_int, 0)) * _loan_scale_for_year(yr_int), 2)
                 our_e  = round(float(_yearly_cash_exp.get(yr_int, 0)) + float(_yearly_inkind.get(yr_int, 0)), 2)
                 our_or = round(float(_yearly_or.get(yr_int, 0)), 2)
                 our_od = round(float(_yearly_od.get(yr_int, 0)), 2)
