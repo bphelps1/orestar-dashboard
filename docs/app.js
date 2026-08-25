@@ -708,6 +708,7 @@ function statsFromTimeline(rows, beginningBalances, fullTimeline) {
   const totalLoansOut= rows.reduce((s, r) => s + (r.loan_payments || 0), 0);
   const totalOR      = rows.reduce((s, r) => s + (r.other_receipts || 0), 0);
   const totalOD      = rows.reduce((s, r) => s + (r.other_disbursements || 0), 0);
+  const totalBA      = rows.reduce((s, r) => s + (r.balance_adjustments || 0), 0);
   const count        = rows.reduce((s, r) => s + (r.count || 0), 0);
 
   // Beginning balance: only the first year's ORESTAR-scraped value is trusted.
@@ -727,15 +728,33 @@ function statsFromTimeline(rows, beginningBalances, fullTimeline) {
       const src = fullTimeline || rows;
       for (const r of src) {
         if (!r.month || r.month >= earliestMonth) break;
-        running += (r.contributions || 0) + (r.loans_received || 0) + (r.other_receipts || 0)
-                 - (r.expenditures || 0) - (r.loan_payments || 0) - (r.other_disbursements || 0);
+        // Same terms as netFlow above — loans and payments are already inside
+        // contributions and expenditures, and adjustments must be included or
+        // the opening position for a filtered range drifts from the real one.
+        running += (r.contributions || 0) + (r.other_receipts || 0) + (r.balance_adjustments || 0)
+                 - (r.expenditures || 0) - (r.other_disbursements || 0);
       }
       beginBal = Math.round(running * 100) / 100;
     }
   }
 
-  // COH: in-kind nets to zero (on both sides), loans are separate
-  const netFlow = totalIn + totalLoansIn + totalOR - totalOut - totalLoansOut - totalOD;
+  // COH — the same arithmetic process.py does, term for term.
+  //
+  // contributions ALREADY contains loans received, and expenditures ALREADY
+  // contains loan payments: that is what _orestar_contrib and _EXPEND_TYPES
+  // hold on the server. Adding totalLoansIn and subtracting totalLoansOut on
+  // top counted both a second time — for Friends of Ted Wheeler, +$495,600 of
+  // loans and -$3,500 of payments — and balance adjustments were missing
+  // entirely, a further +$250. Together exactly the $492,350 by which this
+  // function overstated his balance: $493,880 against a stored $1,530.14 that
+  // matches ORESTAR to the cent.
+  //
+  // In-kind does cancel; it is mirrored into both sides deliberately.
+  //
+  // totalLoansIn / totalLoansOut are still returned because the account-summary
+  // tiles show them as ORESTAR's separate line items. They just are not added
+  // again here.
+  const netFlow = totalIn + totalOR + totalBA - totalOut - totalOD;
 
   return {
     totalIn:     Math.round(totalIn    * 100) / 100,
@@ -2426,6 +2445,7 @@ function renderOverviewSingleFiler(profile) {
   const fullFilerTl = profile.timeline || [];
   const { totalIn, totalInKind, totalOut, cashOnHand, count } =
     statsFromTimeline(tlRows, profile.beginning_balances, fullFilerTl);
+
   document.getElementById("stat-contributions").textContent = fmt$(totalIn);
   document.getElementById("stat-inkind").textContent        = fmt$(totalInKind);
   document.getElementById("stat-expenditures").textContent  = fmt$(totalOut);

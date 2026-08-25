@@ -2227,9 +2227,13 @@ def aggregate_filers(
         lo_monthly = monthly_sum(_loans_out,          "loan_payments")
         or_monthly = monthly_sum(filer_or,            "other_receipts")
         od_monthly = monthly_sum(filer_od,            "other_disbursements")
+        # Balance adjustments were missing from the timeline entirely, so any
+        # balance recomputed from it could not match ours no matter what else
+        # was corrected — the information simply was not there.
+        ba_monthly = monthly_sum(filer_ba,            "balance_adjustments")
         count_monthly_filer = filer_all.groupby("month").size().rename("count")
         tl_df = pd.concat([c_monthly, i_monthly, li_monthly, ce_monthly, ik_monthly,
-                           lo_monthly, or_monthly, od_monthly,
+                           lo_monthly, or_monthly, od_monthly, ba_monthly,
                            count_monthly_filer], axis=1).fillna(0).sort_index()
         # The timeline must carry the SAME loan figures the balance was built
         # from, because the browser recomputes cash on hand from these rows:
@@ -2273,13 +2277,22 @@ def aggregate_filers(
         timeline = [
             {
                 "month": m,
-                "contributions":       round(float(row.get("contributions",       0)), 2),
+                # contributions ALREADY includes loans (and in-kind), and
+                # expenditures already includes loan payments — that is what
+                # _orestar_contrib and _EXPEND_TYPES contain. The loan portion
+                # here is swapped for ORESTAR's reported figure so this field
+                # carries the same loans the balance is built from.
+                "contributions":       round(
+                    float(row.get("contributions", 0))
+                    - float(row.get("loans_received", 0))
+                    + _scaled_loans(m, float(row.get("loans_received", 0))), 2),
                 "inkind":              round(float(row.get("inkind",              0)), 2),
                 "loans_received":      round(_scaled_loans(m, float(row.get("loans_received", 0))), 2),
                 "expenditures":        round(float(row.get("cash_exp", 0)) + float(row.get("inkind_exp", 0)), 2),
                 "loan_payments":       round(float(row.get("loan_payments",       0)), 2),
                 "other_receipts":      round(float(row.get("other_receipts",      0)), 2),
                 "other_disbursements": round(float(row.get("other_disbursements", 0)), 2),
+                "balance_adjustments": round(float(row.get("balance_adjustments", 0)), 2),
                 "count":               int(row.get("count", 0)),
             }
             for m, row in tl_df.iterrows()
