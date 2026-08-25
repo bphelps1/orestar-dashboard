@@ -910,7 +910,8 @@ function buildCalcSummary(profile, year) {
     : timeline;
 
   // Sum transaction-based values from the (filtered) timeline
-  let cashContrib = 0, inkind = 0, loansIn = 0, cashExpend = 0, loansOut = 0, otherReceipts = 0, otherDisburse = 0;
+  let cashContrib = 0, inkind = 0, loansIn = 0, cashExpend = 0, loansOut = 0,
+      otherReceipts = 0, otherDisburse = 0, balanceAdj = 0;
   for (const row of rows) {
     cashContrib   += row.contributions       || 0;
     inkind        += row.inkind              || 0;
@@ -919,6 +920,7 @@ function buildCalcSummary(profile, year) {
     loansOut      += row.loan_payments       || 0;
     otherReceipts += row.other_receipts      || 0;
     otherDisburse += row.other_disbursements || 0;
+    balanceAdj    += row.balance_adjustments || 0;
   }
 
   // Beginning balance: only the first year's ORESTAR-scraped value is trusted.
@@ -935,16 +937,33 @@ function buildCalcSummary(profile, year) {
     let running = firstYearBal;
     for (const r of timeline) {
       if (!r.month || r.month >= year) break;
-      running += (r.contributions || 0) + (r.loans_received || 0) + (r.other_receipts || 0)
-               - (r.expenditures || 0) - (r.loan_payments || 0) - (r.other_disbursements || 0);
+      // Same terms as endingCalc: loans and payments are already inside
+      // contributions and expenditures, and adjustments must be included.
+      running += (r.contributions || 0) + (r.other_receipts || 0) + (r.balance_adjustments || 0)
+               - (r.expenditures || 0) - (r.other_disbursements || 0);
     }
     beginBal = Math.round(running * 100) / 100;
   }
 
-  // COH = begin + contributions + loans_received + other_receipts
-  //       - expenditures - loan_payments - other_disbursements
-  // (in-kind is in both contributions and expenditures, nets to zero)
-  const endingCalc = beginBal + cashContrib + loansIn + otherReceipts - cashExpend - loansOut - otherDisburse;
+  // COH = begin + contributions + other_receipts + balance_adjustments
+  //       - expenditures - other_disbursements
+  //
+  // The tiles below display LOANS RECEIVED and LOAN PAYMENTS as their own
+  // lines, the way ORESTAR's page does — but contributions ALREADY contains
+  // the loans and expenditures already contains the payments. Adding them
+  // again here counted Friends of Ted Wheeler's $262,600 of loans twice and
+  // his $3,500 of payments twice, and balance adjustments were left out
+  // entirely: $262,600 - $3,500 + $250 = $259,350, exactly the discrepancy
+  // this panel then reported against ORESTAR.
+  //
+  // This is the third consumer of the same data to carry that error. The stat
+  // card and statsFromTimeline were fixed first, which left this panel showing
+  // $260,880 and a red warning directly above a Yearly Comparison table where
+  // every year reconciled — the contradiction visible on one screen.
+  //
+  // In-kind is in both contributions and expenditures and nets to zero.
+  const endingCalc = beginBal + cashContrib + otherReceipts + balanceAdj
+                   - cashExpend - otherDisburse;
 
   // ORESTAR-reported values (for comparison / validation)
   // If a specific year is selected, use the per-year ORESTAR data
