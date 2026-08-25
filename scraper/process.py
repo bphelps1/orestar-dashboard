@@ -2142,11 +2142,24 @@ def aggregate_filers(
 
                 attribution_artifact = False
 
-                # Include if any line-item delta exceeds $0.01
+                # EVERY year ORESTAR gives us a figure for, not only the ones
+                # that disagree.
+                #
+                # Storing only mismatches made the table impossible to read as
+                # evidence: Friends of Ted Wheeler showed a single 2006 row out
+                # of 21 comparable years, which looks like one broken year
+                # rather than twenty reconciled ones and one outstanding. The
+                # years that agree are the reassurance — they are what says the
+                # calculation is sound where it is not being questioned.
                 deltas = [d for d in [delta_c, delta_e, delta_or, delta_od, delta_end,
                                       delta_beg, delta_movement] if d is not None]
-                if any(abs(d) > 0.01 for d in deltas):
+                reconciles = not any(abs(d) > 0.01 for d in deltas)
+                if True:
                     yearly_discrepancies[yr_s] = {
+                        # True when every line item agrees, so the UI can show
+                        # a reconciled year as confirmation rather than styling
+                        # it as a small problem.
+                        "reconciles": reconciles,
                         "our_begin": our_begin,
                         "our_contributions": our_c,
                         "our_expenditures": our_e,

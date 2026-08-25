@@ -2340,3 +2340,9 @@ footer a:hover { color: var(--color-accent); }
   font-size: 0.85em;
   line-height: 1.45;
 }
+
+/* A year where every line item agrees with ORESTAR. Deliberately quiet and
+   distinct from disc-minor: the table now lists every comparable year, and
+   agreement is the reassuring case, not a small failure. */
+.disc-row.disc-ok { background: #f0fff4; }
+.disc-row.disc-ok .disc-col-diff { color: #276749; font-weight: 600; }
