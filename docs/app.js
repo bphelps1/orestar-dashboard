@@ -817,16 +817,21 @@ const CALC_TILE_META = {
     label: "Net Cash Flow",
     coh: true,
     subtotal: true,
-    compute: d => d.cash_contributions + (d.loans_received || 0) + d.other_receipts - d.cash_expenditures - (d.loan_payments || 0) - d.other_disbursements,
-    tip: "<strong>Counted:</strong> (Contributions + loans received + other receipts) minus (expenditures + loan payments + other disbursements). In-kind nets to zero.<br><strong>Meaning:</strong> How much cash the committee gained or lost during this period.",
+    // Loans and payments are NOT added here: cash_contributions already
+    // contains loans received and cash_expenditures already contains loan
+    // payments, because that is what the server puts in those fields. The
+    // tiles above display them as separate lines the way ORESTAR's page does,
+    // which is presentation, not arithmetic.
+    compute: d => d.cash_contributions + d.other_receipts + (d.balance_adjustments || 0) - d.cash_expenditures - d.other_disbursements,
+    tip: "<strong>Counted:</strong> (Contributions + other receipts + balance adjustments) minus (expenditures + other disbursements). Loans received and loan payments are already inside those figures and are shown separately above. In-kind nets to zero.<br><strong>Meaning:</strong> How much cash the committee gained or lost during this period.",
   },
   ending_cash_balance: {
     label: "Ending Cash Balance",
     coh: true,
     subtotal: true,
     orestar_field: "orestar_ending",
-    compute: d => d.beginning_balance + d.cash_contributions + (d.loans_received || 0) + d.other_receipts - d.cash_expenditures - (d.loan_payments || 0) - d.other_disbursements,
-    tip: "<strong>Counted:</strong> Beginning balance + net cash flow (including loans).<br><strong>Meaning:</strong> Our calculated cash position at the end of the period. This should closely match the ORESTAR ending balance if our transaction data is complete.",
+    compute: d => d.beginning_balance + d.cash_contributions + d.other_receipts + (d.balance_adjustments || 0) - d.cash_expenditures - d.other_disbursements,
+    tip: "<strong>Counted:</strong> Beginning balance + net cash flow. Loans received are already inside contributions and loan payments inside expenditures.<br><strong>Meaning:</strong> Our calculated cash position at the end of the period. This should closely match the ORESTAR ending balance if our transaction data is complete.",
   },
   // ── Non-cash items ────────────────────────────────────────────────────────
   inkind_contributions: {
@@ -1001,6 +1006,7 @@ function buildCalcSummary(profile, year) {
     other_disbursements: Math.round(otherDisburse * 100) / 100,
     beginning_balance: Math.round(beginBal * 100) / 100,
     other_receipts: Math.round(otherReceipts * 100) / 100,
+    balance_adjustments: Math.round(balanceAdj * 100) / 100,
     ending_cash_balance: Math.round(endingCalc * 100) / 100,
     // ORESTAR values for validation
     orestar_ending: orestarEnding,
