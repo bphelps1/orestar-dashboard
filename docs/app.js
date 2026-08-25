@@ -1114,7 +1114,7 @@ function renderAcctSummaryTiles(profile, year) {
     const showYears = year ? discYears.filter(y => y === year) : discYears;
     if (showYears.length) {
       let discHTML = `<div class="acct-group">
-        <div class="acct-group-title">Yearly Discrepancies (Calculated vs. ORESTAR)</div>
+        <div class="acct-group-title">Yearly Comparison (Calculated vs. ORESTAR)</div>
         <div class="disc-table">
           <div class="disc-table-header">
             <span class="disc-col-year">Year</span>
@@ -1125,14 +1125,18 @@ function renderAcctSummaryTiles(profile, year) {
       for (const yr of showYears) {
         const d = disc[yr];
         const endDisc = d.discrepancy || 0;
-        const severity = Math.abs(endDisc) >= 10000 ? "disc-severe"
+        // A reconciled year is confirmation, not a small problem. Every year
+        // ORESTAR gives a figure for is listed now, so without this the table
+        // would style twenty agreeing years as "minor discrepancies".
+        const severity = d.reconciles ? "disc-ok"
+          : Math.abs(endDisc) >= 10000 ? "disc-severe"
           : Math.abs(endDisc) >= 1000 ? "disc-warn" : "disc-minor";
         const rowId = `disc-detail-${yr}`;
         discHTML += `<div class="disc-row ${severity}" style="cursor:pointer" data-detail="${rowId}">
           <span class="disc-col-year">${yr} ▸</span>
           <span class="disc-col-num">${fmt$(d.our_end)}</span>
           <span class="disc-col-num">${fmt$(d.orestar_end)}</span>
-          <span class="disc-col-num disc-col-diff">${endDisc > 0 ? "+" : ""}${fmt$(endDisc)}</span>
+          <span class="disc-col-num disc-col-diff">${d.reconciles ? "✓" : (endDisc > 0 ? "+" : "") + fmt$(endDisc)}</span>
         </div>`;
         // Expandable line-item detail
         discHTML += `<div id="${rowId}" class="disc-detail" hidden>`;
