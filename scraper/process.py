@@ -2592,11 +2592,20 @@ def aggregate_filers(
             _t = ((_r["detail"].get("orestar_account_summary") or {}).get("scrape_ts")) or 0
             if _t and _r.get("filer_id"):
                 _cuts[str(_r["filer_id"])] = datetime.fromtimestamp(float(_t)).date()
-        if _cuts and "filed_date" in df.columns and "filer_id" in df.columns:
-            _pf = df[df["filer_id"].astype(str).isin(_cuts.keys())].copy()
+        # The processing frame names this column "filer id", with a space — it
+        # is the raw ORESTAR header. Only filer_detail and the database use
+        # filer_id. Guarding on the wrong name meant this block was skipped in
+        # full and silently: every committee reported $0.00 of post-summary
+        # activity, the as-of delta equalled the live one everywhere, and no
+        # warning was logged because nothing raised. A guard written to fail
+        # safely instead made the feature do nothing at all.
+        _fid_col = ("filer id" if "filer id" in df.columns
+                    else ("filer_id" if "filer_id" in df.columns else None))
+        if _cuts and "filed_date" in df.columns and _fid_col:
+            _pf = df[df[_fid_col].astype(str).str.strip().isin(_cuts.keys())].copy()
             _pf["_fd"] = pd.to_datetime(_pf["filed_date"], errors="coerce").dt.date
             _pf = _pf[_pf["_fd"].notna()]
-            _pf["_cut"] = _pf["filer_id"].astype(str).map(_cuts)
+            _pf["_cut"] = _pf[_fid_col].astype(str).str.strip().map(_cuts)
             _pf = _pf[_pf["_fd"] > _pf["_cut"]]
             if not _pf.empty:
                 _ink = _pf["sub_type"].isin(INKIND_SUBTYPES) if "sub_type" in _pf.columns else False
@@ -2607,8 +2616,15 @@ def aggregate_filers(
                 _sign[_pf["tran_type"] == "OD"] = -1.0
                 _pf["_signed"] = _pf["amount"].astype(float) * _sign
                 for (_fid, _cut), _amt in _pf.groupby(
-                        [_pf["filer_id"].astype(str), "_cut"])["_signed"].sum().items():
+                        [_pf[_fid_col].astype(str).str.strip(), "_cut"])["_signed"].sum().items():
                     _filer_post_summary.setdefault(_fid, {})[_cut] = float(_amt)
+        if not _filer_post_summary:
+            log.warning("post-summary activity is empty for all %d committees — "
+                        "the admin comparison is falling back to live deltas "
+                        "(filer id column: %s)", len(_cuts), _fid_col)
+        else:
+            log.info("post-summary activity computed for %d committees",
+                     len(_filer_post_summary))
     except Exception as _e:
         log.warning("post-summary activity not computed (%s) — "
                     "the admin comparison falls back to the live delta", _e)
