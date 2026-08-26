@@ -751,8 +751,30 @@ def aggregate(df: pd.DataFrame) -> None:
     if "tran_date" in df.columns:
         _tran_date = pd.to_datetime(df["tran_date"], errors="coerce")
         _eff_date  = _tran_date.where(_tran_date.notna(), df["filed_date"])
+        # Undated in ORESTAR's own record, so ORESTAR cannot place it in a
+        # reporting period — and does not.
+        #
+        # The filed_date fallback above keeps these rows in the dataset, which
+        # is right: the money is real and belongs in contributor totals. But it
+        # also lands them in a YEAR, and ORESTAR's account summaries are
+        # period-based, so a transaction with no transaction date appears in
+        # none of them. Four rows dataset-wide carry no tran_date, and all four
+        # committees were flagged for exactly their own row, to the cent:
+        #
+        #   6286 Friends of Sherrie Sprenger   $100.00
+        #   5192 Northwest Sportfishing Ind.    $95.00
+        #   2069 Oregonians for Affordable H.   $50.00
+        #    145 Oregon Faculties PAC            $5.00
+        #
+        # Each has ONE year off — 2007, the filing year — entirely in
+        # contributions. 2006 reconciles for all four, so ORESTAR is not
+        # filing them under a different period; it is not counting them at all.
+        # Marked here and held out of the cash balance only, so the rows keep
+        # counting everywhere else.
+        df["_undated"] = _tran_date.isna()
     else:
         _eff_date = df["filed_date"]
+        df["_undated"] = False
     df["year"]  = _eff_date.dt.year.astype(int)
     df["month"] = _eff_date.dt.to_period("M").astype(str)
 
@@ -1603,6 +1625,16 @@ def aggregate_filers(
         _COH_E_TYPES = {"Cash Expenditure", "Loan Payment (Non-Exempt)"}
         _c_for_coh = filer_contrib[filer_contrib["sub_type"].isin(_COH_C_TYPES)] if not filer_contrib.empty else filer_contrib
         _e_for_coh = filer_expend[filer_expend["sub_type"].isin(_COH_E_TYPES)] if not filer_expend.empty else filer_expend
+        # See the _undated note above: ORESTAR's period-based summaries exclude
+        # a transaction it cannot date, so the balance excludes it too. Applied
+        # to the cash frames only — the rows stay in contributor totals, donor
+        # aggregates and transaction listings, where they are perfectly valid.
+        def _dated(_f):
+            if _f is None or _f.empty or "_undated" not in _f.columns:
+                return _f
+            return _f[~_f["_undated"].fillna(False)]
+        _c_for_coh = _dated(_c_for_coh)
+        _e_for_coh = _dated(_e_for_coh)
         # Exempt loans, where ORESTAR's own summary says it did not count one.
         #
         # #96 made ORESTAR's reported figure decide for NON-exempt loans, which
@@ -1660,7 +1692,7 @@ def aggregate_filers(
         # what happens when a correction reaches some of those and not others.
         # A row-level filter is exact here precisely because ORESTAR never
         # reports a partial amount — it is all or nothing.
-        _or_for_coh = filer_or  # All type OR
+        _or_for_coh = _dated(filer_or)  # All type OR, minus anything undated
         _exempt_dropped: dict[str, float] = {}
         _oi_early = _orestar_data.get(name)
         if (not filer_or.empty and "year" in filer_or.columns
