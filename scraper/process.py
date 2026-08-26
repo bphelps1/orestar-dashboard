@@ -52,6 +52,31 @@ INKIND_SUBTYPES = frozenset({
     "In-Kind/Forgiven Personal Expenditures",   # plural, as ORESTAR spells it
 })
 
+def _chain_breaks(yearly: dict) -> dict:
+    """Where ORESTAR's own summaries fail to carry a balance forward.
+
+    Returns {"total": signed sum, "boundaries": count, "detail": [...]}, or an
+    empty dict when the chain is intact. Purely internal to ORESTAR's data, so
+    unlike summary_vs_itemised it needs no evidence about our row coverage.
+    """
+    yrs = sorted(y for y in (yearly or {}) if str(y).isdigit())
+    if len(yrs) < 2:
+        return {}
+    total = 0.0
+    detail = []
+    for i, y in enumerate(yrs[:-1]):
+        nxt = yrs[i + 1]
+        end = float((yearly.get(y) or {}).get("ending_cash_balance") or 0.0)
+        beg = float((yearly.get(nxt) or {}).get("beginning_balance") or 0.0)
+        jump = round(beg - end, 2)
+        if abs(jump) > 0.01:
+            total += jump
+            detail.append({"from": str(y), "to": str(nxt), "amount": jump})
+    if not detail:
+        return {}
+    return {"total": round(total, 2), "boundaries": len(detail), "detail": detail[:12]}
+
+
 _ROW_COMPLETE: dict = {}
 
 
@@ -2685,6 +2710,27 @@ def aggregate_filers(
             "orestar_year": orestar_year,
             "orestar_account_summary": _acct_summary,
             "orestar_yearly": _name_to_yearly.get(name, {}),
+            # ORESTAR's own year-to-year balances, where they do not chain.
+            #
+            # Year N's ending balance should be year N+1's beginning balance.
+            # For 444 of 6,511 committees with more than one summary year it is
+            # not, and the jumps have no transactions behind them: the silent
+            # years were checked against ORESTAR directly and it reports ZERO
+            # records for them, matching what we hold.
+            #
+            # Hood River County Democrats is the clearest case. Its 2009
+            # summary ends at $336.93 and its 2010 summary begins at $475.85 —
+            # $138.92 out of nowhere — and seven more such jumps follow. They
+            # sum to $6,192.22, which is its entire discrepancy to the cent.
+            # Across the bucket this holds for 171 of 178 committees.
+            #
+            # This is the same defect the summary_vs_itemised note describes,
+            # only across years instead of within one, and it needs no
+            # completeness evidence: it is ORESTAR's summary against ORESTAR's
+            # summary. Nothing here can be fixed on our side — we roll the
+            # balance forward from transactions and that arithmetic is sound.
+            # Recording it is what lets the site say so.
+            "orestar_chain_breaks": _chain_breaks(_name_to_yearly.get(name, {})),
             # Exempt loan principal held out of cash because ORESTAR's own
             # statement records no receipts at all in those years. Carried per
             # year so the site can say WHY a figure omits a transaction the

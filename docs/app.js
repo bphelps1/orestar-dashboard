@@ -2382,12 +2382,42 @@ function updateCohIndicator(profile) {
              `above follows that itemised record.</div>`;
     })();
 
+    // ORESTAR's own summaries failing to carry a balance forward.
+    //
+    // Year N's ending balance should be year N+1's beginning balance. For 444
+    // of 6,511 committees it is not, and the jumps have no transactions behind
+    // them — the silent years were checked against ORESTAR directly, which
+    // reports zero records for them. Hood River County Democrats has eight
+    // such jumps summing to $6,192.22: its entire difference, to the cent.
+    //
+    // "Accounts for" is only claimed when the jumps actually sum to the
+    // difference on screen; otherwise the breaks are reported as present
+    // without asserting they are the whole story.
+    const chainNote = (() => {
+      const cb = profile.orestar_chain_breaks;
+      if (!cb || !cb.boundaries || Math.abs(cb.total || 0) <= 0.01) return "";
+      const explains = Math.abs(Math.abs(cb.total) - Math.abs(disc)) <= 1.0;
+      const where = (cb.detail || []).slice(0, 3)
+        .map(b => `${b.from}\u2192${b.to} ${b.amount > 0 ? "+" : "\u2212"}${fmt$(Math.abs(b.amount))}`)
+        .join(", ");
+      return `<div class="disc-note">ORESTAR's own account summaries do not carry this ` +
+             `committee's balance forward across ${cb.boundaries} year ` +
+             `${cb.boundaries === 1 ? "boundary" : "boundaries"}` +
+             `${where ? ` (${where})` : ""}, totalling ${fmt$(Math.abs(cb.total))} with no ` +
+             `transactions in those years to explain it. ` +
+             (explains
+               ? `That accounts for the difference above. `
+               : `` ) +
+             `The balance here is rolled forward from ORESTAR's own transaction record.</div>`;
+    })();
+
     popover.innerHTML = `
       <div class="disc-row"><span>ORESTAR ending cash balance:</span><span>${orestarEnding != null ? fmt$(orestarEnding) : "N/A"}</span></div>
       <div class="disc-row"><span>Calculated cash on hand:</span><span>${fmt$(calcCoh)}</span></div>
       <div class="disc-row disc-diff"><span>Difference:</span><span>${disc >= 0 ? "+" : ""}${fmt$(disc)}</span></div>
       ${loanNote}
       ${itemisedNote}
+      ${chainNote}
       ${exemptLoanNoteText(profile) ? `<div class="disc-note">${esc(exemptLoanNoteText(profile))}</div>` : ""}
       <div class="disc-ts">ORESTAR account summary scraped at: ${formatTimestamp(scrapeTs)}</div>
     `;
