@@ -2301,7 +2301,8 @@ function updateCohIndicator(profile) {
       finalBal +
       (absDisc > 0.01
         ? ` The ${fmt$(absDisc)} shown here is what our transaction history still carries; a closed committee's records often omit the final disbursement.`
-        : "")
+        : "") +
+      (exemptLoanNoteText(profile) ? ` ${exemptLoanNoteText(profile)}` : "")
     );
     return;
   }
@@ -2359,6 +2360,7 @@ function updateCohIndicator(profile) {
       <div class="disc-row"><span>Calculated cash on hand:</span><span>${fmt$(calcCoh)}</span></div>
       <div class="disc-row disc-diff"><span>Difference:</span><span>${disc >= 0 ? "+" : ""}${fmt$(disc)}</span></div>
       ${loanNote}
+      ${exemptLoanNoteText(profile) ? `<div class="disc-note">${esc(exemptLoanNoteText(profile))}</div>` : ""}
       <div class="disc-ts">ORESTAR account summary scraped at: ${formatTimestamp(scrapeTs)}</div>
     `;
     popover.hidden = true;
@@ -2393,6 +2395,27 @@ function updateCohIndicator(profile) {
   }
 }
 
+// Why a balance can leave out a transaction the committee plainly filed.
+//
+// Exempt loan principal is held out of cash for years where ORESTAR's own
+// statement records no receipts at all (see the exempt-loan block in
+// process.py). Committee for SAIF Keeping is the case this exists for:
+// ORESTAR lists a $665,242.33 exempt loan in its transaction record and
+// reports $128.13 of cash for the same year. A reader who looks that
+// transaction up is owed a reason it is missing from the total, rather than
+// left to conclude the figure is broken.
+function exemptLoanNoteText(profile) {
+  const ex = (profile && profile.exempt_loans_excluded) || {};
+  const years = Object.keys(ex).sort();
+  if (!years.length) return "";
+  const total = years.reduce((s, y) => s + (Number(ex[y]) || 0), 0);
+  const those = years.length === 1 ? "that year" : "those years";
+  return `${fmt$(total)} of exempt loan principal (${years.join(", ")}) is not ` +
+         `counted here: ORESTAR's own account summary for ${those} reports no ` +
+         `contributions, no loans and no other receipts, so ORESTAR does not ` +
+         `treat it as cash either.`;
+}
+
 // Build discrepancy indicator HTML for multi-filer cards (inline)
 function cohIndicatorHTML(profile) {
   const src = profile.cash_on_hand_source;
@@ -2406,7 +2429,9 @@ function cohIndicatorHTML(profile) {
   // describing the same balance differently is worse than either alone.
   if (profile.closed) {
     const since = profile.closed_since ? ` since ${profile.closed_since}` : "";
-    const tip = `ORESTAR reports no activity and a $0.00 balance for this committee${since}.`;
+    const exNote = exemptLoanNoteText(profile);
+    const tip = `ORESTAR reports no activity and a $0.00 balance for this committee${since}.` +
+                (exNote ? ` ${exNote}` : "");
     return `<span class="coh-indicator coh-closed" tabindex="0" title="${esc(tip)}">Closed</span>`;
   }
   if (orestarEnding == null) {

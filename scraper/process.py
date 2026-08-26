@@ -52,6 +52,11 @@ INKIND_SUBTYPES = frozenset({
     "In-Kind/Forgiven Personal Expenditures",   # plural, as ORESTAR spells it
 })
 
+# Summaries scraped before the #90 parser fix report $0.00 in every loan field,
+# so the figure can only be trusted from this instant on. Used by the non-exempt
+# correction (#96) and the exempt one below.
+_LOAN_FIELD_TRUSTWORTHY_FROM = 1787500800.0
+
 _SUMMABLE = ("ending_cash_balance", "beginning_balance", "contributions",
              "expenditures", "other_receipts", "other_disbursements",
              "balance_adjustments", "inkind_contributions",
@@ -1567,7 +1572,79 @@ def aggregate_filers(
         _COH_E_TYPES = {"Cash Expenditure", "Loan Payment (Non-Exempt)"}
         _c_for_coh = filer_contrib[filer_contrib["sub_type"].isin(_COH_C_TYPES)] if not filer_contrib.empty else filer_contrib
         _e_for_coh = filer_expend[filer_expend["sub_type"].isin(_COH_E_TYPES)] if not filer_expend.empty else filer_expend
+        # Exempt loans, for years where ORESTAR records no money arriving at all.
+        #
+        # #96 made ORESTAR's own reported figure decide for NON-exempt loans,
+        # which are type C. Exempt loans are type OR and passed through here
+        # untouched — which is how Committee for SAIF Keeping came to show
+        # $665,242.33 of cash on hand, 32% of every flagged dollar on the
+        # dashboard, for a closed committee whose 2006 statement reads $173.13
+        # in, $45.00 spent, $128.13 out.
+        #
+        # ORESTAR's `Loans Received (exempt)` line cannot decide this the way
+        # the non-exempt line decides #96: it reads $0.00 on all but three
+        # records in the entire dataset, so a zero there carries no
+        # information. Yes! Keep Our Groceries Tax Free 2018 is the proof — that
+        # line reads $0.00 while ORESTAR plainly counted the money, reporting
+        # $490,000 of loans received and an ending balance that only reconciles
+        # with our $465,000 exempt loan left IN. Trusting the printed zero would
+        # have broken that committee by $465,000 to fix others.
+        #
+        # What sets SAIF Keeping apart is not that one line but that EVERY
+        # inflow line reads zero: no contributions, no loans, no other receipts.
+        # ORESTAR recorded nothing arriving that year, so counting an arrival
+        # contradicts the statement outright instead of disagreeing with it
+        # about a category. Measured across every committee-year holding an
+        # exempt loan rather than only the flagged ones: 2 fixed ($667,735), 0
+        # broken, 52 left alone.
+        #
+        # The second guard matters more than the case count suggests. A summary
+        # that failed to parse is also all zeros, and is indistinguishable from
+        # one that genuinely recorded no inflow — so require some non-zero
+        # figure elsewhere on the record as evidence it parsed at all. No
+        # committee-year needs it today; one blank scrape and it is the only
+        # thing standing between a parse failure and deleted transactions.
+        #
+        # Filtering the frame here, rather than adjusting a total afterwards,
+        # is deliberate: the balance, the as-of comparison, the ORESTAR
+        # reconciliation and the timeline all derive from _or_for_coh, and #99
+        # was the lesson in what happens when a correction reaches some of those
+        # and not the rest.
         _or_for_coh = filer_or  # All type OR
+        _exempt_dropped: dict[str, float] = {}
+        _oi_early = _orestar_data.get(name)
+        if (not filer_or.empty and "year" in filer_or.columns
+                and "sub_type" in filer_or.columns
+                and float((_oi_early or {}).get("ts") or 0) >= _LOAN_FIELD_TRUSTWORTHY_FROM):
+            _no_inflow_years: set[int] = set()
+            for _yr_s, _ty in (_name_to_yearly.get(name, {}) or {}).items():
+                if not str(_yr_s).isdigit() or not isinstance(_ty, dict):
+                    continue
+                def _amt_of(_k, _row=_ty):
+                    return abs(float(_row.get(_k) or 0.0))
+                _inflow = (_amt_of("contributions") + _amt_of("loans_received")
+                           + _amt_of("loans_received_exempt") + _amt_of("other_receipts"))
+                _parsed = (_amt_of("beginning_balance") + _amt_of("ending_cash_balance")
+                           + _amt_of("expenditures") + _amt_of("other_disbursements"))
+                if _inflow == 0.0 and _parsed > 0.0:
+                    _no_inflow_years.add(int(_yr_s))
+            if _no_inflow_years:
+                _mask = ((filer_or["sub_type"] == "Loan Received (Exempt)")
+                         & (filer_or["year"].isin(_no_inflow_years)))
+                if bool(_mask.any()):
+                    for _y, _a in filer_or[_mask].groupby("year")["amount"].sum().items():
+                        _exempt_dropped[str(int(_y))] = round(float(_a), 2)
+                    _or_for_coh = filer_or[~_mask]
+                    # Recomputed so the stored lifetime figure describes the same
+                    # money the timeline and the balance do.
+                    total_or = round(float(_or_for_coh["amount"].sum()), 2)
+                    log.info(
+                        "%s: excluding %s of exempt loans from cash (%s) — "
+                        "ORESTAR's statement records no receipts at all in those years",
+                        name,
+                        f"${sum(_exempt_dropped.values()):,.2f}",
+                        ", ".join(sorted(_exempt_dropped)),
+                    )
 
         # Calculate net transactions per year for COH computation
         def _yearly_net(contrib_df, expend_df, or_df, od_df, ba_df):
@@ -1700,7 +1777,6 @@ def aggregate_filers(
         # field read $0.00 on EVERY record — substituting a false zero would
         # wipe genuine loans from 33,889 committee-years. Where the summary
         # predates the fix, our own figure stands.
-        _LOAN_FIELD_TRUSTWORTHY_FROM = 1787500800.0
         _sum_ts = float((orestar_info or {}).get("ts") or 0)
         if _sum_ts >= _LOAN_FIELD_TRUSTWORTHY_FROM:
             _our_loans_by_year = {}
@@ -2260,7 +2336,11 @@ def aggregate_filers(
         ce_monthly = monthly_sum(_cash_expend_only,   "cash_exp")
         ik_monthly = monthly_sum(filer_inkind,        "inkind_exp")
         lo_monthly = monthly_sum(_loans_out,          "loan_payments")
-        or_monthly = monthly_sum(filer_or,            "other_receipts")
+        # _or_for_coh, not filer_or. The client recomputes cash on hand from this
+        # timeline, so a frame that still carries the excluded exempt principal
+        # re-adds on render exactly what the server just took out — #99, which
+        # showed Ted Wheeler $726,880 against a stored $1,530.14.
+        or_monthly = monthly_sum(_or_for_coh,         "other_receipts")
         od_monthly = monthly_sum(filer_od,            "other_disbursements")
         # Balance adjustments were missing from the timeline entirely, so any
         # balance recomputed from it could not match ours no matter what else
@@ -2457,6 +2537,12 @@ def aggregate_filers(
             "orestar_year": orestar_year,
             "orestar_account_summary": _acct_summary,
             "orestar_yearly": _name_to_yearly.get(name, {}),
+            # Exempt loan principal held out of cash because ORESTAR's own
+            # statement records no receipts at all in those years. Carried per
+            # year so the site can say WHY a figure omits a transaction the
+            # committee plainly filed, rather than silently differing from a
+            # number the reader can look up.
+            "exempt_loans_excluded": _exempt_dropped,
             "yearly_discrepancies": yearly_discrepancies,
             # Candidate 2006 bases, on the pipeline's own definition, so the
             # rule ORESTAR actually applied can be identified by measurement
