@@ -24,6 +24,7 @@ from pathlib import Path
 import pandas as pd
 from rapidfuzz import fuzz, process as rfuzz_process
 
+import orestar_parse
 import supabase_sync
 
 logging.basicConfig(
@@ -40,6 +41,27 @@ log = logging.getLogger(__name__)
 ROOT          = Path(__file__).parent.parent
 RAW_DIR       = ROOT / "data" / "_raw"
 DATA_DIR      = ROOT / "data"
+# Account-summary fields that add up across committees. Used when one
+# canonical name covers several ORESTAR committees, so the comparison totals
+# describe the same set on both sides.
+# The three in-kind varieties ORESTAR recognises. All are non-cash and all
+# appear in BOTH its Total Contributions and Total Expenditures lines.
+INKIND_SUBTYPES = frozenset({
+    "In-Kind Contribution",
+    "In-Kind/Forgiven Account Payable",
+    "In-Kind/Forgiven Personal Expenditures",   # plural, as ORESTAR spells it
+})
+
+# Summaries scraped before the #90 parser fix report $0.00 in every loan field,
+# so the figure can only be trusted from this instant on. Used by the non-exempt
+# correction (#96) and the exempt one below.
+_LOAN_FIELD_TRUSTWORTHY_FROM = 1787500800.0
+
+_SUMMABLE = ("ending_cash_balance", "beginning_balance", "contributions",
+             "expenditures", "other_receipts", "other_disbursements",
+             "balance_adjustments", "inkind_contributions",
+             "inkind_expenditures", "loans_received", "loan_payments")
+
 AGG_DIR       = DATA_DIR / "aggregated"
 ENTITY_MAP    = Path(__file__).parent / "entity_map.json"
 REVIEW_QUEUE  = DATA_DIR / "review_queue.json"
@@ -450,6 +472,72 @@ def _save_transactions(df: pd.DataFrame) -> None:
 # Main processing pipeline
 # ---------------------------------------------------------------------------
 
+def _drop_superseded(df):
+    """Keep only the version of each transaction that ORESTAR still counts.
+
+    Two rules, and we had only the first:
+
+      1. An original replaced by an amendment is dropped. ORESTAR's Account
+         Summary counts the amendment, not the original, and the two arrive in
+         different fetch windows because they were filed on different dates.
+
+      2. Where a transaction was amended MORE THAN ONCE, only the newest
+         amendment survives. Every amendment points back at the original rather
+         than at the amendment before it, so rule 1 alone left a twice-amended
+         transaction with two live rows and a three-times-amended one with
+         three. Julie for County Commissioner holds three versions of the same
+         $167.41 contribution — same date, same amount, three filed dates — and
+         we counted all three. Dataset-wide: 160 stale rows, 68 committees,
+         $462,613, all of it inflating our side, which is the direction that
+         makes a committee look like it holds MORE than ORESTAR reports.
+
+    Lived in two places before this, copied, with the second labelled "same
+    logic as step 4b". They were the same, which is why fixing rule 2 in one
+    would have left the other wrong. Returns (df, removed_tran_ids) so callers
+    that sync to Postgres can delete what they dropped.
+    """
+    removed: set[str] = set()
+    orig_col = "original id" if "original id" in df.columns else None
+    status_col = "tran status" if "tran status" in df.columns else None
+    if not (orig_col and status_col and "tran_id" in df.columns):
+        return df, removed
+
+    # Rule 1 — originals replaced by an amendment.
+    amended = df[df[status_col] == "Amended"]
+    if not amended.empty:
+        superseded = set(
+            amended[orig_col].dropna().astype(str).str.strip()
+        ) & set(df["tran_id"].astype(str).str.strip())
+        if superseded:
+            before = len(df)
+            df = df[~df["tran_id"].astype(str).str.strip().isin(superseded)]
+            removed |= superseded
+            log.info("Removed %d superseded originals (replaced by amendments): "
+                     "%d → %d rows", before - len(df), before, len(df))
+
+    # Rule 2 — older amendments in a chain.
+    amended = df[df[status_col] == "Amended"]
+    if not amended.empty:
+        key = ["filer_id", orig_col] if "filer_id" in df.columns else [orig_col]
+        # Newest wins: filed date first, tran_id to break same-day ties.
+        order = [c for c in ("filed_date", "tran_id") if c in amended.columns]
+        ranked = amended.dropna(subset=[orig_col])
+        if order:
+            ranked = ranked.sort_values(order)
+        stale = set(
+            ranked.loc[ranked.duplicated(subset=key, keep="last"),
+                       "tran_id"].astype(str).str.strip()
+        )
+        if stale:
+            before = len(df)
+            df = df[~df["tran_id"].astype(str).str.strip().isin(stale)]
+            removed |= stale
+            log.info("Removed %d superseded amendments (kept the newest of each "
+                     "chain): %d → %d rows", before - len(df), before, len(df))
+
+    return df, removed
+
+
 def process() -> None:
     entity_map = load_entity_map()
 
@@ -467,22 +555,7 @@ def process() -> None:
         # Ensure amount is numeric for re-aggregation path
         df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0.0)
 
-        # Remove originals superseded by amendments (same logic as step 4b)
-        _orig_col = "original id" if "original id" in df.columns else None
-        _status_col = "tran status" if "tran status" in df.columns else None
-        if _orig_col and _status_col and "tran_id" in df.columns:
-            amended = df[df[_status_col] == "Amended"]
-            if not amended.empty:
-                superseded_ids = set(
-                    amended[_orig_col].dropna().astype(str).str.strip()
-                ) & set(df["tran_id"].astype(str).str.strip())
-                if superseded_ids:
-                    before = len(df)
-                    df = df[~df["tran_id"].astype(str).str.strip().isin(superseded_ids)]
-                    log.info(
-                        "Removed %d superseded originals (replaced by amendments): %d → %d rows",
-                        before - len(df), before, len(df),
-                    )
+        df, _ = _drop_superseded(df)
     else:
         # ── 2. Type coercion ─────────────────────────────────────────────────
         for col in ["tran_id", "contributor_payee", "filer", "contributor_type",
@@ -536,23 +609,7 @@ def process() -> None:
         # filed on different dates (hence fetched in different weekly windows).
         # ORESTAR's Account Summary counts only the latest version, so we must
         # drop the originals to avoid double-counting.
-        superseded_ids: set[str] = set()
-        _orig_col = "original id" if "original id" in df.columns else None
-        _status_col = "tran status" if "tran status" in df.columns else None
-        if _orig_col and _status_col and "tran_id" in df.columns:
-            amended = df[df[_status_col] == "Amended"]
-            if not amended.empty:
-                # Collect tran_ids of originals that have been superseded
-                superseded_ids = set(
-                    amended[_orig_col].dropna().astype(str).str.strip()
-                ) & set(df["tran_id"].astype(str).str.strip())
-                if superseded_ids:
-                    before = len(df)
-                    df = df[~df["tran_id"].astype(str).str.strip().isin(superseded_ids)]
-                    log.info(
-                        "Removed %d superseded originals (replaced by amendments): %d → %d rows",
-                        before - len(df), before, len(df),
-                    )
+        df, superseded_ids = _drop_superseded(df)
 
         # ── 5. Name normalization + fuzzy dedup ───────────────────────────────
         all_names = (
@@ -599,23 +656,34 @@ def process() -> None:
             _changed = df[df["tran_id"].astype(str).str.strip().isin(_new_ids)]
             supabase_sync.upsert_transactions(_changed)
             supabase_sync.delete_transactions(superseded_ids)
+            # Assign donor_id to the freshly-synced rows (committee-id or exact
+            # alias lookup; unknown names become provisional donors until the
+            # weekly full resolution).
+            if supabase_sync.sync_enabled():
+                import resolve_donors
+                resolve_donors.assign_incremental()
         except Exception as e:
             log.warning("transaction sync failed: %s", e)
 
     # ── 9. Aggregate JSON files ───────────────────────────────────────────────
     aggregate(df)
 
-    # ── 10. Delete raw Excel files (keep filer-targeted for backfill resume) ──
+    # ── 10. Delete raw Excel files ────────────────────────────────────────────
+    #
+    # Filer-targeted files used to be kept here so a backfill could resume from
+    # them. They were committed to git to survive between runners, and git keeps
+    # every version of every one forever: 10,205 files and an 80 GB repository,
+    # against a 100 GB hard limit that would have stopped every push at once.
+    #
+    # Nothing needs them now. The rows are in the year shards and in Postgres,
+    # and the fetcher decides what to skip from ORESTAR's own record counts plus
+    # what the database holds — both of which outlive any file on disk.
     deleted = 0
-    kept = 0
     for f in RAW_DIR.glob("*.xlsx"):
-        if f.name.startswith("filer"):
-            kept += 1
-        else:
-            f.unlink()
-            deleted += 1
-    if deleted or kept:
-        log.info("Deleted %d raw Excel files, kept %d filer-targeted files", deleted, kept)
+        f.unlink()
+        deleted += 1
+    if deleted:
+        log.info("Deleted %d raw Excel files (merged and synced)", deleted)
 
 
 # ---------------------------------------------------------------------------
@@ -696,9 +764,26 @@ def aggregate(df: pd.DataFrame) -> None:
     expenditures    = df[ttype == "E"]
     other_receipts  = df[ttype == "OR"]                    # Other Receipt only (matches ORESTAR "Other Receipts" line)
     other_disburse  = df[ttype == "OD"]                    # Other Disbursement only (matches ORESTAR "Other Disbursements" line)
-    # Note: types O (Account Payable Rescinded, Cash Balance Adjustment, Loan Forgiven)
-    # and OA (Unexpended Agent Balance, Misc Account Receivable) are non-cash accounting
-    # entries that ORESTAR does NOT include in its Other Receipts or COH calculation.
+    # Note: types O (Account Payable Rescinded, Loan Forgiven) and OA (Unexpended
+    # Agent Balance, Misc Account Receivable) are non-cash accounting entries
+    # that ORESTAR does NOT include in its Other Receipts or COH calculation.
+    #
+    # "Cash Balance Adjustment" is the exception, and excluding it was wrong.
+    # ORESTAR's account summary carries a Balance Adjustments line that lands
+    # between the two subtotals and moves the ending balance directly, and
+    # these rows are its transaction-level source: summed per filer-year they
+    # reproduce that line exactly in 1,092 of 1,629 cases (67%), and no other
+    # sub_type or combination comes close.
+    #
+    # Leaving it out cost a permanent, carried-forward error. Oregon Realtors'
+    # 2015 adjustment is -$27,432.32 and its 2015 discrepancy was +$27,432 to
+    # the dollar; from 2017 on, its yearly contributions and expenditures match
+    # ORESTAR exactly while the balance stays off by a constant. 205 committees
+    # are explained by this alone.
+    #
+    # Taken from transactions rather than from the scraped summary line on
+    # purpose: cash on hand is calculated, and ORESTAR stays the check.
+    balance_adjust  = df[(ttype == "O") & (df["sub_type"].str.strip() == "Cash Balance Adjustment")]
 
     # Separate cash contributions from in-kind.
     # IMPORTANT: Use exact "In-Kind Contribution" match only. Other sub_types containing
@@ -707,12 +792,16 @@ def aggregate(df: pd.DataFrame) -> None:
     # as they are not standard in-kind contributions in ORESTAR's methodology.
     # Using str.contains("In-Kind") was a bug that inflated expenditures by $5.2M across
     # 1,483 filers without a matching contribution offset.
-    inkind_mask     = contributions["sub_type"] == "In-Kind Contribution"
+    # All three in-kind varieties, not just the plain one. This drives both the
+    # separate in-kind metric and, by inversion, the cash-only contribution
+    # figures — forgiven payables and forgiven personal expenditures are no
+    # more cash than a donated banner is.
+    inkind_mask     = contributions["sub_type"].isin(INKIND_SUBTYPES)
     cash_contribs   = contributions[~inkind_mask]
     inkind_contribs = contributions[inkind_mask]
 
     # ORESTAR-matching: Cash Contributions = Cash Contribution + In-Kind Contribution
-    _orestar_contrib_mask = contributions["sub_type"].isin({"Cash Contribution", "In-Kind Contribution"})
+    _orestar_contrib_mask = contributions["sub_type"].isin({"Cash Contribution"} | set(INKIND_SUBTYPES))
     _orestar_contribs = contributions[_orestar_contrib_mask]
     # ORESTAR-matching: Cash Expenditures = Cash Expenditure + In-Kind mirrored
     _cash_expend_mask = expenditures["sub_type"] == "Cash Expenditure"
@@ -721,9 +810,15 @@ def aggregate(df: pd.DataFrame) -> None:
 
     # ── summary.json ─────────────────────────────────────────────────────────
     summary = {
-        "total_contributions":  round(_orestar_contribs["amount"].sum(), 2),
+        # Contributions are CASH ONLY app-wide; in-kind is reported separately
+        # as total_inkind and never folded in. ORESTAR's own "Cash
+        # Contributions" line does include in-kind, so these figures will
+        # differ from ORESTAR's published summary by exactly total_inkind —
+        # the ORESTAR reconciliation below uses its own _orestar_* frames and
+        # is unaffected.
+        "total_contributions":  round(cash_contribs["amount"].sum(), 2),
         "total_inkind":         round(inkind_contribs["amount"].sum(), 2),
-        "total_expenditures":   round(_cash_expend_global["amount"].sum() + _inkind_global_amount, 2),
+        "total_expenditures":   round(_cash_expend_global["amount"].sum(), 2),
         "total_other_receipts":  round(other_receipts["amount"].sum(), 2),
         "total_other_disburse":  round(other_disburse["amount"].sum(), 2),
         "total_transactions":   int(len(df)),
@@ -891,7 +986,8 @@ def aggregate(df: pd.DataFrame) -> None:
 
     # ── per-filer index + detail files ───────────────────────────────────────
     global_coh_data = aggregate_filers(df, contributions, inkind_contribs, expenditures,
-                                       other_receipts, other_disburse, filer_col, contrib_col)
+                                       other_receipts, other_disburse, balance_adjust,
+                                       filer_col, contrib_col)
 
     # Update summary.json with correct global cash-on-hand (sum of per-filer COH)
     summary["global_cash_on_hand"] = global_coh_data["global_cash_on_hand"]
@@ -901,12 +997,71 @@ def aggregate(df: pd.DataFrame) -> None:
     log.info("Aggregation complete. JSON files written to %s", AGG_DIR)
 
 
+def _latest_year_summaries(yearly: dict, filer_ids: list[str]) -> dict:
+    """Newest year's account summary per filer, keyed as the balance
+    comparison expects.
+
+    The yearly file names fields as ORESTAR labels them (contributions,
+    expenditures, other_receipts); the balance comparison inherited
+    orestar_-prefixed names from the scraper it replaces. Mapped here so the
+    consumers stay untouched.
+    """
+    out: dict[str, dict] = {}
+    for fid in filer_ids:
+        years = (yearly.get(str(fid)) or {}).get("years", {})
+        if not years:
+            continue
+        yr = max(years)                      # string years sort correctly
+        y = years[yr]
+        out[str(fid)] = {
+            "year": int(yr),
+            # When this summary was captured, carried down from the FILER level.
+            #
+            # The yearly file stores ts once per filer — {"years": {...}, "ts": …}
+            # — not inside each year, so lifting only the year dict dropped it and
+            # `orestar_info.get("ts", 0)` found nothing. 7,297 of 7,299 account
+            # summaries reached the site with no timestamp at all.
+            #
+            # That is not cosmetic: without it there is no way to tell "ORESTAR's
+            # figure is older than our transactions" from "our figures are wrong",
+            # which is exactly the question the 2026 balance divergence turns on.
+            # The popover already tries to show "Scraped: …" and has been printing
+            # the epoch.
+            "ts": float((yearly.get(str(fid)) or {}).get("ts") or 0),
+            "beginning_balance": float(y.get("beginning_balance") or 0),
+            "ending_cash_balance": float(y.get("ending_cash_balance") or 0),
+            "orestar_contributions": float(y.get("contributions") or 0),
+            "orestar_expenditures": float(y.get("expenditures") or 0),
+            "orestar_other_receipts": float(y.get("other_receipts") or 0),
+            "orestar_other_disbursements": float(y.get("other_disbursements") or 0),
+            "balance_adjustments": float(y.get("balance_adjustments") or 0),
+            "inkind_contributions": float(y.get("inkind_contributions") or 0),
+            "inkind_expenditures": float(y.get("inkind_expenditures") or 0),
+            "loans_received": float(y.get("loans_received") or 0),
+            "loans_received_exempt": float(y.get("loans_received_exempt") or 0),
+            "loan_payments": float(y.get("loan_payments") or 0),
+            "loan_payments_exempt": float(y.get("loan_payments_exempt") or 0),
+            "accounts_receivable": float(y.get("accounts_receivable") or 0),
+            "accounts_payable": float(y.get("accounts_payable") or 0),
+            "scrape_ts": (yearly.get(str(fid)) or {}).get("ts", 0),
+        }
+    return out
+
+
 def scrape_account_summaries(
     filer_ids: list[str],
     *,
     cache_path: Path = DATA_DIR / "orestar_cash_balances.json",
     max_workers: int = 10,
-    max_age_days: int = 1,
+    # A full refresh is ~7,245 live page fetches, about 58 minutes. At a 1-day
+    # TTL the daily job re-scraped all of them on any day the weekly scrapers
+    # had not just run, which does not fit in its 60-minute budget — the runs
+    # on 22, 24, 25 and 27 July all died here, mid-scrape.
+    #
+    # Nothing needs it daily. These figures are the CHECK that cash-on-hand is
+    # compared against, never an input to it, and the weekly filer-metadata and
+    # earliest-balances jobs already own refreshing them.
+    max_age_days: int = 7,
 ) -> dict[str, dict]:
     """Fetch full Account Summary from ORESTAR publicAccountSummary for each filer ID.
 
@@ -952,21 +1107,12 @@ def scrape_account_summaries(
         def _parse_dollar(html: str, label: str) -> float | None:
             """Extract a dollar amount following a label in ORESTAR HTML.
 
-            Handles positive ($X,XXX.XX) and negative (- $X,XXX.XX) formats.
+            The old docstring here called ($X,XXX.XX) the POSITIVE format. It
+            is ORESTAR's negative format — accounting parentheses — and reading
+            it as positive is what flipped the sign on every committee in the
+            red. See scraper/orestar_parse.py.
             """
-            # Pattern: label ... optional negative sign ... $ amount
-            pat = re.compile(
-                re.escape(label) + r".*?"
-                r"(-\s*)?\$\s*([\d,]+\.\d{2})",
-                re.DOTALL,
-            )
-            m = pat.search(html)
-            if not m:
-                return None
-            val = float(m.group(2).replace(",", ""))
-            if m.group(1) and m.group(1).strip() == "-":
-                val = -val
-            return val
+            return orestar_parse.parse_dollar(html, label)
 
         def _fetch_one(fid: str) -> tuple[str, dict | None]:
             url = (
@@ -1064,6 +1210,7 @@ def aggregate_filers(
     expenditures: pd.DataFrame,    # E type
     other_receipts: pd.DataFrame,  # OR/O/OA type (e.g. Return/Refund, Misc Receipt)
     other_disburse: pd.DataFrame,  # OD type (e.g. Misc Other Disbursement)
+    balance_adjust: pd.DataFrame,  # type O "Cash Balance Adjustment" only
     filer_col: str,
     contrib_col: str,
 ) -> None:
@@ -1126,6 +1273,7 @@ def aggregate_filers(
     expend_groups   = expenditures.groupby(filer_col)
     or_groups       = other_receipts.groupby(filer_col)
     od_groups       = other_disburse.groupby(filer_col)
+    ba_groups       = balance_adjust.groupby(filer_col)
     all_groups      = df.groupby(filer_col)
 
     def get_group(groups, name):
@@ -1140,22 +1288,103 @@ def aggregate_filers(
     # Build canonical-name → filer-id mapping so we can look up ORESTAR data.
     _filer_id_col = "filer id" if "filer id" in df.columns else None
     _orestar_data: dict[str, dict] = {}  # canonical name → full summary dict
+    # Loaded here, ahead of the first use. The balance comparison below now
+    # derives from this file, so reading it later left _yearly_summaries
+    # unbound and killed the whole run:
+    #   UnboundLocalError: cannot access local variable '_yearly_summaries'
+    _yearly_path = DATA_DIR / "orestar_yearly_summaries.json"
+    _yearly_summaries: dict[str, dict] = {}  # filer_id → {years: {yr: {...}}, ts}
+    if _yearly_path.exists():
+        with open(_yearly_path) as f:
+            _yearly_summaries = json.load(f)
+        log.info("Loaded yearly ORESTAR summaries for %d filers", len(_yearly_summaries))
+
     if _filer_id_col:
-        _name_to_fid: dict[str, str] = (
+        # EVERY filer id a canonical name covers, not just one.
+        #
+        # 265 canonical names span more than one ORESTAR committee — 554
+        # committees, 106,337 rows, $133M — usually because the committees
+        # differ only in punctuation ("Yes! Keep Our Groceries Tax Free!" vs
+        # "...Tax-Free!"). Aggregation groups by canonical NAME, so those rows
+        # are summed together; ORESTAR reports per committee.
+        #
+        # Keeping one id via drop_duplicates compared our merged totals against
+        # a single committee's summary, which reads as a huge overage that
+        # looks exactly like ORESTAR under-reporting. That one name was 78% of
+        # 2018's entire apparent gap: ours $8,632,365 against ORESTAR's
+        # $6,362,423, purely because the other committee's $4.6M was folded in
+        # on our side only.
+        _name_to_fids: dict[str, list[str]] = (
             df[[filer_col, _filer_id_col]]
             .dropna(subset=[_filer_id_col])
             .assign(_fid=lambda x: x[_filer_id_col].astype(str).str.strip())
             .query("_fid != ''")
-            .drop_duplicates(subset=[filer_col], keep="last")
-            .set_index(filer_col)["_fid"]
+            .groupby(filer_col)["_fid"]
+            .agg(lambda v: sorted(set(v)))
             .to_dict()
         )
-        unique_fids = sorted(set(_name_to_fid.values()))
-        _fid_to_summary = scrape_account_summaries(unique_fids)
-        # Map canonical name → full ORESTAR account summary
-        for canon_name, fid in _name_to_fid.items():
-            if fid in _fid_to_summary:
-                _orestar_data[canon_name] = _fid_to_summary[fid]
+        # Kept for callers that only need a representative id.
+        _name_to_fid: dict[str, str] = {n: ids[-1] for n, ids in _name_to_fids.items()}
+        unique_fids = sorted({f for ids in _name_to_fids.values() for f in ids})
+        # Derived from the yearly summaries rather than scraped again.
+        #
+        # Two caches were reading the SAME ORESTAR page. scrape_account_summaries
+        # took the current year into orestar_cash_balances.json;
+        # fetch_earliest_balances takes every year into
+        # orestar_yearly_summaries.json. The yearly file is a strict superset —
+        # 7,518 filers against 7,383, and nothing in the other file is absent
+        # from it.
+        #
+        # Keeping both meant they drifted. The cash-balances cache was last
+        # written 2026-03-26..04-04 while the yearly file is current, so every
+        # balance comparison — the whole discrepancy tab — was measuring today's
+        # transactions against ORESTAR figures four months old. 359 of 3,666
+        # same-year balances disagreed purely from that lag.
+        #
+        # It also carried the in-kind bug fixed in #56: it asks for "In-Kind
+        # Contributions", a label the page never prints, so its in-kind fields
+        # are zero for every filer.
+        #
+        # Dropping it removes ~7,245 page fetches (about 58 minutes) from the
+        # daily refresh, which is the step that used to blow the job's budget.
+        _fid_to_summary = _latest_year_summaries(_yearly_summaries, unique_fids)
+        # Map canonical name → ORESTAR account summary, SUMMED over every
+        # committee the name covers, so both sides of the comparison describe
+        # the same set of committees. Single-committee names are unaffected.
+        _partial_merge = 0
+        for canon_name, fids in _name_to_fids.items():
+            parts = [_fid_to_summary[f] for f in fids if f in _fid_to_summary]
+            if not parts:
+                continue
+            # A name's transactions are summed across every committee it covers,
+            # so the ORESTAR side must cover the same committees or the two are
+            # not comparable. Falling back to whichever summaries happen to
+            # exist reports the missing committee's entire volume as a
+            # discrepancy: "Oregon People's Rebate" spans filers 20684 and
+            # 22517, only 22517 has a summary, and the comparison showed a
+            # $251,794 gap that was purely 20684's own contributions. Our 42
+            # rows for 22517 matched ORESTAR to the cent.
+            #
+            # 36 of 265 multi-committee names are in this state. Skipping is
+            # the honest outcome: no comparison beats a false one, and these
+            # committees simply go unchecked until their summaries are scraped.
+            if len(parts) < len(fids):
+                _partial_merge += 1
+                log.debug("Skipping ORESTAR comparison for %s — %d of %d committees "
+                          "have summaries", canon_name, len(parts), len(fids))
+                continue
+            if len(parts) == 1:
+                _orestar_data[canon_name] = parts[0]
+                continue
+            merged = dict(parts[0])
+            for k in _SUMMABLE:
+                merged[k] = round(sum(float(p.get(k) or 0) for p in parts), 2)
+            merged["merged_filer_ids"] = fids     # so the join is auditable
+            _orestar_data[canon_name] = merged
+        if _partial_merge:
+            log.warning("%d canonical names skipped: they span several committees but only "
+                        "some have ORESTAR summaries — scrape the rest to compare them",
+                        _partial_merge)
         log.info("ORESTAR account summaries mapped for %d / %d filers", len(_orestar_data), len(all_filer_names))
 
     # ── Load earliest-year beginning balances (from Playwright scraper) ──────
@@ -1169,22 +1398,46 @@ def aggregate_filers(
         log.warning("No earliest_balances.json found — beginning balances will default to $0")
 
     # Load per-year ORESTAR summaries
-    _yearly_path = DATA_DIR / "orestar_yearly_summaries.json"
-    _yearly_summaries: dict[str, dict] = {}  # filer_id → {years: {yr: {...}}, ts}
-    if _yearly_path.exists():
-        with open(_yearly_path) as f:
-            _yearly_summaries = json.load(f)
-        log.info("Loaded yearly ORESTAR summaries for %d filers", len(_yearly_summaries))
 
     # Build canonical-name → earliest balance mapping
     _name_to_earliest: dict[str, dict] = {}
     _name_to_yearly: dict[str, dict] = {}  # canonical name → {yr: summary}
     if _filer_id_col:
-        for canon_name, fid in _name_to_fid.items():
-            if fid in _earliest_balances:
-                _name_to_earliest[canon_name] = _earliest_balances[fid]
-            if fid in _yearly_summaries:
-                _name_to_yearly[canon_name] = _yearly_summaries[fid].get("years", {})
+        for canon_name, fids in _name_to_fids.items():
+            # Opening balance: sum across the committees the name covers, since
+            # the rolling calculation sums their transactions.
+            # Same completeness rule as the account summaries above: an anchor
+            # summed over some of a name's committees, against transactions
+            # summed over all of them, understates the opening balance by the
+            # missing committees' share and carries that error forward for ever.
+            begins = [_earliest_balances[f] for f in fids if f in _earliest_balances]
+            if begins and len(begins) == len(fids):
+                if len(begins) == 1:
+                    _name_to_earliest[canon_name] = begins[0]
+                else:
+                    _name_to_earliest[canon_name] = {
+                        "earliest_year": min(b.get("earliest_year", 9999) for b in begins),
+                        "beginning_balance": round(
+                            sum(float(b.get("beginning_balance") or 0) for b in begins), 2),
+                        # Only trustworthy if EVERY part reached its first statement.
+                        "reached_earliest": all(b.get("reached_earliest") for b in begins),
+                    }
+            # Yearly summaries: add year by year across the same committees.
+            yearlies = [_yearly_summaries[f].get("years", {}) for f in fids
+                        if f in _yearly_summaries]
+            if not yearlies or len(yearlies) < len(fids):
+                continue          # incomplete coverage — see the note above
+            if len(yearlies) == 1:
+                _name_to_yearly[canon_name] = yearlies[0]
+                continue
+            combined: dict[str, dict] = {}
+            for yr in {y for d in yearlies for y in d}:
+                rows = [d[yr] for d in yearlies if yr in d]
+                base = dict(rows[0])
+                for k in _SUMMABLE:
+                    base[k] = round(sum(float(r.get(k) or 0) for r in rows), 2)
+                combined[yr] = base
+            _name_to_yearly[canon_name] = combined
 
     # Load filer metadata (party, office, committee type) from scraper cache
     _filer_metadata_path = DATA_DIR / "filer_metadata.json"
@@ -1226,6 +1479,7 @@ def aggregate_filers(
         filer_expend  = get_group(expend_groups,  name)
         filer_or      = get_group(or_groups,      name)
         filer_od      = get_group(od_groups,      name)
+        filer_ba      = get_group(ba_groups,      name)
         filer_all     = get_group(all_groups,     name)
 
         # ── ORESTAR-matching line item definitions (empirically verified) ──────
@@ -1241,14 +1495,74 @@ def aggregate_filers(
         #            - CashExpenditure - LoanPayments - OtherDisbursements
 
         # Stat card / ORESTAR-matching totals
-        _CONTRIB_TYPES = {"Cash Contribution", "In-Kind Contribution"}
+        # These two frames exist ONLY to reconcile against ORESTAR's account
+        # summary, so they must mirror ORESTAR's own arithmetic exactly:
+        #
+        #   Total Contributions = Cash Contributions
+        #                       + Loans Received (non-exempt)
+        #                       + In-Kind
+        #   Total Expenditures  = Cash Expenditures
+        #                       + Loan Payments (non-exempt)
+        #                       + In-Kind
+        #
+        # Both were short. Contributions omitted non-exempt loans, so any
+        # committee with a loan looked to be missing exactly the loan amount —
+        # Oregonians Are Ready showed "missing $1,000,000" in 2024 while our
+        # rows summed to ORESTAR's $1,114,500 to the cent. Expenditures counted
+        # only cash, omitting both loan payments and in-kind.
+        #
+        # Measured over 25,451 committee-years, matching ORESTAR exactly:
+        #   contributions  78.6% -> 86.5%
+        #   expenditures   55.7% -> 90.3%
+        #
+        # This is a DIAGNOSTIC, not the balance. Cash on hand was never
+        # affected: _COH_C_TYPES/_COH_E_TYPES already carried non-exempt loans
+        # and correctly leave in-kind out of a cash figure. What was wrong was
+        # the instrument used to decide where money is missing — and it sent
+        # this investigation after $15M of gaps that were never real.
+        # ORESTAR recognises THREE in-kind varieties, not one. Its Total
+        # Contributions and Total Expenditures lines both count all of them,
+        # and each lands on both sides — which is why the omission produced
+        # symmetric gaps, equal on contributions and expenditures.
+        #
+        # Friends of Sam Carpenter 2018 is the clean example: short exactly
+        # $140,060.27 on each side, matching that year's
+        # In-Kind/Forgiven Account Payable ($75,646.13) plus
+        # In-Kind/Forgiven Personal Expenditures ($64,414.14).
+        #
+        # Note the plural on the second. An earlier check of mine used the
+        # singular, matched nothing, and made this look worth one percentage
+        # point rather than six.
+        _CONTRIB_TYPES = ({"Cash Contribution", "Loan Received (Non-Exempt)"}
+                          | set(INKIND_SUBTYPES))
+        _EXPEND_TYPES  = {"Cash Expenditure", "Loan Payment (Non-Exempt)"}
         _orestar_contrib = filer_contrib[filer_contrib["sub_type"].isin(_CONTRIB_TYPES)] if not filer_contrib.empty else filer_contrib
-        _cash_expend_only = filer_expend[filer_expend["sub_type"] == "Cash Expenditure"] if not filer_expend.empty else filer_expend
+        # In-kind sits under tran_type C in the source data, so ORESTAR's
+        # expenditure total is rebuilt from the expenditure rows plus the
+        # in-kind frame.
+        # Cash expenditures plus non-exempt loan payments — and deliberately
+        # NOT in-kind, which is added downstream where our_e is assembled:
+        #     our_e = _yearly_cash_exp + _yearly_inkind
+        #
+        # In-kind genuinely belongs in this comparison; ORESTAR's Total
+        # Expenditures includes it, confirmed against freshly parsed summaries
+        # (Yes on 117 2024: cash+loan 3,957,175.42 + in-kind 5,467,744.61 =
+        # 9,424,920.03, ORESTAR's figure to the cent). It was already being
+        # added there. Folding it in here as well counted it TWICE, storing
+        # 14,892,664.64 for that committee-year and inflating 9,155
+        # committee-years by $179,850,067 in total.
+        _cash_expend_only = (filer_expend[filer_expend["sub_type"].isin(_EXPEND_TYPES)]
+                             if not filer_expend.empty else filer_expend)
         _inkind_amount = round(float(filer_inkind["amount"].sum()) if not filer_inkind.empty else 0.0, 2)
 
-        total_in    = round(float(_orestar_contrib["amount"].sum()) if not _orestar_contrib.empty else 0.0, 2)
+        # Cash only — in-kind is a separate, distinct metric (total_inkind).
+        # _orestar_contrib / _yearly_orestar_c keep the in-kind-inclusive
+        # definition for the ORESTAR reconciliation further down.
+        _cash_contrib_only = (filer_contrib[filer_contrib["sub_type"] != "In-Kind Contribution"]
+                              if not filer_contrib.empty else filer_contrib)
+        total_in    = round(float(_cash_contrib_only["amount"].sum()) if not _cash_contrib_only.empty else 0.0, 2)
         total_inkind = _inkind_amount
-        total_out   = round(float(_cash_expend_only["amount"].sum()) if not _cash_expend_only.empty else 0.0, 2) + _inkind_amount
+        total_out   = round(float(_cash_expend_only["amount"].sum()) if not _cash_expend_only.empty else 0.0, 2)
         total_or    = round(float(filer_or["amount"].sum()) if not filer_or.empty else 0.0, 2)
         total_od    = round(float(filer_od["amount"].sum()) if not filer_od.empty else 0.0, 2)
         tran_count  = int(len(filer_all))
@@ -1258,14 +1572,93 @@ def aggregate_filers(
         _COH_E_TYPES = {"Cash Expenditure", "Loan Payment (Non-Exempt)"}
         _c_for_coh = filer_contrib[filer_contrib["sub_type"].isin(_COH_C_TYPES)] if not filer_contrib.empty else filer_contrib
         _e_for_coh = filer_expend[filer_expend["sub_type"].isin(_COH_E_TYPES)] if not filer_expend.empty else filer_expend
+        # Exempt loans, for years where ORESTAR records no money arriving at all.
+        #
+        # #96 made ORESTAR's own reported figure decide for NON-exempt loans,
+        # which are type C. Exempt loans are type OR and passed through here
+        # untouched — which is how Committee for SAIF Keeping came to show
+        # $665,242.33 of cash on hand, 32% of every flagged dollar on the
+        # dashboard, for a closed committee whose 2006 statement reads $173.13
+        # in, $45.00 spent, $128.13 out.
+        #
+        # ORESTAR's `Loans Received (exempt)` line cannot decide this the way
+        # the non-exempt line decides #96: it reads $0.00 on all but three
+        # records in the entire dataset, so a zero there carries no
+        # information. Yes! Keep Our Groceries Tax Free 2018 is the proof — that
+        # line reads $0.00 while ORESTAR plainly counted the money, reporting
+        # $490,000 of loans received and an ending balance that only reconciles
+        # with our $465,000 exempt loan left IN. Trusting the printed zero would
+        # have broken that committee by $465,000 to fix others.
+        #
+        # What sets SAIF Keeping apart is not that one line but that EVERY
+        # inflow line reads zero: no contributions, no loans, no other receipts.
+        # ORESTAR recorded nothing arriving that year, so counting an arrival
+        # contradicts the statement outright instead of disagreeing with it
+        # about a category. Measured across every committee-year holding an
+        # exempt loan rather than only the flagged ones: 2 fixed ($667,735), 0
+        # broken, 52 left alone.
+        #
+        # The second guard matters more than the case count suggests. A summary
+        # that failed to parse is also all zeros, and is indistinguishable from
+        # one that genuinely recorded no inflow — so require some non-zero
+        # figure elsewhere on the record as evidence it parsed at all. No
+        # committee-year needs it today; one blank scrape and it is the only
+        # thing standing between a parse failure and deleted transactions.
+        #
+        # Filtering the frame here, rather than adjusting a total afterwards,
+        # is deliberate: the balance, the as-of comparison, the ORESTAR
+        # reconciliation and the timeline all derive from _or_for_coh, and #99
+        # was the lesson in what happens when a correction reaches some of those
+        # and not the rest.
         _or_for_coh = filer_or  # All type OR
+        _exempt_dropped: dict[str, float] = {}
+        _oi_early = _orestar_data.get(name)
+        if (not filer_or.empty and "year" in filer_or.columns
+                and "sub_type" in filer_or.columns
+                and float((_oi_early or {}).get("ts") or 0) >= _LOAN_FIELD_TRUSTWORTHY_FROM):
+            _no_inflow_years: set[int] = set()
+            for _yr_s, _ty in (_name_to_yearly.get(name, {}) or {}).items():
+                if not str(_yr_s).isdigit() or not isinstance(_ty, dict):
+                    continue
+                def _amt_of(_k, _row=_ty):
+                    return abs(float(_row.get(_k) or 0.0))
+                _inflow = (_amt_of("contributions") + _amt_of("loans_received")
+                           + _amt_of("loans_received_exempt") + _amt_of("other_receipts"))
+                _parsed = (_amt_of("beginning_balance") + _amt_of("ending_cash_balance")
+                           + _amt_of("expenditures") + _amt_of("other_disbursements"))
+                if _inflow == 0.0 and _parsed > 0.0:
+                    _no_inflow_years.add(int(_yr_s))
+            if _no_inflow_years:
+                _mask = ((filer_or["sub_type"] == "Loan Received (Exempt)")
+                         & (filer_or["year"].isin(_no_inflow_years)))
+                if bool(_mask.any()):
+                    for _y, _a in filer_or[_mask].groupby("year")["amount"].sum().items():
+                        _exempt_dropped[str(int(_y))] = round(float(_a), 2)
+                    _or_for_coh = filer_or[~_mask]
+                    # Recomputed so the stored lifetime figure describes the same
+                    # money the timeline and the balance do.
+                    total_or = round(float(_or_for_coh["amount"].sum()), 2)
+                    log.info(
+                        "%s: excluding %s of exempt loans from cash (%s) — "
+                        "ORESTAR's statement records no receipts at all in those years",
+                        name,
+                        f"${sum(_exempt_dropped.values()):,.2f}",
+                        ", ".join(sorted(_exempt_dropped)),
+                    )
 
         # Calculate net transactions per year for COH computation
-        def _yearly_net(contrib_df, expend_df, or_df, od_df):
-            """Return {year_str: net_cash_flow} for each year with transactions."""
+        def _yearly_net(contrib_df, expend_df, or_df, od_df, ba_df):
+            """Return {year_str: net_cash_flow} for each year with transactions.
+
+            Balance adjustments carry their own sign already (they are usually
+            negative), so they are added rather than subtracted — the same way
+            ORESTAR's summary adds its Balance Adjustments line to reach the
+            ending balance.
+            """
             nets: dict[str, float] = {}
             all_frames = []
-            for frame, sign in [(contrib_df, 1), (or_df, 1), (expend_df, -1), (od_df, -1)]:
+            for frame, sign in [(contrib_df, 1), (or_df, 1), (expend_df, -1), (od_df, -1),
+                                (ba_df, 1)]:
                 if not frame.empty and "year" in frame.columns:
                     yearly = frame.groupby("year")["amount"].sum()
                     for yr, amt in yearly.items():
@@ -1273,15 +1666,176 @@ def aggregate_filers(
                         nets[yr_s] = nets.get(yr_s, 0.0) + sign * float(amt)
             return nets
 
-        yearly_nets = _yearly_net(_c_for_coh, _e_for_coh, _or_for_coh, filer_od)
+        yearly_nets = _yearly_net(_c_for_coh, _e_for_coh, _or_for_coh, filer_od, filer_ba)
+
+        # The same nets, attributed by FILING year instead of transaction year.
+        #
+        # ORESTAR's annual statement covers what was FILED in that period, and
+        # for most years filing follows activity closely enough that the two
+        # bases agree. 2006 is the exception and a large one: ORESTAR launched,
+        # committees entered years of accumulated activity, and essentially all
+        # of it carries a 2006 transaction date with a 2007 filing date. Every
+        # one of Citizens for Mannix's 2006 loans -- $309,000 across five rows
+        # -- was filed in January 2007.
+        #
+        # Measured over the 73 committees that diverge in 2006: attributing by
+        # transaction date reconciles NONE of them and leaves $2,872,708;
+        # attributing by filing date reconciles 22 exactly and leaves $200,041.
+        #
+        # This is NOT used as the primary basis, because the same measurement
+        # says filing date is worse in most other years -- 2025 goes from $18K
+        # to $147K, 2026 from $1.0M to $1.3M. It is computed alongside so a
+        # divergence that DISAPPEARS under the filing basis can be recognised
+        # for what it is: a period-boundary effect, not missing data.
+        # Candidate rules for which rows ORESTAR's 2006 statement counts.
+        #
+        # Computed HERE, from the same frames and the same sign convention as
+        # yearly_nets, because every attempt to reimplement this net in ad-hoc
+        # SQL has produced a different number — once by $457,723 on a single
+        # committee, and once making a diverging committee appear to reconcile.
+        # A candidate basis is only meaningful if it differs from the live
+        # figure in the basis alone.
+        #
+        # 2006 is the only year in question: our figures match ORESTAR from
+        # 2007 on, often to within tens of dollars across a hundred committees.
+        def _net_2006(row_filter):
+            total = 0.0
+            for _f, _sign in [(_c_for_coh, 1), (_or_for_coh, 1), (_e_for_coh, -1),
+                              (filer_od, -1), (filer_ba, 1)]:
+                if _f.empty or "year" not in _f.columns:
+                    continue
+                _g = _f[_f["year"] == 2006]
+                if _g.empty:
+                    continue
+                _g = row_filter(_g)
+                if _g is None or _g.empty:
+                    continue
+                total += _sign * float(_g["amount"].sum())
+            return round(total, 2)
+
+        def _filed_by(frame, cutoff):
+            if "filed_date" not in frame.columns:
+                return None
+            _fd = pd.to_datetime(frame["filed_date"], errors="coerce")
+            return frame[_fd.notna() & (_fd <= pd.Timestamp(cutoff))]
+
+        basis_2006 = {
+            "tran_2006": _net_2006(lambda g: g),
+            "tran_2006_filed_by_2006": _net_2006(lambda g: _filed_by(g, "2006-12-31")),
+            "tran_2006_filed_by_2007_01_31": _net_2006(lambda g: _filed_by(g, "2007-01-31")),
+            "tran_2006_filed_by_2007_06_30": _net_2006(lambda g: _filed_by(g, "2007-06-30")),
+            "tran_2006_filed_by_2007_12_31": _net_2006(lambda g: _filed_by(g, "2007-12-31")),
+        }
+
+        _filed_frames = []
+        for _f, _sign in [(_c_for_coh, 1), (_or_for_coh, 1), (_e_for_coh, -1),
+                          (filer_od, -1), (filer_ba, 1)]:
+            if not _f.empty and "filed_date" in _f.columns:
+                _g = _f.copy()
+                _g["_fy"] = pd.to_datetime(_g["filed_date"], errors="coerce").dt.year
+                _filed_frames.append((_g.dropna(subset=["_fy"]), _sign))
+        yearly_nets_filed: dict[str, float] = {}
+        for _g, _sign in _filed_frames:
+            for _yr, _amt in _g.groupby("_fy")["amount"].sum().items():
+                _k = str(int(_yr))
+                yearly_nets_filed[_k] = yearly_nets_filed.get(_k, 0.0) + _sign * float(_amt)
 
         # Determine beginning balances and cash-on-hand
         # Strategy: use the earliest-year beginning balance scraped directly from
         # ORESTAR (via Playwright), then roll forward through yearly transaction nets.
         # This avoids error-prone back-calculation from the current year.
         orestar_info = _orestar_data.get(name)
+
+        # Count loan principal as cash only where ORESTAR counts it.
+        #
+        # A loan received is not automatically the committee's money. Ted
+        # Wheeler's 2006 statement records $233,000 of loans and reports
+        # Loans Received $0.00 in the cash section, Total Outstanding Loans
+        # $230,000 under Financial Status, and an ending cash balance of
+        # $1,819.65 — against $107.90 of cash expenditures that year. Had that
+        # $233,000 been cash, it would still have been sitting there. It never
+        # entered the account; the candidate's spending was recorded as a loan
+        # to the committee.
+        #
+        # We added it anyway, so his balance ran $233,000 high — and kept
+        # running high forever, because ORESTAR carries its own (loan-free)
+        # ending forward every year. Measured today: our $234,530.14 against
+        # ORESTAR's $1,530.14, a gap equal to the 2006 loans to the cent.
+        #
+        # The rule is NOT "ignore loans". In most years ORESTAR does count them
+        # and the money genuinely arrives: Wheeler's 2010, 2011, 2020 and 2021
+        # loans all appear in ORESTAR's own figures and match our rows exactly.
+        # Excluding loans wholesale was measured across all 46,761
+        # committee-years and breaks 2,581 of them, taking the residual from
+        # $3.55M to $24.36M.
+        #
+        # So ORESTAR's own reported figure decides, per committee-year. It
+        # agrees with our transaction rows 738 times and disagrees 123, almost
+        # all of them in 2006 (65, $2,228,906).
+        #
+        # Guarded on scrape freshness, because before the #90 parser fix this
+        # field read $0.00 on EVERY record — substituting a false zero would
+        # wipe genuine loans from 33,889 committee-years. Where the summary
+        # predates the fix, our own figure stands.
+        _sum_ts = float((orestar_info or {}).get("ts") or 0)
+        if _sum_ts >= _LOAN_FIELD_TRUSTWORTHY_FROM:
+            _our_loans_by_year = {}
+            if not filer_contrib.empty and "year" in filer_contrib.columns:
+                _lr = filer_contrib[filer_contrib["sub_type"] == "Loan Received (Non-Exempt)"]
+                if not _lr.empty:
+                    _our_loans_by_year = _lr.groupby("year")["amount"].sum().to_dict()
+            _their_years = _name_to_yearly.get(name, {})
+            for _yr_s in list(yearly_nets):
+                _ty = _their_years.get(_yr_s)
+                if not _ty:
+                    continue
+                _theirs = _ty.get("loans_received")
+                if _theirs is None:
+                    continue
+                try:
+                    _ours = float(_our_loans_by_year.get(int(_yr_s), 0.0))
+                except (TypeError, ValueError):
+                    continue
+                _adj = round(float(_theirs) - _ours, 2)
+                if abs(_adj) > 0.01:
+                    yearly_nets[_yr_s] = round(yearly_nets[_yr_s] + _adj, 2)
+
+        # Our net as it stood WHEN THE SUMMARY WAS CAPTURED.
+        #
+        # An account summary is a snapshot; transactions keep arriving. Comparing
+        # today's transactions against a summary scraped days ago produces a
+        # divergence that is neither side's fault, and that accounted for 95% of
+        # the 2026 gap — $3,473,683 across 465 committees fell to $189,706 once
+        # the summaries were re-scraped, and it began climbing again immediately
+        # because committees kept filing.
+        #
+        # Re-scraping cannot fix this; it only resets the clock. The fix is to
+        # compare like with like: restrict our side to rows that had been FILED
+        # by the moment ORESTAR's figure was taken. If the two agree as of that
+        # instant, the data is sound and the visible difference is only the
+        # window between then and now.
+        #
+        # Rows are cut by filed_date rather than tran_date because a summary can
+        # only reflect what had been filed when it was read.
+        _asof_ts = float((orestar_info or {}).get("ts") or 0)
+        yearly_nets_asof: dict[str, float] = {}
+        if _asof_ts:
+            _asof_cut = pd.Timestamp(datetime.fromtimestamp(_asof_ts))
+            for _f, _sign in [(_c_for_coh, 1), (_or_for_coh, 1), (_e_for_coh, -1),
+                              (filer_od, -1), (filer_ba, 1)]:
+                if _f.empty or "year" not in _f.columns or "filed_date" not in _f.columns:
+                    continue
+                _g = _f.copy()
+                _g["_fd"] = pd.to_datetime(_g["filed_date"], errors="coerce")
+                _g = _g[_g["_fd"].notna() & (_g["_fd"] <= _asof_cut)]
+                if _g.empty:
+                    continue
+                for _yr, _amt in _g.groupby("year")["amount"].sum().items():
+                    _k = str(int(_yr))
+                    yearly_nets_asof[_k] = yearly_nets_asof.get(_k, 0.0) + _sign * float(_amt)
         beginning_balances: dict[str, float] = {}
-        cash_on_hand_source = "calculated"
+        cash_on_hand_source = "calculated"   # always — see the check below
+        has_orestar_check = False
         orestar_discrepancy = 0.0
         orestar_year = 0
 
@@ -1292,17 +1846,74 @@ def aggregate_filers(
         # transactions. If the scraped "earliest year" is AFTER our first
         # transaction year, the scraper returned the current-year balance
         # (not the actual earliest), so the beginning balance should be $0.
+        # The anchor is the "Beginning Balance (Previous Year)" from the FIRST
+        # account statement ORESTAR holds for this committee. Read from the
+        # right page it needs no special-casing by year: a committee that
+        # predates ORESTAR shows the real money it walked in with, and one
+        # formed later shows $0, because there was nothing before.
+        #
+        # So the only question is whether the scraper actually got to that
+        # page. `reached_earliest` answers it. Without that flag the two
+        # outcomes were indistinguishable, and a timed-out click banked
+        # whatever middle year it stopped on as the committee's opening
+        # balance — filer 142 recorded $220,614.68 from 2024 for a committee
+        # filing since 2006.
         earliest_info = _name_to_earliest.get(name)
         first_txn_year = int(sorted_years[0]) if sorted_years else 9999
         first_year_begin = 0.0
+        # Whether our pre-statement transactions agree with the opening balance
+        # ORESTAR states. None when the question does not arise.
+        opening_reconciles = None
+        opening_our_prior_net = None
         if earliest_info:
             scraped_year = earliest_info.get("earliest_year", 9999)
-            if scraped_year <= first_txn_year:
+            # Older cache entries predate the flag; fall back to the year test,
+            # which catches the same failure whenever transactions run earlier.
+            complete = earliest_info.get("reached_earliest", scraped_year <= first_txn_year)
+            if complete and scraped_year <= first_txn_year:
                 first_year_begin = earliest_info["beginning_balance"]
-            else:
-                log.debug(
-                    "Ignoring earliest balance for %s: scraped year %d > first txn year %d",
-                    name, scraped_year, first_txn_year,
+            elif (complete and scraped_year > first_txn_year
+                  and earliest_info.get("beginning_balance") is not None):
+                # ORESTAR's first statement postdates our first transaction.
+                #
+                # Both figures describe the same money and they disagree, so
+                # one of them has to be chosen rather than quietly averaged by
+                # accident. ORESTAR's is the bank position it certified at the
+                # time; ours is whatever pre-statement rows happen to be in the
+                # transaction record, and those are systematically partial —
+                # ORESTAR's transaction search returns back-dated entries filed
+                # later, but its account summaries only begin in 2006, so the
+                # early rows are contributions whose matching expenditures were
+                # never filed as transactions.
+                #
+                # Measured on all five committees in this position, our
+                # pre-statement net exceeds ORESTAR's stated opening in four:
+                # Citizens for Mannix holds $150,000 of 2003-04 contributions
+                # and NO expenditures against a stated opening of $203.84. We
+                # were carrying $149,796 of money that had already been spent.
+                #
+                # So: take ORESTAR's figure as the anchor and drop the
+                # pre-statement rows it already accounts for, rather than
+                # trusting a record we can prove is incomplete.
+                _pre = round(sum(yearly_nets.get(str(y), 0.0)
+                                 for y in range(first_txn_year, scraped_year)), 2)
+                first_year_begin = earliest_info["beginning_balance"]
+                opening_reconciles = abs(_pre - first_year_begin) <= 0.01
+                opening_our_prior_net = _pre
+                for _y in range(first_txn_year, scraped_year):
+                    yearly_nets.pop(str(_y), None)
+                log.info(
+                    "%s: anchoring on ORESTAR's %d opening $%.2f; our %d-%d rows "
+                    "net $%.2f (%s) and are superseded by it",
+                    name, scraped_year, first_year_begin, first_txn_year,
+                    scraped_year - 1, _pre,
+                    "reconciles" if opening_reconciles else "does NOT reconcile",
+                )
+            elif earliest_info.get("beginning_balance"):
+                log.warning(
+                    "Ignoring $%.2f opening balance for %s: paging stopped at %d but "
+                    "transactions start %d — not the first statement",
+                    earliest_info["beginning_balance"], name, scraped_year, first_txn_year,
                 )
 
         # Roll forward: beginning balance for each year, then cash on hand
@@ -1312,15 +1923,116 @@ def aggregate_filers(
             running += yearly_nets.get(yr_s, 0.0)
         cash_on_hand = round(running, 2)
 
-        # Compare against ORESTAR-reported ending balance for validation
+        # --- signature of the per-year deltas -------------------------------
+        # Computed after the yearly loop below fills yearly_discrepancies;
+        # declared here so the record above always has a value.
+        discrepancy_signature = None
+        discrepancy_first_bad_year = None
+
+        # Compare against ORESTAR-reported ending balance for validation.
+        #
+        # This is a CHECK, never an input: cash_on_hand above is calculated
+        # from transactions and nothing here changes it. The flag used to be
+        # set to "orestar" at this point, which read as though the figure came
+        # from ORESTAR — it never did.
+        is_closed = False
+        closed_since = None
+        closed_final_balance = None
         if orestar_info and orestar_info.get("year", 0) > 0:
             orestar_year = orestar_info["year"]
             orestar_ending = orestar_info.get("ending_cash_balance", 0.0)
-            cash_on_hand_source = "orestar"
-            our_anchor_ending = round(
-                beginning_balances.get(str(orestar_year), 0.0)
-                + yearly_nets.get(str(orestar_year), 0.0), 2
-            )
+            has_orestar_check = True
+
+            # Anchor on the last year ORESTAR reports ACTIVITY in, not merely
+            # the last year it issued a statement.
+            #
+            # ORESTAR keeps producing an annual Account Summary after a
+            # committee stops operating, and those trailing statements are
+            # entirely zero — every line, including the ending balance. The
+            # cash-balances file stores the LATEST year, so for a wound-down
+            # committee the check was comparing our full-history balance
+            # against a blank form.
+            #
+            # Citizens for Mannix is the clearest case. Its real history is all
+            # there in ORESTAR:
+            #
+            #     2006  ending $568.75    contributions $186,050
+            #     2007  ending $1,560.47  contributions $205,940
+            #     2008  ending $106.66    contributions $645,535
+            #     2009  ending $2,600.66  contributions $56,941
+            #     2010  ending $0.00      contributions $12,451   <- wound down
+            #     2011-2015                                        <- empty stubs
+            #
+            # We anchored on 2015 and recorded the committee as $299,796 adrift.
+            # 253 committees carry $1.66M of "discrepancy" for this reason, and
+            # a re-scrape confirmed the zeros are real rather than a scraping
+            # gap — the statements genuinely are blank, so the fix belongs here
+            # rather than in the scraper.
+            #
+            # A year that ends at zero after real activity is a perfectly good
+            # anchor: that IS the committee's closing balance. Only years with
+            # no activity at all are skipped.
+            _all_years = _name_to_yearly.get(name, {})
+            if _all_years:
+                def _has_activity(y: dict) -> bool:
+                    return any(abs(float(y.get(k) or 0)) > 0 for k in
+                               ("contributions", "expenditures", "other_receipts",
+                                "other_disbursements", "beginning_balance",
+                                "ending_cash_balance", "loans_received",
+                                "loan_payments", "balance_adjustments"))
+                _live = sorted((int(y) for y, v in _all_years.items()
+                                if str(y).isdigit() and _has_activity(v)))
+                if _live and _live[-1] < orestar_year:
+                    _anchor = _live[-1]
+                    log.debug(
+                        "%s: ORESTAR's %d statement is blank — anchoring on %d instead",
+                        name, orestar_year, _anchor,
+                    )
+                    orestar_year = _anchor
+                    orestar_ending = float(
+                        _all_years[str(_anchor)].get("ending_cash_balance") or 0.0
+                    )
+
+            # Closed: ORESTAR's most recent statements are entirely blank —
+            # no activity AND no cash balance.
+            #
+            # This is the strongest signal the record offers that a committee
+            # is finished. It is deliberately NOT the same as dormant: a
+            # dormant committee has ORESTAR carrying a real balance forward
+            # year after year (Oregon Strong, $889,626.78), which is a
+            # committee holding money and filing nothing. A blank statement
+            # says the opposite — nothing held, nothing moved.
+            #
+            # Requiring the cash balance to be zero is what separates them,
+            # and it is why "no contributions or expenditures this year" is not
+            # sufficient on its own.
+            if _all_years:
+                _yrs = sorted((y for y in _all_years if str(y).isdigit()), key=int)
+                _live_yrs = [y for y in _yrs if _has_activity(_all_years[y])]
+                if _live_yrs and _yrs and _yrs[-1] != _live_yrs[-1]:
+                    _blank_from = _yrs[_yrs.index(_live_yrs[-1]) + 1]
+                    is_closed = True
+                    closed_since = int(_blank_from)
+                    closed_final_balance = float(
+                        _all_years[_live_yrs[-1]].get("ending_cash_balance") or 0.0
+                    )
+            # A dormant committee still gets a statement: ORESTAR carries its
+            # balance forward every year whether or not anything moves. We have
+            # no transactions for those years, so looking the year up in our
+            # own tables returned 0 and the committee appeared to be off by its
+            # entire balance. Oregon Strong sat at $889,626.78 on both sides
+            # and was recorded as $889,626.78 adrift; 1,447 committees — 41% of
+            # everything flagged — were wrong for exactly this reason.
+            #
+            # When we have no data for ORESTAR's year, our balance at the end of
+            # it is simply the balance we last rolled forward to: cash_on_hand.
+            if str(orestar_year) in beginning_balances:
+                our_anchor_ending = round(
+                    beginning_balances[str(orestar_year)]
+                    + yearly_nets.get(str(orestar_year), 0.0), 2
+                )
+            else:
+                our_anchor_ending = cash_on_hand
             orestar_discrepancy = round(our_anchor_ending - orestar_ending, 2)
 
         # Per-year discrepancy tracking: compare our rolling calculation
@@ -1339,6 +2051,32 @@ def aggregate_filers(
         _yearly_orestar_c = _yearly_sums(_orestar_contrib)
         _yearly_cash_exp  = _yearly_sums(_cash_expend_only)
         _yearly_inkind    = _yearly_sums(filer_inkind)
+        # Loan receipts per year, so a committee-year can be checked against
+        # ORESTAR's own reported loans line.
+        _loans_recv = (filer_contrib[filer_contrib["sub_type"] == "Loan Received (Non-Exempt)"]
+                       if not filer_contrib.empty else filer_contrib)
+        _yearly_loans = _yearly_sums(_loans_recv)
+
+        # Per-year loan scaling, shared by the balance, the timeline and this
+        # comparison so all three treat loan principal identically.
+        _coh_loan_scale: dict[int, float] = {}
+        if _sum_ts >= _LOAN_FIELD_TRUSTWORTHY_FROM:
+            _their_yrs_cmp = _name_to_yearly.get(name, {})
+            for _y, _amt in (_yearly_loans or {}).items():
+                _ty = _their_yrs_cmp.get(str(int(_y)))
+                if not _ty or _ty.get("loans_received") is None:
+                    continue
+                _amt = float(_amt)
+                if abs(_amt) <= 0.01:
+                    continue
+                _coh_loan_scale[int(_y)] = float(_ty["loans_received"]) / _amt
+
+        def _loan_scale_for_year(_y):
+            try:
+                return _coh_loan_scale.get(int(_y), 1.0)
+            except (TypeError, ValueError):
+                return 1.0
+
         _yearly_or = _yearly_sums(_or_for_coh)
         _yearly_od = _yearly_sums(filer_od)
 
@@ -1350,10 +2088,49 @@ def aggregate_filers(
 
                 yr_int = int(yr_s) if yr_s.isdigit() else None
                 our_begin = beginning_balances.get(yr_s, 0.0)
-                our_c  = round(float(_yearly_orestar_c.get(yr_int, 0)), 2)
+                # Contributions on the same basis as the balance and the stat
+                # card: loan principal counted the way ORESTAR counts it.
+                #
+                # _orestar_contrib includes loans received, so this line was
+                # comparing our raw loan figure against ORESTAR's reported one
+                # while every other line — and the balance itself — already used
+                # theirs. Wheeler's 2006 read ours $235,500 against ORESTAR
+                # $2,500, the difference being exactly his ten loan rows, on a
+                # year where the ending balance matched to the cent.
+                #
+                # It also left the page disagreeing with itself: since #99 the
+                # timeline and the Contributions card carry the adjusted figure,
+                # so the row below the card contradicted it.
+                our_c  = round(float(_yearly_orestar_c.get(yr_int, 0))
+                               - float(_yearly_loans.get(yr_int, 0))
+                               + float(_yearly_loans.get(yr_int, 0)) * _loan_scale_for_year(yr_int), 2)
                 our_e  = round(float(_yearly_cash_exp.get(yr_int, 0)) + float(_yearly_inkind.get(yr_int, 0)), 2)
                 our_or = round(float(_yearly_or.get(yr_int, 0)), 2)
                 our_od = round(float(_yearly_od.get(yr_int, 0)), 2)
+                # Transaction basis, for every year including 2006.
+                #
+                # 2006 was briefly switched to the FILING basis, because the
+                # committees that diverge there reconcile under it: Citizens for
+                # Mannix's whole 2006 loan book — $309,000 across five rows —
+                # carries 2006 transaction dates and 2007-01 filing dates, and
+                # ORESTAR's 2006 statement reports only the $159,000 filed on
+                # the 29th.
+                #
+                # That switch was reverted. It was measured only on the 74
+                # committee-years ALREADY diverging, where it looked like a drop
+                # from $3.18M to $205K. Applied to everyone it took 2006 from 73
+                # affected committees to 513 — 426 of them newly wrong by under
+                # $5,000 each — because ORESTAR's 2006 statement is not uniformly
+                # filing-based. Committees that filed contemporaneously agree on
+                # both bases; late filers follow the filing; and committees with
+                # 2005 activity filed in 2006 are broken BY the filing basis.
+                #
+                # Trading $690K of concentrated, explainable error for small
+                # errors across 440 additional committees is the worse deal, and
+                # it is still not what ORESTAR does. The rule ORESTAR actually
+                # applied in its first year is not yet known; see
+                # audit_2006_basis.py, which measures it per committee instead
+                # of assuming it.
                 our_net = yearly_nets.get(yr_s, 0.0)
                 our_end = round(our_begin + our_net, 2)
 
@@ -1371,10 +2148,129 @@ def aggregate_filers(
                 delta_end = round(our_end - (orestar_end or 0), 2) if orestar_end is not None else None
                 delta_beg = round(our_begin - (orestar_beg or 0), 2) if orestar_beg is not None else None
 
-                # Include if any line-item delta exceeds $0.01
-                deltas = [d for d in [delta_c, delta_e, delta_or, delta_od, delta_end, delta_beg] if d is not None]
-                if any(abs(d) > 0.01 for d in deltas):
+                # How much ORESTAR says the balance MOVED this year, against
+                # how much our transactions say it moved.
+                #
+                # delta_end below cannot answer "is this year's data right?",
+                # because our_end is built on OUR rolled-forward beginning
+                # balance: one bad year in 2008 makes every year after it look
+                # wrong, and the real culprit is indistinguishable from its
+                # eighteen innocent successors.
+                #
+                # ORESTAR states a beginning AND an ending balance for every
+                # year, so the difference between them is that year's movement
+                # as the audited record has it — with no dependence on anything
+                # earlier. Comparing our own net against it isolates the single
+                # year, which is what makes it possible to say WHERE our
+                # transaction history diverges rather than merely that it does.
+                #
+                # Both sides include balance adjustments: yearly_nets is built
+                # with filer_ba, and ORESTAR's ending reflects adjustments too,
+                # so the two definitions match.
+                orestar_movement = (
+                    round((orestar_end or 0) - (orestar_beg or 0), 2)
+                    if orestar_end is not None and orestar_beg is not None else None
+                )
+                delta_movement = (
+                    round(round(our_net, 2) - orestar_movement, 2)
+                    if orestar_movement is not None else None
+                )
+
+                # Does this divergence disappear if the year is read the way
+                # ORESTAR's statement is assembled — by what was FILED in it?
+                #
+                # If so it is a period-boundary effect, not missing data: the
+                # transactions exist on both sides, they simply fall on
+                # different sides of a year line. Marking that is what stops
+                # 2006 being re-investigated as a data gap, which has now
+                # happened three times, each with a different wrong
+                # explanation attached (pre-ORESTAR boundary, loan treatment,
+                # a parse bug).
+                our_net_filed = round(yearly_nets_filed.get(yr_s, 0.0), 2)
+                delta_movement_filed = (
+                    round(our_net_filed - orestar_movement, 2)
+                    if orestar_movement is not None else None
+                )
+                # Same year, but our side frozen to the summary's capture time.
+                our_net_asof = (round(yearly_nets_asof.get(yr_s, 0.0), 2)
+                                if _asof_ts else None)
+                delta_movement_asof = (
+                    round(our_net_asof - orestar_movement, 2)
+                    if our_net_asof is not None and orestar_movement is not None else None
+                )
+                # Reconciles as of the capture, diverges now => the gap is the
+                # reporting window, not the data. Regenerates every day by
+                # design, so it is not something to chase.
+                # Same reasoning. The as-of figures are kept because they are
+                # genuinely informative — they say how much of a difference the
+                # reporting window accounts for — but they do not excuse it.
+                # Measured, the window explains little of what is left in 2026:
+                # $241,675 live against $214,909 as-of.
+                snapshot_lag = False
+
+                # Deliberately NOT flagging "this would reconcile on another
+                # basis" as an explanation.
+                #
+                # That is a suppression mechanism wearing a classifier's clothes:
+                # it leaves the calculation disagreeing with ORESTAR and hides
+                # the difference behind a tolerance. Where another basis is
+                # demonstrably the right one — 2006 — the fix is to compute on
+                # it, which is what happens above. Where it is not, the
+                # difference is real and belongs in the total.
+                # ORESTAR contradicting its own summary.
+                #
+                # Our cash-balance formula IS ORESTAR's, read off the page:
+                #   Beginning + Total Contributions + Other Receipts
+                #   + Loans Received (exempt) - Total Expenditures
+                #   - Other Disbursements - Loan Payments (exempt)
+                #   + Balance Adjustments = Ending Cash Balance
+                # with Total Contributions including non-exempt loans and
+                # in-kind, and in-kind cancelling against the expenditure side.
+                # That is why 2007-2025 reconcile to within tens of dollars
+                # across thousands of committee-years.
+                #
+                # Where it does not reconcile, the inconsistency is ORESTAR's.
+                # Ted Wheeler's 2006 summary reports Loans Received $0.00 while
+                # the SAME page reports Total Outstanding Loans $230,000.00,
+                # against $233,000 of loan transactions ORESTAR itself lists.
+                # Its own numbers disagree with each other, so no calculation
+                # can match all of them at once — mirroring the loans line
+                # reconciles 66 committee-years and breaks 44 whose movement
+                # follows OUR figure instead.
+                #
+                # Recorded rather than resolved, and surfaced in the tooltip, so
+                # a reader sees that the difference is in the source record.
+                our_loans_received = round(float(_yearly_loans.get(yr_int, 0)), 2)
+                orestar_loans_received = (float(yr_orestar.get("loans_received"))
+                                          if yr_orestar.get("loans_received") is not None else None)
+                loan_gap = (round(our_loans_received - orestar_loans_received, 2)
+                            if orestar_loans_received is not None else None)
+                orestar_omits_loans = bool(
+                    loan_gap is not None and abs(loan_gap) > 1.0
+                    and delta_movement is not None
+                    and abs(abs(loan_gap) - abs(delta_movement)) <= max(1.0, abs(loan_gap) * 0.05)
+                )
+
+                attribution_artifact = False
+
+                # EVERY year ORESTAR gives us a figure for, not only the ones
+                # that disagree.
+                #
+                # Storing only mismatches made the table impossible to read as
+                # evidence: Friends of Ted Wheeler showed a single 2006 row out
+                # of 21 comparable years, which looks like one broken year
+                # rather than twenty reconciled ones and one outstanding. The
+                # years that agree are the reassurance — they are what says the
+                # calculation is sound where it is not being questioned.
+                deltas = [d for d in [delta_c, delta_e, delta_or, delta_od, delta_end,
+                                      delta_beg, delta_movement] if d is not None]
+                reconciles = not any(abs(d) > 0.01 for d in deltas)
+                if True:
                     yearly_discrepancies[yr_s] = {
+                        # True when every line item agrees, so the UI can show
+                        # a reconciled year as confirmation rather than styling
+                        # it as a small problem.
+                        "reconciles": reconciles,
                         "our_begin": our_begin,
                         "our_contributions": our_c,
                         "our_expenditures": our_e,
@@ -1393,6 +2289,26 @@ def aggregate_filers(
                         "delta_other_receipts": delta_or,
                         "delta_other_disbursements": delta_od,
                         "delta_begin": delta_beg,
+                        # The drift-free pair: what ORESTAR says this year moved,
+                        # and how far our transactions are from that. Unlike
+                        # `discrepancy`, these do not inherit earlier years' error.
+                        "orestar_movement": orestar_movement,
+                        "delta_movement": delta_movement,
+                        # Same year read on ORESTAR's own basis. When this
+                        # reconciles and delta_movement does not, the year is a
+                        # filing-period boundary artifact rather than a gap.
+                        "our_net_filed": our_net_filed,
+                        "delta_movement_filed": delta_movement_filed,
+                        "attribution_artifact": attribution_artifact,
+                        # Our side as of the summary's capture. When this
+                        # reconciles and the live comparison does not, the
+                        # difference is the reporting window.
+                        "our_loans_received": our_loans_received,
+                        "orestar_loans_received": orestar_loans_received,
+                        "orestar_omits_loans": orestar_omits_loans,
+                        "our_net_asof": our_net_asof,
+                        "delta_movement_asof": delta_movement_asof,
+                        "snapshot_lag": snapshot_lag,
                         "discrepancy": delta_end,
                     }
 
@@ -1420,22 +2336,78 @@ def aggregate_filers(
         ce_monthly = monthly_sum(_cash_expend_only,   "cash_exp")
         ik_monthly = monthly_sum(filer_inkind,        "inkind_exp")
         lo_monthly = monthly_sum(_loans_out,          "loan_payments")
-        or_monthly = monthly_sum(filer_or,            "other_receipts")
+        # _or_for_coh, not filer_or. The client recomputes cash on hand from this
+        # timeline, so a frame that still carries the excluded exempt principal
+        # re-adds on render exactly what the server just took out — #99, which
+        # showed Ted Wheeler $726,880 against a stored $1,530.14.
+        or_monthly = monthly_sum(_or_for_coh,         "other_receipts")
         od_monthly = monthly_sum(filer_od,            "other_disbursements")
+        # Balance adjustments were missing from the timeline entirely, so any
+        # balance recomputed from it could not match ours no matter what else
+        # was corrected — the information simply was not there.
+        ba_monthly = monthly_sum(filer_ba,            "balance_adjustments")
         count_monthly_filer = filer_all.groupby("month").size().rename("count")
         tl_df = pd.concat([c_monthly, i_monthly, li_monthly, ce_monthly, ik_monthly,
-                           lo_monthly, or_monthly, od_monthly,
+                           lo_monthly, or_monthly, od_monthly, ba_monthly,
                            count_monthly_filer], axis=1).fillna(0).sort_index()
+        # The timeline must carry the SAME loan figures the balance was built
+        # from, because the browser recomputes cash on hand from these rows:
+        #
+        #     netFlow = totalIn + totalLoansIn + totalOR
+        #             - totalOut - totalLoansOut - totalOD
+        #
+        # so a correction applied only to yearly_nets is silently undone on
+        # render. Ted Wheeler's stored balance was $1,530.14, matching ORESTAR
+        # to the cent, while the page displayed $726,880 with a red discrepancy
+        # warning — the client re-adding the loan principal the server had just
+        # removed.
+        #
+        # Scaled proportionally within the year, so a month keeps its share of
+        # whatever ORESTAR reports for that year. Where ORESTAR reports nothing
+        # (2006 for 65 committees) every month goes to zero, which is the point.
+        _loan_scale: dict[int, float] = {}
+        if _sum_ts >= _LOAN_FIELD_TRUSTWORTHY_FROM:
+            _their_years_tl = _name_to_yearly.get(name, {})
+            _ours_tl = {}
+            if not filer_contrib.empty and "year" in filer_contrib.columns:
+                _lr_tl = filer_contrib[filer_contrib["sub_type"] == "Loan Received (Non-Exempt)"]
+                if not _lr_tl.empty:
+                    _ours_tl = _lr_tl.groupby("year")["amount"].sum().to_dict()
+            for _y, _ours_amt in _ours_tl.items():
+                _ty = _their_years_tl.get(str(int(_y)))
+                if not _ty or _ty.get("loans_received") is None:
+                    continue
+                _ours_amt = float(_ours_amt)
+                if abs(_ours_amt) <= 0.01:
+                    continue
+                _loan_scale[int(_y)] = float(_ty["loans_received"]) / _ours_amt
+
+        def _scaled_loans(month_key, raw):
+            try:
+                _y = int(str(month_key)[:4])
+            except (TypeError, ValueError):
+                return raw
+            return raw * _loan_scale.get(_y, 1.0)
+
         timeline = [
             {
                 "month": m,
-                "contributions":       round(float(row.get("contributions",       0)), 2),
+                # contributions ALREADY includes loans (and in-kind), and
+                # expenditures already includes loan payments — that is what
+                # _orestar_contrib and _EXPEND_TYPES contain. The loan portion
+                # here is swapped for ORESTAR's reported figure so this field
+                # carries the same loans the balance is built from.
+                "contributions":       round(
+                    float(row.get("contributions", 0))
+                    - float(row.get("loans_received", 0))
+                    + _scaled_loans(m, float(row.get("loans_received", 0))), 2),
                 "inkind":              round(float(row.get("inkind",              0)), 2),
-                "loans_received":      round(float(row.get("loans_received",      0)), 2),
+                "loans_received":      round(_scaled_loans(m, float(row.get("loans_received", 0))), 2),
                 "expenditures":        round(float(row.get("cash_exp", 0)) + float(row.get("inkind_exp", 0)), 2),
                 "loan_payments":       round(float(row.get("loan_payments",       0)), 2),
                 "other_receipts":      round(float(row.get("other_receipts",      0)), 2),
                 "other_disbursements": round(float(row.get("other_disbursements", 0)), 2),
+                "balance_adjustments": round(float(row.get("balance_adjustments", 0)), 2),
                 "count":               int(row.get("count", 0)),
             }
             for m, row in tl_df.iterrows()
@@ -1530,6 +2502,24 @@ def aggregate_filers(
                 "scrape_ts": orestar_info.get("ts", 0),
             }
 
+        # Classify the per-year deltas now that the loop above has filled them.
+        _dvals = [round(float(v.get("discrepancy", 0) or 0), 2)
+                  for _, v in sorted(yearly_discrepancies.items())]
+        if len(_dvals) >= 2:
+            if max(_dvals) - min(_dvals) <= 0.01:
+                # Same every year: the years reconcile, the start does not.
+                discrepancy_signature = "opening_balance"
+            else:
+                discrepancy_signature = "missing_transactions"
+                # Name the first year the delta moves — that is where rows went
+                # missing, and it turns "this committee is off by $X" into
+                # somewhere to look.
+                _yrs = sorted(yearly_discrepancies)
+                for _i in range(1, len(_yrs)):
+                    if abs(_dvals[_i] - _dvals[_i - 1]) > 0.01:
+                        discrepancy_first_bad_year = int(_yrs[_i])
+                        break
+
         detail = {
             "name": name, "slug": slug,
             "total_in": total_in, "total_inkind": total_inkind,
@@ -1537,11 +2527,47 @@ def aggregate_filers(
             "total_or": total_or, "total_od": total_od,
             "cash_on_hand": cash_on_hand, "tran_count": tran_count,
             "cash_on_hand_source": cash_on_hand_source,
+            "has_orestar_check": has_orestar_check,
             "orestar_discrepancy": orestar_discrepancy,
+            # Surfaced on the site as a "Closed" label, so a reader can
+            # tell a finished committee from one that is merely quiet.
+            "closed": is_closed,
+            "closed_since": closed_since,
+            "closed_final_balance": closed_final_balance,
             "orestar_year": orestar_year,
             "orestar_account_summary": _acct_summary,
             "orestar_yearly": _name_to_yearly.get(name, {}),
+            # Exempt loan principal held out of cash because ORESTAR's own
+            # statement records no receipts at all in those years. Carried per
+            # year so the site can say WHY a figure omits a transaction the
+            # committee plainly filed, rather than silently differing from a
+            # number the reader can look up.
+            "exempt_loans_excluded": _exempt_dropped,
             "yearly_discrepancies": yearly_discrepancies,
+            # Candidate 2006 bases, on the pipeline's own definition, so the
+            # rule ORESTAR actually applied can be identified by measurement
+            # rather than guessed at a fifth time.
+            "basis_2006": basis_2006,
+            # What KIND of problem this committee has, read off the shape of
+            # the per-year deltas rather than their size.
+            #
+            # A discrepancy that is the SAME every year means each year's
+            # activity reconciles and the divergence predates all of them —
+            # the opening balance is wrong. One that CHANGES in a given year
+            # means transactions are missing in that year, and names the year.
+            #
+            # Citizens for Mannix is $299,796.16 adrift in 2006, 2007, 2008,
+            # 2009 and 2010 — identical to the cent. Its 2006+ row count
+            # matches ORESTAR exactly (339), so nothing is missing; it starts
+            # from the wrong place. Across everything flagged, 201 committees
+            # ($2.6M) carry a constant offset against 101 ($1.2M) that vary,
+            # so most of what survived the row recovery was never fetchable.
+            "discrepancy_signature": discrepancy_signature,
+            "discrepancy_first_bad_year": discrepancy_first_bad_year,
+            # Surfaced so a reader can see WHY the opening balance was
+            # taken from ORESTAR rather than from our own rows.
+            "opening_reconciles": opening_reconciles,
+            "opening_our_prior_net": opening_our_prior_net,
             "beginning_balances": beginning_balances,
             "timeline": timeline,
             "top_donors": top_donors_list,
@@ -1628,6 +2654,145 @@ def aggregate_filers(
         len(index_rows), len(index_rows),
     )
 
+    # ── balance_discrepancies.json — where we disagree with ORESTAR ─────────
+    #
+    # Every committee is checked against its own ORESTAR account summary. Most
+    # agree; the ones that do not are worth a human look, because a gap means
+    # either our transaction data is incomplete or ORESTAR's own arithmetic is.
+    # Precomputed here rather than derived in the browser: filer_detail holds
+    # 7,268 large JSON blobs, and the admin page should not have to pull them
+    # all down to find the couple of thousand that matter.
+    # Cash filed AFTER each committee's summary was captured, per (filer,
+    # cutoff date). Built once from the merged frame rather than queried per
+    # committee: this runs over 7,263 filers, and the alternative is 7,263
+    # round trips to answer one question.
+    #
+    # Same definition as the balance itself — cash contributions and other
+    # receipts in, cash expenditures and disbursements out, in-kind excluded
+    # because it never moves cash. Loans are already inside the contribution
+    # and expenditure sets, exactly as ORESTAR has them.
+    _filer_post_summary: dict[str, dict] = {}
+    try:
+        _cuts = {}
+        for _r in _filer_detail_rows:
+            _t = ((_r["detail"].get("orestar_account_summary") or {}).get("scrape_ts")) or 0
+            if _t and _r.get("filer_id"):
+                _cuts[str(_r["filer_id"])] = datetime.fromtimestamp(float(_t)).date()
+        # The processing frame names this column "filer id", with a space — it
+        # is the raw ORESTAR header. Only filer_detail and the database use
+        # filer_id. Guarding on the wrong name meant this block was skipped in
+        # full and silently: every committee reported $0.00 of post-summary
+        # activity, the as-of delta equalled the live one everywhere, and no
+        # warning was logged because nothing raised. A guard written to fail
+        # safely instead made the feature do nothing at all.
+        _fid_col = ("filer id" if "filer id" in df.columns
+                    else ("filer_id" if "filer_id" in df.columns else None))
+        if _cuts and "filed_date" in df.columns and _fid_col:
+            _pf = df[df[_fid_col].astype(str).str.strip().isin(_cuts.keys())].copy()
+            _pf["_fd"] = pd.to_datetime(_pf["filed_date"], errors="coerce").dt.date
+            _pf = _pf[_pf["_fd"].notna()]
+            _pf["_cut"] = _pf[_fid_col].astype(str).str.strip().map(_cuts)
+            _pf = _pf[_pf["_fd"] > _pf["_cut"]]
+            if not _pf.empty:
+                _ink = _pf["sub_type"].isin(INKIND_SUBTYPES) if "sub_type" in _pf.columns else False
+                _sign = pd.Series(0.0, index=_pf.index)
+                _sign[(_pf["tran_type"] == "C") & (~_ink)] = 1.0
+                _sign[_pf["tran_type"] == "OR"] = 1.0
+                _sign[(_pf["tran_type"] == "E") & (~_ink)] = -1.0
+                _sign[_pf["tran_type"] == "OD"] = -1.0
+                _pf["_signed"] = _pf["amount"].astype(float) * _sign
+                for (_fid, _cut), _amt in _pf.groupby(
+                        [_pf[_fid_col].astype(str).str.strip(), "_cut"])["_signed"].sum().items():
+                    _filer_post_summary.setdefault(_fid, {})[_cut] = float(_amt)
+        if not _filer_post_summary:
+            log.warning("post-summary activity is empty for all %d committees — "
+                        "the admin comparison is falling back to live deltas "
+                        "(filer id column: %s)", len(_cuts), _fid_col)
+        else:
+            log.info("post-summary activity computed for %d committees",
+                     len(_filer_post_summary))
+    except Exception as _e:
+        log.warning("post-summary activity not computed (%s) — "
+                    "the admin comparison falls back to the live delta", _e)
+
+    _disc_rows = []
+    for _row in _filer_detail_rows:
+        _d = _row["detail"]
+        _acct = _d.get("orestar_account_summary") or {}
+        if _acct.get("ending_cash_balance") is None:
+            continue                      # never checked — not a discrepancy
+        _delta = round(_d.get("cash_on_hand", 0.0) - _acct["ending_cash_balance"], 2)
+
+        # The same balance as of the moment ORESTAR's figure was captured.
+        #
+        # cash_on_hand covers every transaction we hold; ending_cash_balance is
+        # a snapshot. Anything filed in between is a difference belonging to
+        # neither side, and it reappears continuously: hours after a summary
+        # sweep finished, Cyrus for Oregon was flagged for $45,771 that was
+        # exactly its 16 rows filed since, and Hicks for Senate for $108,312 of
+        # which $91,765 was the same thing.
+        #
+        # Both figures are kept rather than one replacing the other. Showing
+        # only the as-of delta would hide the window; showing only the live one
+        # buries real gaps in it — Bring Balance to Salem PAC's $180,040 has no
+        # post-summary activity at all and is entirely genuine.
+        _asof_delta = None
+        _post_summary = None
+        _ts = _acct.get("scrape_ts") or 0
+        # scrape_ts is 0 on summaries captured before #87 recorded it. Treating
+        # that as "captured in 1970" would exclude a committee's whole history
+        # and report its entire balance as post-summary activity, so those keep
+        # the live comparison only.
+        if _ts:
+            _cut = datetime.fromtimestamp(float(_ts)).date()
+            _post = _filer_post_summary.get(str(_row.get("filer_id")), {}).get(_cut)
+            if _post is None:
+                _post = 0.0
+            _post_summary = round(float(_post), 2)
+            _asof_delta = round(_delta - _post_summary, 2)
+
+        # Flag on the AS-OF difference where we have one: that is the real
+        # disagreement. A committee whose entire delta is post-summary activity
+        # is not in disagreement with ORESTAR, it is simply ahead of it.
+        _judge = _asof_delta if _asof_delta is not None else _delta
+        if abs(_judge) <= 0.01:
+            continue
+        _disc_rows.append({
+            "slug": _row["slug"], "name": _row["name"], "filer_id": _row.get("filer_id"),
+            "calculated": _d.get("cash_on_hand", 0.0),
+            "orestar": _acct["ending_cash_balance"],
+            "delta": _delta,
+            # What the comparison is actually judged on: our balance restricted
+            # to rows filed by the summary's capture, against that summary.
+            "asof_delta": _asof_delta,
+            "post_summary_activity": _post_summary,
+            "orestar_year": _acct.get("year"),
+            "scrape_ts": _acct.get("scrape_ts"),
+            "tran_count": _d.get("tran_count", 0),
+            # A committee with no activity in ORESTAR's year is a different
+            # animal from one that is actively filing and still disagrees.
+            "dormant": str(_acct.get("year")) not in (_d.get("beginning_balances") or {}),
+            # A closed committee's discrepancy is a different kind of thing
+            # from an active one's, and the Admin tab should say so rather
+            # than listing them side by side as if equivalent.
+            "closed": bool(_d.get("closed")),
+            "closed_since": _d.get("closed_since"),
+            # "opening_balance" or "missing_transactions" — the Admin tab can
+            # then group by the kind of problem instead of listing an
+            # undifferentiated dollar figure per committee.
+            "signature": _d.get("discrepancy_signature"),
+            "first_bad_year": _d.get("discrepancy_first_bad_year"),
+        })
+    _disc_rows.sort(key=lambda r: -abs(r["asof_delta"] if r["asof_delta"] is not None else r["delta"]))
+    _write_json("balance_discrepancies.json", {
+        "generated": datetime.now().isoformat(timespec="seconds"),
+        "checked": sum(1 for r in _filer_detail_rows
+                       if (r["detail"].get("orestar_account_summary") or {})
+                          .get("ending_cash_balance") is not None),
+        "flagged": len(_disc_rows),
+        "rows": _disc_rows,
+    })
+
     # ── by_party_type.json — Donor type composition by party by year ────────
     # Cross-references filer_index party data with per-filer donor type
     # breakdowns to produce a partisan comparison dataset.
@@ -1712,6 +2877,33 @@ def aggregate_filers(
     # ── activity_snapshot.json — Campaign Pulse module data ────────────────
     from generate_activity_snapshot import generate as _gen_snapshot
     _snapshot = _gen_snapshot(agg_dir=AGG_DIR, filers_dir=filers_dir)
+
+    # Carry forward what this generator does not build.
+    #
+    # legislative_map has TWO producers. generate_activity_snapshot builds it
+    # from the filing roster; refresh_legislative_map rebuilds the same key and
+    # adds district_history, the per-district prior-cycle results the race map
+    # renders under "Previous cycles".
+    #
+    # Rewriting the whole key here silently deleted that history on every daily
+    # refresh. racemap.js reads it, refresh_legislative_map writes it, and
+    # nothing errored — the panel simply showed nothing for all but the few
+    # hours between a candidate-filings run and the next refresh. The feature
+    # has never worked in the normal course of a day.
+    #
+    # Preserving a key the current generator cannot produce is the fix: the
+    # daily refresh has no candidate-filing or election-results data in hand,
+    # so it is in no position to replace it.
+    try:
+        _prev_snap = supabase_sync.get_dashboard_cache("activity_snapshot") or {}
+        _prev_hist = ((_prev_snap.get("legislative_map") or {}).get("district_history"))
+        if _prev_hist and "district_history" not in (_snapshot.get("legislative_map") or {}):
+            _snapshot.setdefault("legislative_map", {})["district_history"] = _prev_hist
+            log.info("Preserved district_history for %d chamber(s) from the previous snapshot",
+                     len(_prev_hist))
+    except Exception as e:
+        log.warning("Could not preserve district_history: %s", e)
+
     _write_json("activity_snapshot.json", _snapshot)
     log.info(
         "Wrote activity_snapshot.json (%d candidates)",
@@ -1868,7 +3060,21 @@ def _build_combined_csv() -> Path:
 
 
 if __name__ == "__main__":
+    import os
     import sys
+
+    # Every Supabase write in this file is a silent no-op when SUPABASE_DB_URL
+    # is unset. That is right for local runs, but in CI it meant three
+    # scheduled workflows spent an hour scraping, wrote correct JSON to the
+    # repo, exited 0 — and left the live site reading days-old data, with
+    # nothing in the log to say so. Say it loudly instead of returning quietly.
+    if not supabase_sync.sync_enabled():
+        _where = "CI" if os.environ.get("GITHUB_ACTIONS") else "this machine"
+        print("=" * 72, file=sys.stderr)
+        print(f"WARNING: SUPABASE_DB_URL is not set on {_where}.", file=sys.stderr)
+        print("         Files on disk will be updated; the LIVE SITE WILL NOT.",
+              file=sys.stderr)
+        print("=" * 72, file=sys.stderr)
     if "--supabase-full-load" in sys.argv:
         # One-time / periodic: load every transaction shard into Postgres and
         # publish the combined full-dataset CSV to Storage. Run once after the
@@ -1900,19 +3106,43 @@ if __name__ == "__main__":
             if "filed_date" in df.columns:
                 _fd = pd.to_datetime(df["filed_date"], format="mixed", dayfirst=False, errors="coerce")
                 df["filed_date"] = _fd.dt.strftime("%Y-%m-%d").fillna(df["filed_date"])
+                df, _superseded = _drop_superseded(df)
                 _save_transactions(df)
             else:
                 log.warning("No filed_date column — cannot split by year")
-            # Clean up raw files — keep filer-targeted files so incomplete
-            # downloads can resume on the next run (the fetch skips existing files)
+
+            # Push the freshly-merged rows to Postgres NOW, not on tomorrow's
+            # daily refresh.
+            #
+            # This used to write year shards and stop, which made the database
+            # lag the shards by up to a day. That was tolerable when raw Excel
+            # files were kept on disk as the resume record — but those files are
+            # the reason the repository reached 80 GB, and the fetcher's
+            # "do we already hold this window?" check reads POSTGRES. Leaving
+            # the database behind would make that check answer "no" for rows we
+            # had just downloaded, and the next chain run would fetch them all
+            # over again.
+            try:
+                _new_ids = set(new_df["tran_id"].astype(str).str.strip())
+                _changed = df[df["tran_id"].astype(str).str.strip().isin(_new_ids)]
+                supabase_sync.upsert_transactions(_changed)
+                if _superseded:
+                    supabase_sync.delete_transactions(_superseded)
+                log.info("Synced %d merged rows to Postgres", len(_changed))
+            except Exception as e:
+                log.warning("merge-only transaction sync failed: %s", e)
+
+            # Raw files are now disposable. Every one of them has been merged
+            # into the year shards and pushed to Postgres, and the fetcher
+            # decides what to skip from ORESTAR's record counts plus what the
+            # database holds — not from what happens to be left on disk.
+            #
+            # Keeping them cost 10,205 committed files and 80 GB of repository,
+            # because git retains every version of every one forever.
             cleaned = 0
-            kept = 0
             for f in RAW_DIR.glob("*.xls*"):
-                if f.name.startswith("filer"):
-                    kept += 1
-                else:
-                    f.unlink()
-                    cleaned += 1
-            log.info("Merge complete. Cleaned %d raw files, kept %d filer-targeted files for resume.", cleaned, kept)
+                f.unlink()
+                cleaned += 1
+            log.info("Merge complete. Cleaned %d raw files (all merged and synced).", cleaned)
     else:
         process()

@@ -708,6 +708,7 @@ function statsFromTimeline(rows, beginningBalances, fullTimeline) {
   const totalLoansOut= rows.reduce((s, r) => s + (r.loan_payments || 0), 0);
   const totalOR      = rows.reduce((s, r) => s + (r.other_receipts || 0), 0);
   const totalOD      = rows.reduce((s, r) => s + (r.other_disbursements || 0), 0);
+  const totalBA      = rows.reduce((s, r) => s + (r.balance_adjustments || 0), 0);
   const count        = rows.reduce((s, r) => s + (r.count || 0), 0);
 
   // Beginning balance: only the first year's ORESTAR-scraped value is trusted.
@@ -727,15 +728,33 @@ function statsFromTimeline(rows, beginningBalances, fullTimeline) {
       const src = fullTimeline || rows;
       for (const r of src) {
         if (!r.month || r.month >= earliestMonth) break;
-        running += (r.contributions || 0) + (r.loans_received || 0) + (r.other_receipts || 0)
-                 - (r.expenditures || 0) - (r.loan_payments || 0) - (r.other_disbursements || 0);
+        // Same terms as netFlow above — loans and payments are already inside
+        // contributions and expenditures, and adjustments must be included or
+        // the opening position for a filtered range drifts from the real one.
+        running += (r.contributions || 0) + (r.other_receipts || 0) + (r.balance_adjustments || 0)
+                 - (r.expenditures || 0) - (r.other_disbursements || 0);
       }
       beginBal = Math.round(running * 100) / 100;
     }
   }
 
-  // COH: in-kind nets to zero (on both sides), loans are separate
-  const netFlow = totalIn + totalLoansIn + totalOR - totalOut - totalLoansOut - totalOD;
+  // COH — the same arithmetic process.py does, term for term.
+  //
+  // contributions ALREADY contains loans received, and expenditures ALREADY
+  // contains loan payments: that is what _orestar_contrib and _EXPEND_TYPES
+  // hold on the server. Adding totalLoansIn and subtracting totalLoansOut on
+  // top counted both a second time — for Friends of Ted Wheeler, +$495,600 of
+  // loans and -$3,500 of payments — and balance adjustments were missing
+  // entirely, a further +$250. Together exactly the $492,350 by which this
+  // function overstated his balance: $493,880 against a stored $1,530.14 that
+  // matches ORESTAR to the cent.
+  //
+  // In-kind does cancel; it is mirrored into both sides deliberately.
+  //
+  // totalLoansIn / totalLoansOut are still returned because the account-summary
+  // tiles show them as ORESTAR's separate line items. They just are not added
+  // again here.
+  const netFlow = totalIn + totalOR + totalBA - totalOut - totalOD;
 
   return {
     totalIn:     Math.round(totalIn    * 100) / 100,
@@ -798,16 +817,21 @@ const CALC_TILE_META = {
     label: "Net Cash Flow",
     coh: true,
     subtotal: true,
-    compute: d => d.cash_contributions + (d.loans_received || 0) + d.other_receipts - d.cash_expenditures - (d.loan_payments || 0) - d.other_disbursements,
-    tip: "<strong>Counted:</strong> (Contributions + loans received + other receipts) minus (expenditures + loan payments + other disbursements). In-kind nets to zero.<br><strong>Meaning:</strong> How much cash the committee gained or lost during this period.",
+    // Loans and payments are NOT added here: cash_contributions already
+    // contains loans received and cash_expenditures already contains loan
+    // payments, because that is what the server puts in those fields. The
+    // tiles above display them as separate lines the way ORESTAR's page does,
+    // which is presentation, not arithmetic.
+    compute: d => d.cash_contributions + d.other_receipts + (d.balance_adjustments || 0) - d.cash_expenditures - d.other_disbursements,
+    tip: "<strong>Counted:</strong> (Contributions + other receipts + balance adjustments) minus (expenditures + other disbursements). Loans received and loan payments are already inside those figures and are shown separately above. In-kind nets to zero.<br><strong>Meaning:</strong> How much cash the committee gained or lost during this period.",
   },
   ending_cash_balance: {
     label: "Ending Cash Balance",
     coh: true,
     subtotal: true,
     orestar_field: "orestar_ending",
-    compute: d => d.beginning_balance + d.cash_contributions + (d.loans_received || 0) + d.other_receipts - d.cash_expenditures - (d.loan_payments || 0) - d.other_disbursements,
-    tip: "<strong>Counted:</strong> Beginning balance + net cash flow (including loans).<br><strong>Meaning:</strong> Our calculated cash position at the end of the period. This should closely match the ORESTAR ending balance if our transaction data is complete.",
+    compute: d => d.beginning_balance + d.cash_contributions + d.other_receipts + (d.balance_adjustments || 0) - d.cash_expenditures - d.other_disbursements,
+    tip: "<strong>Counted:</strong> Beginning balance + net cash flow. Loans received are already inside contributions and loan payments inside expenditures.<br><strong>Meaning:</strong> Our calculated cash position at the end of the period. This should closely match the ORESTAR ending balance if our transaction data is complete.",
   },
   // ── Non-cash items ────────────────────────────────────────────────────────
   inkind_contributions: {
@@ -891,7 +915,8 @@ function buildCalcSummary(profile, year) {
     : timeline;
 
   // Sum transaction-based values from the (filtered) timeline
-  let cashContrib = 0, inkind = 0, loansIn = 0, cashExpend = 0, loansOut = 0, otherReceipts = 0, otherDisburse = 0;
+  let cashContrib = 0, inkind = 0, loansIn = 0, cashExpend = 0, loansOut = 0,
+      otherReceipts = 0, otherDisburse = 0, balanceAdj = 0;
   for (const row of rows) {
     cashContrib   += row.contributions       || 0;
     inkind        += row.inkind              || 0;
@@ -900,6 +925,7 @@ function buildCalcSummary(profile, year) {
     loansOut      += row.loan_payments       || 0;
     otherReceipts += row.other_receipts      || 0;
     otherDisburse += row.other_disbursements || 0;
+    balanceAdj    += row.balance_adjustments || 0;
   }
 
   // Beginning balance: only the first year's ORESTAR-scraped value is trusted.
@@ -916,16 +942,33 @@ function buildCalcSummary(profile, year) {
     let running = firstYearBal;
     for (const r of timeline) {
       if (!r.month || r.month >= year) break;
-      running += (r.contributions || 0) + (r.loans_received || 0) + (r.other_receipts || 0)
-               - (r.expenditures || 0) - (r.loan_payments || 0) - (r.other_disbursements || 0);
+      // Same terms as endingCalc: loans and payments are already inside
+      // contributions and expenditures, and adjustments must be included.
+      running += (r.contributions || 0) + (r.other_receipts || 0) + (r.balance_adjustments || 0)
+               - (r.expenditures || 0) - (r.other_disbursements || 0);
     }
     beginBal = Math.round(running * 100) / 100;
   }
 
-  // COH = begin + contributions + loans_received + other_receipts
-  //       - expenditures - loan_payments - other_disbursements
-  // (in-kind is in both contributions and expenditures, nets to zero)
-  const endingCalc = beginBal + cashContrib + loansIn + otherReceipts - cashExpend - loansOut - otherDisburse;
+  // COH = begin + contributions + other_receipts + balance_adjustments
+  //       - expenditures - other_disbursements
+  //
+  // The tiles below display LOANS RECEIVED and LOAN PAYMENTS as their own
+  // lines, the way ORESTAR's page does — but contributions ALREADY contains
+  // the loans and expenditures already contains the payments. Adding them
+  // again here counted Friends of Ted Wheeler's $262,600 of loans twice and
+  // his $3,500 of payments twice, and balance adjustments were left out
+  // entirely: $262,600 - $3,500 + $250 = $259,350, exactly the discrepancy
+  // this panel then reported against ORESTAR.
+  //
+  // This is the third consumer of the same data to carry that error. The stat
+  // card and statsFromTimeline were fixed first, which left this panel showing
+  // $260,880 and a red warning directly above a Yearly Comparison table where
+  // every year reconciled — the contradiction visible on one screen.
+  //
+  // In-kind is in both contributions and expenditures and nets to zero.
+  const endingCalc = beginBal + cashContrib + otherReceipts + balanceAdj
+                   - cashExpend - otherDisburse;
 
   // ORESTAR-reported values (for comparison / validation)
   // If a specific year is selected, use the per-year ORESTAR data
@@ -963,6 +1006,7 @@ function buildCalcSummary(profile, year) {
     other_disbursements: Math.round(otherDisburse * 100) / 100,
     beginning_balance: Math.round(beginBal * 100) / 100,
     other_receipts: Math.round(otherReceipts * 100) / 100,
+    balance_adjustments: Math.round(balanceAdj * 100) / 100,
     ending_cash_balance: Math.round(endingCalc * 100) / 100,
     // ORESTAR values for validation
     orestar_ending: orestarEnding,
@@ -1114,7 +1158,7 @@ function renderAcctSummaryTiles(profile, year) {
     const showYears = year ? discYears.filter(y => y === year) : discYears;
     if (showYears.length) {
       let discHTML = `<div class="acct-group">
-        <div class="acct-group-title">Yearly Discrepancies (Calculated vs. ORESTAR)</div>
+        <div class="acct-group-title">Yearly Comparison (Calculated vs. ORESTAR)</div>
         <div class="disc-table">
           <div class="disc-table-header">
             <span class="disc-col-year">Year</span>
@@ -1125,14 +1169,18 @@ function renderAcctSummaryTiles(profile, year) {
       for (const yr of showYears) {
         const d = disc[yr];
         const endDisc = d.discrepancy || 0;
-        const severity = Math.abs(endDisc) >= 10000 ? "disc-severe"
+        // A reconciled year is confirmation, not a small problem. Every year
+        // ORESTAR gives a figure for is listed now, so without this the table
+        // would style twenty agreeing years as "minor discrepancies".
+        const severity = d.reconciles ? "disc-ok"
+          : Math.abs(endDisc) >= 10000 ? "disc-severe"
           : Math.abs(endDisc) >= 1000 ? "disc-warn" : "disc-minor";
         const rowId = `disc-detail-${yr}`;
         discHTML += `<div class="disc-row ${severity}" style="cursor:pointer" data-detail="${rowId}">
           <span class="disc-col-year">${yr} ▸</span>
           <span class="disc-col-num">${fmt$(d.our_end)}</span>
           <span class="disc-col-num">${fmt$(d.orestar_end)}</span>
-          <span class="disc-col-num disc-col-diff">${endDisc > 0 ? "+" : ""}${fmt$(endDisc)}</span>
+          <span class="disc-col-num disc-col-diff">${d.reconciles ? "✓" : (endDisc > 0 ? "+" : "") + fmt$(endDisc)}</span>
         </div>`;
         // Expandable line-item detail
         discHTML += `<div id="${rowId}" class="disc-detail" hidden>`;
@@ -1185,9 +1233,6 @@ let byTypeDataGlobal = null;
 let donorsData       = null;
 let recipientsData   = null;
 let timelineData     = null;
-let fuseIndex        = null;
-let allRecent        = [];
-
 let donorFilerMap    = null; // donor_name_lower → {slug, name, confidence} | {candidates, confidence:"ambiguous"}
 
 let selectedDonorTypeGroup = null;
@@ -1754,7 +1799,34 @@ function initFilerSelector() {
   const dateStartEl = document.getElementById("date-start");
   const dateEndEl   = document.getElementById("date-end");
 
-  const fuse = new Fuse(filerIndex, { keys: ["name"], threshold: 0.3 });
+  // Search by committee name, candidate name, race/office, or filer ID.
+  const fuse = new Fuse(filerIndex, {
+    keys: [
+      { name: "name",            weight: 2 },
+      { name: "candidate_name",  weight: 1.5 },
+      { name: "office_district", weight: 1 },
+      { name: "filer_id",        weight: 0.5 },
+    ],
+    threshold: 0.3,
+  });
+
+  function searchFilers(q) {
+    // Digits → exact/prefix filer-ID lookup first ("4792" → Friends of Tina Kotek)
+    if (/^\d+$/.test(q)) {
+      const exact = filerIndex.filter(f => String(f.filer_id) === q);
+      const prefix = filerIndex.filter(f => String(f.filer_id).startsWith(q) && String(f.filer_id) !== q);
+      const byId = exact.concat(prefix);
+      if (byId.length) return byId.slice(0, 20);
+    }
+    return fuse.search(q).map(r => r.item).slice(0, 20);
+  }
+
+  /** Secondary line in the dropdown: candidate · race · election */
+  function filerSubtitle(item) {
+    const parts = [item.candidate_name, item.office_district || item.office, item.election]
+      .filter(Boolean);
+    return parts.length ? `<span class="filer-option-sub">${esc(parts.join(" · "))}</span>` : "";
+  }
 
   let dropdownItems = [];
   let highlightIdx  = -1;
@@ -1793,7 +1865,7 @@ function initFilerSelector() {
     highlightIdx  = -1;
     if (items.length) {
       dropdown.innerHTML = items.map((item, i) =>
-        `<li role="option" data-slug="${esc(item.slug)}" data-idx="${i}">${esc(item.name)}</li>`
+        `<li role="option" data-slug="${esc(item.slug)}" data-idx="${i}">${esc(item.name)}${filerSubtitle(item)}</li>`
       ).join("");
     } else {
       dropdown.innerHTML = `<li class="no-results">No results</li>`;
@@ -1820,18 +1892,12 @@ function initFilerSelector() {
 
   input.addEventListener("focus", () => {
     const q = input.value.trim();
-    const results = q
-      ? fuse.search(q).map(r => r.item).slice(0, 20)
-      : filerIndex.slice(0, 20);
-    openDropdown(results);
+    openDropdown(q ? searchFilers(q) : filerIndex.slice(0, 20));
   });
 
   input.addEventListener("input", () => {
     const q = input.value.trim();
-    const results = q
-      ? fuse.search(q).map(r => r.item).slice(0, 20)
-      : filerIndex.slice(0, 20);
-    openDropdown(results);
+    openDropdown(q ? searchFilers(q) : filerIndex.slice(0, 20));
   });
 
   input.addEventListener("blur", () => {
@@ -1892,6 +1958,9 @@ function initFilerSelector() {
     onStateChange();
   });
 
+  // updateClearBtn is local to this initialiser, so hand it over explicitly.
+  initCyclePresets(dateStartEl, dateEndEl, updateClearBtn);
+
   clearBtn.addEventListener("click", () => {
     state.selectedFilers = [];
     state.dateStart = "";
@@ -1900,6 +1969,57 @@ function initFilerSelector() {
     dateStartEl.value = "2006-01-01";
     dateEndEl.value   = (summaryData && summaryData.date_range_end) || "";
     renderChips();
+    updateClearBtn();
+    onStateChange();
+  });
+}
+
+// ── Election-cycle presets ────────────────────────────────────────────────────
+
+/** An Oregon election cycle runs Dec of the pre-election year → Nov of the
+ *  election year (2026 cycle = 2024-12-01 … 2026-11-30). */
+function cycleRange(electionYear) {
+  return { start: `${electionYear - 2}-12-01`, end: `${electionYear}-11-30` };
+}
+
+/** The three most recent even-numbered election years, ending with the current
+ *  cycle. Derived from today's date so the buttons advance without a code edit. */
+function recentCycles(count = 3) {
+  const now = new Date();
+  // Before December, the cycle ending this even year is still the current one.
+  let latest = now.getFullYear();
+  if (latest % 2 !== 0) latest += 1;                       // odd year → next even
+  else if (now.getMonth() >= 11) latest += 2;              // Dec → next cycle began
+  return Array.from({ length: count }, (_, i) => latest - i * 2);
+}
+
+function initCyclePresets(dateStartEl, dateEndEl, updateClearBtn) {
+  const box = document.getElementById("cycle-presets");
+  if (!box) return;
+  const years = recentCycles(3);
+  box.insertAdjacentHTML("beforeend", years.map(y => {
+    const { start, end } = cycleRange(y);
+    return `<button class="cycle-btn" data-start="${start}" data-end="${end}" data-year="${y}"
+              title="${start} to ${end}">${y}</button>`;
+  }).join(""));
+
+  box.addEventListener("click", e => {
+    const btn = e.target.closest(".cycle-btn");
+    if (!btn) return;
+    const active = btn.classList.contains("active");
+    box.querySelectorAll(".cycle-btn").forEach(b => b.classList.remove("active"));
+    if (active) {                       // clicking the active cycle clears it
+      state.dateStart = "";
+      state.dateEnd = "";
+      dateStartEl.value = "2006-01-01";
+      dateEndEl.value = (summaryData && summaryData.date_range_end) || "";
+    } else {
+      btn.classList.add("active");
+      state.dateStart = btn.dataset.start;
+      state.dateEnd = btn.dataset.end;
+      dateStartEl.value = state.dateStart;
+      dateEndEl.value = state.dateEnd;
+    }
     updateClearBtn();
     onStateChange();
   });
@@ -1930,6 +2050,7 @@ async function loadOverview() {
   const n = state.selectedFilers.length;
 
   if (n === 0) {
+    setOverviewTiles("statewide");
     renderOverviewGlobal();
     await loadTimeline();
   } else if (n === 1) {
@@ -1941,6 +2062,103 @@ async function loadOverview() {
     renderOverviewMultiFiler(profiles);
     await loadTimeline();
   }
+  renderFilerRaceHeader();
+}
+
+/**
+ * Candidate / race context for the committees currently filtered on.
+ *
+ * Answers "who is this and what are they running for" without leaving Overview,
+ * and for legislative seats lists the rest of the field from the ORESTAR
+ * candidate filing roster (activity_snapshot.legislative_map) — the ballot
+ * record, not the committee's self-reported election, which goes stale.
+ */
+function renderFilerRaceHeader() {
+  const box = document.getElementById("filer-race-header");
+  if (!box) return;
+  const sel = state.selectedFilers;
+  if (!sel.length || !filerIndex) { box.hidden = true; return; }
+
+  const partyTag = p => {
+    const s = (p || "").toLowerCase();
+    const cls = s.startsWith("dem") ? "D" : s.startsWith("rep") ? "R" : "other";
+    return p ? `<span class="frh-party ${cls}">${cls === "other" ? esc(p) : cls}</span>` : "";
+  };
+
+  const lm = (typeof activitySnapshot !== "undefined" && activitySnapshot)
+    ? activitySnapshot.legislative_map : null;
+  const CHAMBER = { "State Representative": "house", "State Senator": "senate" };
+
+  const rows = sel.map(f => {
+    const row = filerIndex.find(r => r.slug === f.slug) || {};
+    const office = row.office || "";
+    const district = (row.office_district || "").match(/(\d+)\w*\s+District/i);
+    const isCand = row.committee_type === "Candidate Committee";
+
+    const bits = [];
+    if (row.candidate_name) bits.push(esc(row.candidate_name));
+    if (row.office_district) bits.push(esc(row.office_district));
+    else if (row.committee_type) bits.push(esc(row.committee_type));
+    if (row.filer_id) bits.push(`Filer ID ${esc(row.filer_id)}`);
+
+    // Rest of the field, from the filing roster. Statewide races are keyed by
+    // office name (no district); legislative races by district number.
+    //
+    // Show the field ONLY when this committee is itself in the race. A
+    // committee keeps its office/district long after the candidate stops
+    // running — "Kate Brown Committee" still reads office=Governor from its
+    // 2018 filing — so matching on office or district alone would present a
+    // former officeholder as part of the current contest. The roster decides
+    // who is running; anything not in it falls through to "not on the ballot".
+    let fieldHtml = "";
+    const chamber = CHAMBER[office];
+    const swEntry = lm && lm.statewide ? lm.statewide[office] : null;
+    const distEntry = (lm && chamber && district)
+      ? (lm[chamber] || {})[String(parseInt(district[1], 10))]
+      : null;
+    const entry = swEntry || distEntry;
+    const inThisRace = !!(entry && entry.candidates.some(c => c.slug && c.slug === f.slug));
+    if (entry && inThisRace) {
+      const raceLabel = swEntry ? office : (row.office_district || office);
+      fieldHtml = `
+        <div class="frh-field">
+          <div class="frh-field-label">${esc(lm.election || "Race")} · ${esc(raceLabel)}</div>
+          ${entry.candidates.map(c => {
+            const me = c.slug && c.slug === f.slug;
+            const nm = esc(c.candidate_name || c.name || "");
+            const label = me ? `<span class="frh-opp-self">${nm}</span>`
+              : (c.slug ? `<a data-slug="${esc(c.slug)}">${nm}</a>` : nm);
+            const amt = c.slug ? fmt$(c.raised_cycle)
+              : `<span class="frh-opp-none">no committee</span>`;
+            return `<div class="frh-opp"><span>${label}${partyTag(c.party)}</span><span>${amt}</span></div>`;
+          }).join("")}
+          <a class="frh-link" href="#" data-scroll-map>View race map ↓</a>
+        </div>`;
+    }
+    // A candidate committee with no roster entry isn't on the current ballot.
+    if (!fieldHtml && isCand && row.office_district) {
+      fieldHtml = `<div class="frh-field"><span class="frh-opp-none">Not on the current ballot`
+        + `${row.election ? ` — committee reports “${esc(row.election)}”` : ""}</span></div>`;
+    }
+
+    return `<div class="frh-row">
+        <div class="frh-title">${esc(row.name || f.name)}${partyTag(row.party)}</div>
+        ${bits.length ? `<div class="frh-meta">${bits.join(" · ")}</div>` : ""}
+        ${fieldHtml}
+      </div>`;
+  }).join("");
+
+  box.innerHTML = rows;
+  box.hidden = false;
+  // Opponent links reuse the existing in-page filer navigation
+  box.querySelectorAll("a[data-slug]").forEach(a =>
+    a.addEventListener("click", e => { e.preventDefault(); selectFilerBySlug(a.dataset.slug); }));
+  // The map is on this page now, so scroll to it instead of navigating.
+  box.querySelectorAll("a[data-scroll-map]").forEach(a =>
+    a.addEventListener("click", e => {
+      e.preventDefault();
+      document.querySelector(".rc-box")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }));
 }
 
 function renderOverviewGlobal() {
@@ -2056,7 +2274,43 @@ function updateCohIndicator(profile) {
   const disc = orestarEnding != null ? Math.round((calcCoh - orestarEnding) * 100) / 100 : 0;
   const absDisc = Math.abs(disc);
 
-  if (src === "orestar" && absDisc > 0.01) {
+  // A closed committee gets a plain label, not a warning triangle.
+  //
+  // ORESTAR keeps issuing an annual Account Summary after a committee stops
+  // operating, and those statements are entirely blank — no activity and no
+  // cash balance. That is the record saying the committee is finished, so a
+  // leftover difference against our transaction history is expected rather
+  // than alarming, and flagging it as a discrepancy told readers a committee
+  // had a problem when it simply no longer exists.
+  //
+  // Note this is NOT the same as dormant: a dormant committee has ORESTAR
+  // carrying a real balance forward while filing nothing, which IS worth a
+  // warning. The zero cash balance is the difference.
+  if (profile.closed) {
+    ind.hidden = false;
+    ind.className = "coh-indicator coh-closed";
+    ind.textContent = "Closed";
+    ind.setAttribute("tabindex", "0");
+    const since = profile.closed_since ? ` since ${profile.closed_since}` : "";
+    const finalBal = profile.closed_final_balance != null
+      ? ` Its last reported balance was ${fmt$(profile.closed_final_balance)}.`
+      : "";
+    ind.setAttribute(
+      "title",
+      `ORESTAR reports no activity and a $0.00 balance for this committee${since}.` +
+      finalBal +
+      (absDisc > 0.01
+        ? ` The ${fmt$(absDisc)} shown here is what our transaction history still carries; a closed committee's records often omit the final disbursement.`
+        : "") +
+      (exemptLoanNoteText(profile) ? ` ${exemptLoanNoteText(profile)}` : "")
+    );
+    return;
+  }
+
+  // Gate on having an ORESTAR figure to compare against. The old test
+  // read a source label that always said the balance came from ORESTAR;
+  // it never did — the balance is calculated from transactions.
+  if (orestarEnding != null && absDisc > 0.01) {
     const severity = discrepancySeverity(absDisc);
     ind.hidden = false;
     ind.className = `coh-indicator coh-warn-${severity}`;
@@ -2072,10 +2326,41 @@ function updateCohIndicator(profile) {
     const popover = document.createElement("div");
     popover.className = "disc-popover";
     popover.setAttribute("role", "tooltip");
+    // Where ORESTAR's own summary disagrees with itself, say so.
+    //
+    // Our cash-balance formula is ORESTAR's, taken from their page: beginning
+    // balance, plus total contributions (which include non-exempt loans) and
+    // other receipts, less total expenditures and disbursements, plus balance
+    // adjustments. It reconciles to within tens of dollars across thousands of
+    // committee-years from 2007 on.
+    //
+    // For a small number of committees it cannot reconcile, because ORESTAR's
+    // summary contradicts itself: Ted Wheeler's 2006 page reports Loans
+    // Received $0.00 and Total Outstanding Loans $230,000.00 at the same time,
+    // against $233,000 of loan transactions ORESTAR itself lists. Attributing
+    // that to our arithmetic would be wrong, and silently absorbing it would be
+    // worse, so the reader is told where the difference actually lives.
+    const loanNote = (() => {
+      const yd = profile.yearly_discrepancies || {};
+      const yrs = Object.keys(yd).filter(y => yd[y] && yd[y].orestar_omits_loans);
+      if (!yrs.length) return "";
+      yrs.sort();
+      const y = yd[yrs[0]];
+      const ours = fmt$(y.our_loans_received || 0);
+      const theirs = fmt$(y.orestar_loans_received || 0);
+      const many = yrs.length > 1 ? ` (also ${yrs.slice(1).join(", ")})` : "";
+      return `<div class="disc-note">ORESTAR's own ${yrs[0]} account summary reports ` +
+             `${theirs} of loans received while listing ${ours} in loan transactions` +
+             `${many}. The difference above follows ORESTAR's transaction record; ` +
+             `its summary page does not agree with itself for this committee.</div>`;
+    })();
+
     popover.innerHTML = `
       <div class="disc-row"><span>ORESTAR ending cash balance:</span><span>${orestarEnding != null ? fmt$(orestarEnding) : "N/A"}</span></div>
       <div class="disc-row"><span>Calculated cash on hand:</span><span>${fmt$(calcCoh)}</span></div>
       <div class="disc-row disc-diff"><span>Difference:</span><span>${disc >= 0 ? "+" : ""}${fmt$(disc)}</span></div>
+      ${loanNote}
+      ${exemptLoanNoteText(profile) ? `<div class="disc-note">${esc(exemptLoanNoteText(profile))}</div>` : ""}
       <div class="disc-ts">ORESTAR account summary scraped at: ${formatTimestamp(scrapeTs)}</div>
     `;
     popover.hidden = true;
@@ -2089,15 +2374,46 @@ function updateCohIndicator(profile) {
     ind.addEventListener("focus", showPopover);
     ind.addEventListener("blur", hidePopover);
     ind.addEventListener("click", () => { popover.hidden = !popover.hidden; });
-  } else if (src === "calculated") {
+  } else if (orestarEnding == null) {
+    // Genuinely unchecked: no account summary on file to compare against.
+    //
+    // This used to test `src === "calculated"`, which is not the same question.
+    // Every balance is calculated from transactions — that is the design — so
+    // the label is now "calculated" for all 7,268 filers, and every one of them
+    // was being told "no ORESTAR beginning balance data scraped yet" while
+    // holding a freshly scraped summary. The check has to be whether an ORESTAR
+    // figure EXISTS, not what the source is called.
     ind.hidden = false;
     ind.className = "coh-indicator coh-estimated";
     ind.textContent = "EST";
     ind.setAttribute("tabindex", "0");
-    ind.title = "Estimated: no ORESTAR beginning balance data scraped yet. Cash on hand is calculated from transactions with a $0 starting balance.";
+    ind.title = "No ORESTAR account summary scraped yet, so this balance is unchecked.";
   } else {
+    // ORESTAR agrees with the calculation. That is the good case, and it earns
+    // silence — same as the multi-filer cards, and what .coh-ok intends.
     ind.hidden = true;
   }
+}
+
+// Why a balance can leave out a transaction the committee plainly filed.
+//
+// Exempt loan principal is held out of cash for years where ORESTAR's own
+// statement records no receipts at all (see the exempt-loan block in
+// process.py). Committee for SAIF Keeping is the case this exists for:
+// ORESTAR lists a $665,242.33 exempt loan in its transaction record and
+// reports $128.13 of cash for the same year. A reader who looks that
+// transaction up is owed a reason it is missing from the total, rather than
+// left to conclude the figure is broken.
+function exemptLoanNoteText(profile) {
+  const ex = (profile && profile.exempt_loans_excluded) || {};
+  const years = Object.keys(ex).sort();
+  if (!years.length) return "";
+  const total = years.reduce((s, y) => s + (Number(ex[y]) || 0), 0);
+  const those = years.length === 1 ? "that year" : "those years";
+  return `${fmt$(total)} of exempt loan principal (${years.join(", ")}) is not ` +
+         `counted here: ORESTAR's own account summary for ${those} reports no ` +
+         `contributions, no loans and no other receipts, so ORESTAR does not ` +
+         `treat it as cash either.`;
 }
 
 // Build discrepancy indicator HTML for multi-filer cards (inline)
@@ -2108,8 +2424,18 @@ function cohIndicatorHTML(profile) {
   const orestarEnding = acct.ending_cash_balance != null ? acct.ending_cash_balance : null;
   const disc = orestarEnding != null ? Math.round((calcCoh - orestarEnding) * 100) / 100 : 0;
   const absDisc = Math.abs(disc);
-  if (src === "calculated") {
-    return '<span class="coh-indicator coh-estimated" tabindex="0" title="Estimated: no ORESTAR beginning balance data scraped yet">EST</span>';
+  // Same rule as updateCohIndicator: a finished committee is labelled, not
+  // warned about. Kept in step with that function deliberately — two badges
+  // describing the same balance differently is worse than either alone.
+  if (profile.closed) {
+    const since = profile.closed_since ? ` since ${profile.closed_since}` : "";
+    const exNote = exemptLoanNoteText(profile);
+    const tip = `ORESTAR reports no activity and a $0.00 balance for this committee${since}.` +
+                (exNote ? ` ${exNote}` : "");
+    return `<span class="coh-indicator coh-closed" tabindex="0" title="${esc(tip)}">Closed</span>`;
+  }
+  if (orestarEnding == null) {
+    return '<span class="coh-indicator coh-estimated" tabindex="0" title="No ORESTAR account summary scraped yet, so this balance is unchecked">EST</span>';
   }
   if (absDisc > 0.01) {
     const severity = discrepancySeverity(absDisc);
@@ -2120,9 +2446,43 @@ function cohIndicatorHTML(profile) {
   return '';
 }
 
+
+/**
+ * Show only the tiles that still mean something under the current filter.
+ *
+ * "Compared with past cycles" charts fixed sets of statewide committees, so it
+ * never describes a filtered selection. The district map is kept only when the
+ * filter is one committee that is actually on this cycle's ballot — then it is
+ * lit on that district, which is more use than the statewide default. Anything
+ * else (a PAC, a former officeholder, several committees at once) hides it,
+ * since a map with nothing to point at is just noise.
+ *
+ * mode: "statewide" | "filer" | "multi"
+ */
+function setOverviewTiles(mode, profile) {
+  // Fixed sets of statewide committees — never a description of a selection.
+  const past = document.getElementById("past-cycles-box");
+  if (past) past.hidden = mode !== "statewide";
+
+  const mapBox = document.getElementById("legislative-races-box");
+  if (!mapBox) return;
+  if (mode === "statewide") {
+    mapBox.hidden = false;
+    if (typeof rcClearSelection === "function") rcClearSelection();
+    return;
+  }
+  const seat = mode === "filer" && typeof rcDistrictForSlug === "function"
+    ? rcDistrictForSlug(profile && profile.slug) : null;
+  mapBox.hidden = !seat;
+  if (seat && typeof rcSelectDistrict === "function") rcSelectDistrict(seat.chamber, seat.district);
+}
+
 function renderOverviewSingleFiler(profile) {
   const pulseEl = document.getElementById("campaign-pulse");
   if (pulseEl) pulseEl.hidden = true;
+  // The comparisons now read this committee's own money rather than the state's.
+  if (typeof ccSetScope === "function") ccSetScope("filer", profile);
+  setOverviewTiles("filer", profile);
   const partyBox = document.getElementById("party-fundraising-box");
   if (partyBox) partyBox.hidden = true;
   const racesBox = document.getElementById("races-to-watch");
@@ -2135,6 +2495,7 @@ function renderOverviewSingleFiler(profile) {
   const fullFilerTl = profile.timeline || [];
   const { totalIn, totalInKind, totalOut, cashOnHand, count } =
     statsFromTimeline(tlRows, profile.beginning_balances, fullFilerTl);
+
   document.getElementById("stat-contributions").textContent = fmt$(totalIn);
   document.getElementById("stat-inkind").textContent        = fmt$(totalInKind);
   document.getElementById("stat-expenditures").textContent  = fmt$(totalOut);
@@ -2173,6 +2534,8 @@ function renderOverviewSingleFiler(profile) {
 function renderOverviewMultiFiler(profiles) {
   const pulseEl = document.getElementById("campaign-pulse");
   if (pulseEl) pulseEl.hidden = true;
+  if (typeof ccSetScope === "function") ccSetScope("none");
+  setOverviewTiles("multi");
   const partyBox = document.getElementById("party-fundraising-box");
   if (partyBox) partyBox.hidden = true;
   const racesBox = document.getElementById("races-to-watch");
@@ -2917,6 +3280,10 @@ async function loadTimeline() {
 }
 
 function renderTimeline(year) {
+  // Cycle comparison is a statewide aggregate, so it belongs to this view only.
+  if (typeof initCycleCompare === "function") {
+    try { initCycleCompare(); } catch (e) { console.warn("[cyclecompare]", e); }
+  }
   // Date range takes precedence over year dropdown
   let rows;
   if (state.dateStart || state.dateEnd) {
@@ -3026,93 +3393,11 @@ function renderTimelineMultiFiler(profiles) {
   makeLineChart("chart-timeline", months, datasets);
 }
 
-// ── Search ────────────────────────────────────────────────────────────────────
-
-async function loadSearch() {
-  if (!allRecent.length) {
-    allRecent = await DL.getBlob("recent_transactions");
-    fuseIndex = new Fuse(allRecent, {
-      keys: ["contributor_payee", "filer", "amount", "purpose"],
-      threshold: 0.35,
-      includeScore: false,
-    });
-  }
-
-  const input   = document.getElementById("search-input");
-  const typeEl  = document.getElementById("search-type");
-  const clearEl = document.getElementById("search-clear");
-
-  if (!input._listenerAttached) {
-    input.addEventListener("input", applySearchFilters);
-    typeEl.addEventListener("change", applySearchFilters);
-    clearEl.addEventListener("click", () => {
-      input.value = "";
-      typeEl.value = "";
-      applySearchFilters();
-    });
-    input._listenerAttached = true;
-  }
-
-  applySearchFilters();
-}
-
-function applySearchFilters() {
-  const input  = document.getElementById("search-input");
-  const typeEl = document.getElementById("search-type");
-  const q      = input ? input.value.trim() : "";
-  const type   = typeEl ? typeEl.value : "";
-
-  let results = q && fuseIndex
-    ? fuseIndex.search(q).map(r => r.item)
-    : [...allRecent];
-
-  if (type) {
-    results = results.filter(r => (r.tran_type || "").trim().toUpperCase() === type);
-  }
-
-  // Filer filter
-  if (state.selectedFilers.length > 0) {
-    const selectedNames = new Set(state.selectedFilers.map(f => f.name.toLowerCase()));
-    results = results.filter(r => selectedNames.has((r.filer || "").toLowerCase()));
-  }
-
-  // Date range filter
-  if (state.dateStart) {
-    results = results.filter(r => r.filed_date && r.filed_date >= state.dateStart);
-  }
-  if (state.dateEnd) {
-    results = results.filter(r => r.filed_date && r.filed_date <= state.dateEnd);
-  }
-
-  document.getElementById("search-count").textContent = fmtNum(results.length);
-  renderSearchResults(results);
-}
-
-function renderSearchResults(rows) {
-  const tbody = document.querySelector("#table-search tbody");
-  if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#718096;padding:24px">No transactions found.</td></tr>';
-    return;
-  }
-
-  tbody.innerHTML = rows.slice(0, 2000).map(r => {
-    const type  = (r.tran_type || "").trim().toUpperCase();
-    const badge = `<span class="badge badge-${type}">${type === "C" ? "Contribution" : type === "E" ? "Expenditure" : type}</span>`;
-    return `<tr>
-      <td>${r.filed_date || "—"}</td>
-      <td>${badge}</td>
-      <td>${esc(r.contributor_payee || "")}</td>
-      <td>${esc(r.filer || "")}</td>
-      <td class="num">${fmt$(r.amount)}</td>
-      <td>${esc(r.purpose || "")}</td>
-    </tr>`;
-  }).join("");
-}
-
 // ── Party Fundraising ───────────────────────────────────────────────────
 async function loadPartyFundraising() {
   try {
     const data = await DL.getBlob("by_party_type");
+    window.partyTypeData = data;   // reused by cyclecompare.js
     if (!data || !data.by_year) return;
     const box = document.getElementById("party-fundraising-box");
     if (!box) return;
@@ -3247,67 +3532,55 @@ async function loadPartyFundraising() {
 
 // ── Races to Watch ──────────────────────────────────────────────────────
 function renderRacesToWatch() {
-  if (!activitySnapshot || !activitySnapshot.races || !activitySnapshot.races.length) return;
-  const races = activitySnapshot.races;
+  // Built from legislative_map — the same roster the district map uses, so the
+  // cards and the map can never disagree. That roster is already the current
+  // GENERAL election only, which is what we want now the primary is decided.
+  const lm = activitySnapshot && activitySnapshot.legislative_map;
   const el = document.getElementById("races-to-watch");
   const list = document.getElementById("races-list");
-  if (!el || !list) return;
+  if (!lm || !el || !list) return;
+
+  const races = [];
+  for (const [chamber, label] of [["house", "House District"], ["senate", "Senate District"]]) {
+    for (const [d, e] of Object.entries(lm[chamber] || {})) {
+      races.push({ office: `${label} ${d}`, total: e.total_raised || 0,
+                   candidates: e.candidates || [] });
+    }
+  }
+  for (const [office, e] of Object.entries(lm.statewide || {})) {
+    races.push({ office, total: e.total_raised || 0, candidates: e.candidates || [] });
+  }
+
+  // Top 6 by money — a 2x3 grid rather than a long list.
+  const top = races.sort((a, b) => b.total - a.total).slice(0, 6);
+  if (!top.length) return;
   el.hidden = false;
 
-  function raceRowHTML(c) {
-    const partyClass = c.party === "Democrat" ? "party-d" : c.party === "Republican" ? "party-r" : "party-other";
-    const badge = c.party ? `<span class="pulse-entry-party ${partyClass}">${c.party.charAt(0)}</span>` : "";
-    return `<div class="race-row" ${c.slug ? `data-slug="${esc(c.slug)}" style="cursor:pointer"` : ""}>
-        <span class="race-col-name">${badge} ${esc(c.candidate_name || c.name)}</span>
-        <span class="race-col-raised">${fmt$(c.raised_cycle)}</span>
-        <span class="race-col-coh">${fmt$(c.cash_on_hand)}</span>
+  list.innerHTML = top.map(race => {
+    const rows = race.candidates.slice(0, 4).map(c => {
+      const p = (c.party || "").toLowerCase();
+      const cls = p.startsWith("dem") ? "party-d" : p.startsWith("rep") ? "party-r" : "party-other";
+      const badge = c.party ? `<span class="pulse-entry-party ${cls}">${esc(c.party.charAt(0))}</span>` : "";
+      const nm = esc(c.candidate_name || c.name || "");
+      const name = c.slug
+        ? `<a href="#" data-slug="${esc(c.slug)}">${nm}</a>`
+        : `<span class="race-no-cmte">${nm}</span>`;
+      return `<div class="race-row"><span class="race-col-name">${badge} ${name}</span>` +
+             `<span class="race-col-raised">${c.slug ? fmt$(c.raised_cycle) : "—"}</span></div>`;
+    }).join("");
+    const more = race.candidates.length > 4
+      ? `<div class="race-more">+${race.candidates.length - 4} more</div>` : "";
+    return `<div class="race-card">
+        <div class="race-card-header">
+          <span class="race-office">${esc(race.office)}</span>
+          <span class="race-total">${fmt$(race.total)}</span>
+        </div>
+        ${rows}${more}
       </div>`;
-  }
+  }).join("");
 
-  let html = "";
-  for (let ri = 0; ri < races.length; ri++) {
-    const race = races[ri];
-    const visible = race.candidates.slice(0, 5);
-    const extra = race.candidates.slice(5);
-    html += `<div class="race-card">
-      <div class="race-card-header">
-        <span class="race-office">${esc(race.office)}</span>
-        <span class="race-total">${fmt$(race.total_raised)}</span>
-      </div>
-      <div class="race-table">
-        <div class="race-table-header">
-          <span class="race-col-name">Candidate</span>
-          <span class="race-col-raised">Raised</span>
-          <span class="race-col-coh">Cash on Hand</span>
-        </div>`;
-    for (const c of visible) html += raceRowHTML(c);
-    if (extra.length > 0) {
-      html += `<div class="race-extra" id="race-extra-${ri}" hidden>`;
-      for (const c of extra) html += raceRowHTML(c);
-      html += `</div>`;
-      html += `<div class="race-show-more" data-race-idx="${ri}">Show ${extra.length} more</div>`;
-    }
-    html += `</div></div>`;
-  }
-  list.innerHTML = html;
-
-  // Wire up click-to-navigate on race rows
-  list.querySelectorAll(".race-row[data-slug]").forEach(row => {
-    row.addEventListener("click", () => selectFilerBySlug(row.dataset.slug));
-  });
-
-  // Wire up show-more toggles
-  list.querySelectorAll(".race-show-more").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const idx = btn.dataset.raceIdx;
-      const extra = document.getElementById(`race-extra-${idx}`);
-      if (!extra) return;
-      extra.hidden = !extra.hidden;
-      btn.textContent = extra.hidden
-        ? `Show ${extra.children.length} more`
-        : "Show fewer";
-    });
-  });
+  list.querySelectorAll("a[data-slug]").forEach(a =>
+    a.addEventListener("click", e => { e.preventDefault(); selectFilerBySlug(a.dataset.slug); }));
 }
 
 // ── Fundraising Pulse ────────────────────────────────────────────────────
@@ -3318,10 +3591,16 @@ const PULSE_ROWS = 3;
 async function loadCampaignPulse() {
   try {
     activitySnapshot = await DL.getBlob("activity_snapshot");
+    // Overview extras: historical comparison, then the district map below it.
+    if (typeof initCompare === "function") { try { initCompare(); } catch (e) { console.warn("[compare]", e); } }
+    if (typeof initRaceMap === "function") { try { initRaceMap(activitySnapshot); } catch (e) { console.warn("[racemap]", e); } }
     await ensureDonorFilerMap();
     const el = document.getElementById("campaign-pulse");
     if (el) { el.hidden = false; renderPulsePeriod(pulseCurrentPeriod); }
     renderRacesToWatch();
+    // The race header needs legislative_map, which only exists once this
+    // resolves — re-render so the field appears if Overview drew first.
+    renderFilerRaceHeader();
     // Wire up period toggle
     const toggle = document.getElementById("pulse-period-toggle");
     if (toggle) {
@@ -3492,7 +3771,6 @@ const loaders = {
   overview:   loadOverview,
   donors:     loadDonors,
   recipients: loadRecipients,
-  search:     loadSearch,
 };
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -3506,6 +3784,13 @@ const loaders = {
   // Load donor→filer map in background (non-blocking)
   ensureDonorFilerMap().catch(() => {});
   initFilerSelector();
+  // Cross-page handoff: /donors and /races link to a committee by stashing
+  // its slug in sessionStorage before navigating here.
+  const handoff = sessionStorage.getItem("openFilerSlug");
+  if (handoff) {
+    sessionStorage.removeItem("openFilerSlug");
+    selectFilerBySlug(handoff);
+  }
   renderActiveTab();
 
   // Silently check if user has admin/reviewer role — show admin button if so
