@@ -1108,7 +1108,8 @@ function bdRender() {
   const kind = document.getElementById("bd-kind").value;
 
   const rows = (bdRows || []).filter(r => {
-    if (Math.abs(r.delta) < min) return false;
+    const judged = (r.asof_delta != null) ? r.asof_delta : r.delta;
+    if (Math.abs(judged) < min) return false;
     if (kind === "active"  && r.dormant) return false;
     if (kind === "dormant" && !r.dormant) return false;
     if (q && !(r.name || "").toLowerCase().includes(q)
@@ -1132,14 +1133,30 @@ function bdRender() {
   const CAP = 300;
   const shown = rows.slice(0, CAP);
   const body = shown.map(r => {
-    const sev = Math.abs(r.delta) >= 100000 ? "red"
-              : Math.abs(r.delta) >= 10000  ? "yellow" : "gray";
+    // Judge on the AS-OF difference where there is one.
+    //
+    // `delta` compares everything we hold against a snapshot, so anything filed
+    // since the summary was captured shows up as disagreement belonging to
+    // neither side. Hours after a summary sweep, Cyrus for Oregon was listed
+    // for $45,771 that was precisely its 16 rows filed since.
+    //
+    // Both are shown, deliberately. Only the as-of figure would hide the
+    // window; only the live one buries real gaps inside it — Bring Balance to
+    // Salem PAC's $180,040 has no post-summary activity at all.
+    const judged = (r.asof_delta != null) ? r.asof_delta : r.delta;
+    const sev = Math.abs(judged) >= 100000 ? "red"
+              : Math.abs(judged) >= 10000  ? "yellow" : "gray";
+    const since = (r.post_summary_activity != null && Math.abs(r.post_summary_activity) > 0.01)
+      ? `<span class="bd-since" title="Filed after ORESTAR's summary was captured on ${esc(String(r.orestar_year || ""))}; not a disagreement, just activity ORESTAR has not published yet">`
+        + `${r.post_summary_activity > 0 ? "+" : ""}${bd$(r.post_summary_activity)} since</span>`
+      : "";
     return `<tr>
       <td><a href="../index.html?filer=${encodeURIComponent(r.slug)}" target="_blank">${esc(r.name || r.slug)}</a>
-          ${r.dormant ? '<span class="bd-tag" title="No transactions in the year ORESTAR reports">dormant</span>' : ""}</td>
+          ${r.dormant ? '<span class="bd-tag" title="No transactions in the year ORESTAR reports">dormant</span>' : ""}
+          ${r.closed ? '<span class="bd-tag" title="ORESTAR reports no activity and a $0.00 balance for this committee">closed</span>' : ""}</td>
       <td class="bd-num">${bd$(r.calculated)}</td>
       <td class="bd-num">${bd$(r.orestar)}</td>
-      <td class="bd-num bd-delta bd-${sev}">${r.delta > 0 ? "+" : ""}${bd$(r.delta)}</td>
+      <td class="bd-num bd-delta bd-${sev}">${judged > 0 ? "+" : ""}${bd$(judged)}${since}</td>
       <td class="bd-num">${(r.tran_count || 0).toLocaleString()}</td>
       <td>${r.orestar_year || "—"}</td>
     </tr>`;
@@ -1149,7 +1166,7 @@ function bdRender() {
     <table class="bd-table">
       <thead><tr>
         <th>Committee</th><th class="bd-num">Calculated</th><th class="bd-num">ORESTAR</th>
-        <th class="bd-num">Difference</th><th class="bd-num">Txns</th><th>Yr</th>
+        <th class="bd-num" title="Our balance as of the moment ORESTAR's summary was captured, against that summary. Activity filed since is shown beneath and is not counted as a disagreement.">Difference</th><th class="bd-num">Txns</th><th>Yr</th>
       </tr></thead>
       <tbody>${body}</tbody>
     </table>

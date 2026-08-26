@@ -349,3 +349,14 @@
   display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 9px;
   background: #edf2f7; color: #718096; font-size: .72rem; vertical-align: middle;
 }
+
+/* Activity filed after ORESTAR's summary was captured. Shown next to the
+   difference so a reader can see the committee is ahead of ORESTAR rather
+   than in disagreement with it. */
+.bd-since {
+  display: block;
+  font-size: 0.78em;
+  font-weight: 400;
+  color: #718096;
+  margin-top: 2px;
+}

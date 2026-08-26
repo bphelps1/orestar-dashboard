@@ -2576,6 +2576,43 @@ def aggregate_filers(
     # Precomputed here rather than derived in the browser: filer_detail holds
     # 7,268 large JSON blobs, and the admin page should not have to pull them
     # all down to find the couple of thousand that matter.
+    # Cash filed AFTER each committee's summary was captured, per (filer,
+    # cutoff date). Built once from the merged frame rather than queried per
+    # committee: this runs over 7,263 filers, and the alternative is 7,263
+    # round trips to answer one question.
+    #
+    # Same definition as the balance itself — cash contributions and other
+    # receipts in, cash expenditures and disbursements out, in-kind excluded
+    # because it never moves cash. Loans are already inside the contribution
+    # and expenditure sets, exactly as ORESTAR has them.
+    _filer_post_summary: dict[str, dict] = {}
+    try:
+        _cuts = {}
+        for _r in _filer_detail_rows:
+            _t = ((_r["detail"].get("orestar_account_summary") or {}).get("scrape_ts")) or 0
+            if _t and _r.get("filer_id"):
+                _cuts[str(_r["filer_id"])] = datetime.fromtimestamp(float(_t)).date()
+        if _cuts and "filed_date" in df.columns and "filer_id" in df.columns:
+            _pf = df[df["filer_id"].astype(str).isin(_cuts.keys())].copy()
+            _pf["_fd"] = pd.to_datetime(_pf["filed_date"], errors="coerce").dt.date
+            _pf = _pf[_pf["_fd"].notna()]
+            _pf["_cut"] = _pf["filer_id"].astype(str).map(_cuts)
+            _pf = _pf[_pf["_fd"] > _pf["_cut"]]
+            if not _pf.empty:
+                _ink = _pf["sub_type"].isin(INKIND_SUBTYPES) if "sub_type" in _pf.columns else False
+                _sign = pd.Series(0.0, index=_pf.index)
+                _sign[(_pf["tran_type"] == "C") & (~_ink)] = 1.0
+                _sign[_pf["tran_type"] == "OR"] = 1.0
+                _sign[(_pf["tran_type"] == "E") & (~_ink)] = -1.0
+                _sign[_pf["tran_type"] == "OD"] = -1.0
+                _pf["_signed"] = _pf["amount"].astype(float) * _sign
+                for (_fid, _cut), _amt in _pf.groupby(
+                        [_pf["filer_id"].astype(str), "_cut"])["_signed"].sum().items():
+                    _filer_post_summary.setdefault(_fid, {})[_cut] = float(_amt)
+    except Exception as _e:
+        log.warning("post-summary activity not computed (%s) — "
+                    "the admin comparison falls back to the live delta", _e)
+
     _disc_rows = []
     for _row in _filer_detail_rows:
         _d = _row["detail"]
@@ -2583,13 +2620,50 @@ def aggregate_filers(
         if _acct.get("ending_cash_balance") is None:
             continue                      # never checked — not a discrepancy
         _delta = round(_d.get("cash_on_hand", 0.0) - _acct["ending_cash_balance"], 2)
-        if abs(_delta) <= 0.01:
+
+        # The same balance as of the moment ORESTAR's figure was captured.
+        #
+        # cash_on_hand covers every transaction we hold; ending_cash_balance is
+        # a snapshot. Anything filed in between is a difference belonging to
+        # neither side, and it reappears continuously: hours after a summary
+        # sweep finished, Cyrus for Oregon was flagged for $45,771 that was
+        # exactly its 16 rows filed since, and Hicks for Senate for $108,312 of
+        # which $91,765 was the same thing.
+        #
+        # Both figures are kept rather than one replacing the other. Showing
+        # only the as-of delta would hide the window; showing only the live one
+        # buries real gaps in it — Bring Balance to Salem PAC's $180,040 has no
+        # post-summary activity at all and is entirely genuine.
+        _asof_delta = None
+        _post_summary = None
+        _ts = _acct.get("scrape_ts") or 0
+        # scrape_ts is 0 on summaries captured before #87 recorded it. Treating
+        # that as "captured in 1970" would exclude a committee's whole history
+        # and report its entire balance as post-summary activity, so those keep
+        # the live comparison only.
+        if _ts:
+            _cut = datetime.fromtimestamp(float(_ts)).date()
+            _post = _filer_post_summary.get(str(_row.get("filer_id")), {}).get(_cut)
+            if _post is None:
+                _post = 0.0
+            _post_summary = round(float(_post), 2)
+            _asof_delta = round(_delta - _post_summary, 2)
+
+        # Flag on the AS-OF difference where we have one: that is the real
+        # disagreement. A committee whose entire delta is post-summary activity
+        # is not in disagreement with ORESTAR, it is simply ahead of it.
+        _judge = _asof_delta if _asof_delta is not None else _delta
+        if abs(_judge) <= 0.01:
             continue
         _disc_rows.append({
             "slug": _row["slug"], "name": _row["name"], "filer_id": _row.get("filer_id"),
             "calculated": _d.get("cash_on_hand", 0.0),
             "orestar": _acct["ending_cash_balance"],
             "delta": _delta,
+            # What the comparison is actually judged on: our balance restricted
+            # to rows filed by the summary's capture, against that summary.
+            "asof_delta": _asof_delta,
+            "post_summary_activity": _post_summary,
             "orestar_year": _acct.get("year"),
             "scrape_ts": _acct.get("scrape_ts"),
             "tran_count": _d.get("tran_count", 0),
@@ -2607,7 +2681,7 @@ def aggregate_filers(
             "signature": _d.get("discrepancy_signature"),
             "first_bad_year": _d.get("discrepancy_first_bad_year"),
         })
-    _disc_rows.sort(key=lambda r: -abs(r["delta"]))
+    _disc_rows.sort(key=lambda r: -abs(r["asof_delta"] if r["asof_delta"] is not None else r["delta"]))
     _write_json("balance_discrepancies.json", {
         "generated": datetime.now().isoformat(timespec="seconds"),
         "checked": sum(1 for r in _filer_detail_rows
