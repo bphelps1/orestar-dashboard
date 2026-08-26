@@ -2398,7 +2398,7 @@ function updateCohIndicator(profile) {
 // Why a balance can leave out a transaction the committee plainly filed.
 //
 // Exempt loan principal is held out of cash for years where ORESTAR's own
-// statement records no receipts at all (see the exempt-loan block in
+// statement reports no exempt loans received (see the exempt-loan block in
 // process.py). Committee for SAIF Keeping is the case this exists for:
 // ORESTAR lists a $665,242.33 exempt loan in its transaction record and
 // reports $128.13 of cash for the same year. A reader who looks that
@@ -2412,8 +2412,9 @@ function exemptLoanNoteText(profile) {
   const those = years.length === 1 ? "that year" : "those years";
   return `${fmt$(total)} of exempt loan principal (${years.join(", ")}) is not ` +
          `counted here: ORESTAR's own account summary for ${those} reports no ` +
-         `contributions, no loans and no other receipts, so ORESTAR does not ` +
-         `treat it as cash either.`;
+         `exempt loans received, so ORESTAR does not treat it as cash either. ` +
+         `ORESTAR reported exempt loans inconsistently before about 2013; from ` +
+         `2014 on it records them and this balance counts them.`;
 }
 
 // Build discrepancy indicator HTML for multi-filer cards (inline)
