@@ -2672,6 +2672,7 @@ def aggregate_filers(
     # because it never moves cash. Loans are already inside the contribution
     # and expenditure sets, exactly as ORESTAR has them.
     _filer_post_summary: dict[str, dict] = {}
+    _filer_last_filed: dict[str, object] = {}
     try:
         _cuts = {}
         for _r in _filer_detail_rows:
@@ -2692,6 +2693,24 @@ def aggregate_filers(
             _pf["_fd"] = pd.to_datetime(_pf["filed_date"], errors="coerce").dt.date
             _pf = _pf[_pf["_fd"].notna()]
             _pf["_cut"] = _pf[_fid_col].astype(str).str.strip().map(_cuts)
+            # When did each committee last file anything at all?
+            #
+            # Taken here, before the cutoff filter, because the question is
+            # about the SNAPSHOT rather than about activity after it: if a
+            # committee filed on or after the day its summary was captured,
+            # that summary provably cannot contain everything we hold, and the
+            # comparison against it is stale by arithmetic rather than by
+            # supposition.
+            #
+            # The post-summary figure above cannot answer this, because it cuts
+            # strictly after the capture DATE and filed_date carries no time.
+            # Bring Balance to Salem PAC filed $180,040 on 2026-08-24 and the
+            # summary was captured 2026-08-24 12:37:45, so its post-summary
+            # activity came out as $0.00 and the gap was recorded as genuine.
+            # ORESTAR's live page now reports exactly our figure, to the cent.
+            for _fid_v, _fd_v in (_pf.groupby(_pf[_fid_col].astype(str).str.strip())["_fd"]
+                                     .max().items()):
+                _filer_last_filed[str(_fid_v)] = _fd_v
             _pf = _pf[_pf["_fd"] > _pf["_cut"]]
             if not _pf.empty:
                 _ink = _pf["sub_type"].isin(INKIND_SUBTYPES) if "sub_type" in _pf.columns else False
@@ -2734,10 +2753,20 @@ def aggregate_filers(
         #
         # Both figures are kept rather than one replacing the other. Showing
         # only the as-of delta would hide the window; showing only the live one
-        # buries real gaps in it — Bring Balance to Salem PAC's $180,040 has no
-        # post-summary activity at all and is entirely genuine.
+        # buries real gaps in it.
+        #
+        # Bring Balance to Salem PAC was cited here as the example of a gap
+        # with no post-summary activity that was "entirely genuine". It was
+        # not. Its $180,040 is two rows filed 2026-08-24 against a summary
+        # captured 2026-08-24 12:37:45; ORESTAR's live page now reports our
+        # figure to the cent. Three more of that group were checked against
+        # ORESTAR directly and every one matched exactly. Hence snapshot_stale
+        # below — post_summary_activity cannot see a same-day filing, so it
+        # said $0.00 and the comparison looked sound.
         _asof_delta = None
         _post_summary = None
+        _cut = None
+        _last_filed = None
         _ts = _acct.get("scrape_ts") or 0
         # scrape_ts is 0 on summaries captured before #87 recorded it. Treating
         # that as "captured in 1970" would exclude a committee's whole history
@@ -2745,6 +2774,7 @@ def aggregate_filers(
         # the live comparison only.
         if _ts:
             _cut = datetime.fromtimestamp(float(_ts)).date()
+            _last_filed = _filer_last_filed.get(str(_row.get("filer_id")))
             _post = _filer_post_summary.get(str(_row.get("filer_id")), {}).get(_cut)
             if _post is None:
                 _post = 0.0
@@ -2782,6 +2812,23 @@ def aggregate_filers(
             # undifferentiated dollar figure per committee.
             "signature": _d.get("discrepancy_signature"),
             "first_bad_year": _d.get("discrepancy_first_bad_year"),
+            # The snapshot provably predates something we hold.
+            #
+            # Not a tolerance and not a guess: if the committee filed on or
+            # after the day its summary was captured, that summary cannot
+            # contain every row on our side, so the difference is at least
+            # partly the capture time rather than a disagreement. Four such
+            # committees were checked against ORESTAR's live page during this
+            # investigation and all four matched our figure exactly.
+            #
+            # These rows are LABELLED, not dropped — they stay in the list with
+            # their dollars visible. The resolution is a fresher summary, and a
+            # reader who cannot see which comparisons are stale cannot tell
+            # which ones to re-scrape.
+            "snapshot_stale": bool(
+                _ts and _last_filed is not None and _last_filed >= _cut),
+            "last_filed": (_last_filed.isoformat()
+                           if _ts and _last_filed is not None else None),
         })
     _disc_rows.sort(key=lambda r: -abs(r["asof_delta"] if r["asof_delta"] is not None else r["delta"]))
     _write_json("balance_discrepancies.json", {
@@ -2790,6 +2837,14 @@ def aggregate_filers(
                        if (r["detail"].get("orestar_account_summary") or {})
                           .get("ending_cash_balance") is not None),
         "flagged": len(_disc_rows),
+        # How many of those comparisons are against a summary that provably
+        # predates the committee's own filings, and what they are worth. Kept
+        # in the payload so the Admin tab can say what the flagged total is
+        # actually made of instead of presenting one undifferentiated number.
+        "snapshot_stale": sum(1 for r in _disc_rows if r.get("snapshot_stale")),
+        "snapshot_stale_amount": round(sum(
+            abs(r["asof_delta"] if r["asof_delta"] is not None else r["delta"])
+            for r in _disc_rows if r.get("snapshot_stale")), 2),
         "rows": _disc_rows,
     })
 

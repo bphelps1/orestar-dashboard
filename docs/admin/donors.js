@@ -1099,6 +1099,8 @@ async function bdLoad() {
   const blob = data.data;
   bdRows = blob.rows || [];
   bdMeta = { checked: blob.checked || 0, flagged: blob.flagged || bdRows.length,
+             snapshotStale: blob.snapshot_stale || 0,
+             snapshotStaleAmount: blob.snapshot_stale_amount || 0,
              generated: blob.generated || "" };
 }
 
@@ -1118,9 +1120,18 @@ function bdRender() {
   });
 
   const agree = bdMeta.checked - bdMeta.flagged;
+  // Name the stale share rather than folding it into one number. These
+  // comparisons are against a summary that predates the committee's own
+  // filings, so their dollars are not evidence of disagreement — but they are
+  // still listed, because the fix is to re-scrape them and a hidden row cannot
+  // be re-scraped.
+  const staleTxt = bdMeta.snapshotStale
+    ? ` · ${bdMeta.snapshotStale.toLocaleString()} against a stale snapshot`
+      + (bdMeta.snapshotStaleAmount ? ` (${bd$(bdMeta.snapshotStaleAmount)})` : "")
+    : "";
   document.getElementById("bd-count").textContent =
     `${rows.length.toLocaleString()} shown · ${bdMeta.flagged.toLocaleString()} flagged of `
-    + `${bdMeta.checked.toLocaleString()} checked · ${agree.toLocaleString()} agree`;
+    + `${bdMeta.checked.toLocaleString()} checked · ${agree.toLocaleString()} agree${staleTxt}`;
 
   if (!rows.length) {
     document.getElementById("bd-list").innerHTML =
@@ -1141,8 +1152,14 @@ function bdRender() {
     // for $45,771 that was precisely its 16 rows filed since.
     //
     // Both are shown, deliberately. Only the as-of figure would hide the
-    // window; only the live one buries real gaps inside it — Bring Balance to
-    // Salem PAC's $180,040 has no post-summary activity at all.
+    // window; only the live one buries real gaps inside it.
+    //
+    // Bring Balance to Salem PAC used to be cited here as a gap with no
+    // post-summary activity. That was wrong: its $180,040 is two rows filed
+    // 2026-08-24 against a summary captured 2026-08-24 12:37:45, and ORESTAR's
+    // live page now reports our figure to the cent. post_summary_activity cuts
+    // strictly after the capture DATE and filed_date carries no time, so a
+    // same-day filing is invisible to it. That is what the stale tag is for.
     const judged = (r.asof_delta != null) ? r.asof_delta : r.delta;
     const sev = Math.abs(judged) >= 100000 ? "red"
               : Math.abs(judged) >= 10000  ? "yellow" : "gray";
@@ -1153,7 +1170,8 @@ function bdRender() {
     return `<tr>
       <td><a href="../index.html?filer=${encodeURIComponent(r.slug)}" target="_blank">${esc(r.name || r.slug)}</a>
           ${r.dormant ? '<span class="bd-tag" title="No transactions in the year ORESTAR reports">dormant</span>' : ""}
-          ${r.closed ? '<span class="bd-tag" title="ORESTAR reports no activity and a $0.00 balance for this committee">closed</span>' : ""}</td>
+          ${r.closed ? '<span class="bd-tag" title="ORESTAR reports no activity and a $0.00 balance for this committee">closed</span>' : ""}
+          ${r.snapshot_stale ? `<span class="bd-tag bd-tag-stale" title="This committee last filed on ${esc(String(r.last_filed || ""))}, on or after the day ORESTAR's summary was captured — so that summary cannot contain everything we hold and the comparison is stale. Re-scrape the summary to resolve it. Four committees in this group were checked against ORESTAR's live page and every one matched our figure exactly.">stale snapshot</span>` : ""}</td>
       <td class="bd-num">${bd$(r.calculated)}</td>
       <td class="bd-num">${bd$(r.orestar)}</td>
       <td class="bd-num bd-delta bd-${sev}">${judged > 0 ? "+" : ""}${bd$(judged)}${since}</td>
