@@ -2355,11 +2355,39 @@ function updateCohIndicator(profile) {
              `its summary page does not agree with itself for this committee.</div>`;
     })();
 
+    // ORESTAR's summary against ORESTAR's own itemised transactions.
+    //
+    // Only shown where the coverage survey has confirmed we hold every row
+    // ORESTAR reports, because a line difference looks identical whether
+    // ORESTAR over-reports or we under-hold, and only the survey can tell
+    // those apart. Friends of Ted Ferrioli 2006 is the case: the summary
+    // claims $213,961.90 of expenditures against 161 itemised transactions
+    // totalling $173,367.64, with exactly one $40,000 row in ORESTAR's list.
+    const itemisedNote = (() => {
+      const yd = profile.yearly_discrepancies || {};
+      const yrs = Object.keys(yd).filter(y => {
+        const v = yd[y];
+        return v && v.rows_complete && v.summary_vs_itemised != null
+               && Math.abs(v.summary_vs_itemised) > 0.01;
+      });
+      if (!yrs.length) return "";
+      yrs.sort();
+      const v = yd[yrs[0]];
+      const more = yrs.length > 1 ? ` (also ${yrs.slice(1).join(", ")})` : "";
+      return `<div class="disc-note">ORESTAR's ${yrs[0]} account summary does not agree with ` +
+             `ORESTAR's own itemised transactions for that year${more}: the summary is ` +
+             `${fmt$(Math.abs(v.summary_vs_itemised))} ` +
+             `${v.summary_vs_itemised > 0 ? "above" : "below"} what its listed transactions ` +
+             `total. We hold every row ORESTAR reports for this committee, and the balance ` +
+             `above follows that itemised record.</div>`;
+    })();
+
     popover.innerHTML = `
       <div class="disc-row"><span>ORESTAR ending cash balance:</span><span>${orestarEnding != null ? fmt$(orestarEnding) : "N/A"}</span></div>
       <div class="disc-row"><span>Calculated cash on hand:</span><span>${fmt$(calcCoh)}</span></div>
       <div class="disc-row disc-diff"><span>Difference:</span><span>${disc >= 0 ? "+" : ""}${fmt$(disc)}</span></div>
       ${loanNote}
+      ${itemisedNote}
       ${exemptLoanNoteText(profile) ? `<div class="disc-note">${esc(exemptLoanNoteText(profile))}</div>` : ""}
       <div class="disc-ts">ORESTAR account summary scraped at: ${formatTimestamp(scrapeTs)}</div>
     `;

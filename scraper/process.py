@@ -52,6 +52,31 @@ INKIND_SUBTYPES = frozenset({
     "In-Kind/Forgiven Personal Expenditures",   # plural, as ORESTAR spells it
 })
 
+_ROW_COMPLETE: dict = {}
+
+
+def _row_completeness() -> dict:
+    """filer_id -> True when we hold every row ORESTAR reports for that filer.
+
+    From the coverage survey, which asks ORESTAR how many records it holds and
+    compares that against ours. It is the only evidence that can separate "our
+    data is short" from "ORESTAR's summary disagrees with ORESTAR's own
+    itemised transactions", and without it the second claim cannot honestly be
+    made — a line difference looks identical either way.
+
+    Missing file is not an error: every caller treats an absent filer as
+    unknown and says nothing rather than guessing.
+    """
+    path = DATA_DIR / "coverage_survey.json"
+    if not path.exists():
+        return {}
+    try:
+        return {str(e["filer_id"]): (e.get("missing") or 0) <= 0
+                for e in json.loads(path.read_text())}
+    except Exception:
+        return {}
+
+
 # Summaries scraped before the #90 parser fix report $0.00 in every loan field,
 # so the figure can only be trusted from this instant on. Used by the non-exempt
 # correction (#96) and the exempt one below.
@@ -1325,6 +1350,12 @@ def aggregate_filers(
         )
         # Kept for callers that only need a representative id.
         _name_to_fid: dict[str, str] = {n: ids[-1] for n, ids in _name_to_fids.items()}
+        # Loaded once here rather than per filer: 7,263 committees would
+        # otherwise re-read and re-parse the same file.
+        global _ROW_COMPLETE
+        _ROW_COMPLETE = _row_completeness()
+        log.info("row-completeness known for %d committees (from the coverage survey)",
+                 len(_ROW_COMPLETE))
         unique_fids = sorted({f for ids in _name_to_fids.values() for f in ids})
         # Derived from the yearly summaries rather than scraped again.
         #
@@ -2292,6 +2323,7 @@ def aggregate_filers(
                 deltas = [d for d in [delta_c, delta_e, delta_or, delta_od, delta_end,
                                       delta_beg, delta_movement] if d is not None]
                 reconciles = not any(abs(d) > 0.01 for d in deltas)
+                _rows_complete_here = _ROW_COMPLETE.get(_name_to_fid.get(name, ""))
                 if True:
                     yearly_discrepancies[yr_s] = {
                         # True when every line item agrees, so the UI can show
@@ -2336,6 +2368,40 @@ def aggregate_filers(
                         "our_net_asof": our_net_asof,
                         "delta_movement_asof": delta_movement_asof,
                         "snapshot_lag": snapshot_lag,
+                        # ORESTAR's summary against ORESTAR's OWN itemised
+                        # transactions, where we know our row set equals its.
+                        #
+                        # Friends of Ted Ferrioli 2006 is the case this exists
+                        # for. ORESTAR's summary reports $213,961.90 of
+                        # expenditures and $204,049.26 of contributions; the
+                        # 161 transactions ORESTAR itemises for that year total
+                        # $173,367.64 and $203,155.00. Verified against ORESTAR
+                        # directly, not inferred: a date-bounded record count
+                        # (161 = 161, where the survey's all-years figure could
+                        # not have settled it), a narrow search finding exactly
+                        # ONE $40,000 row, a fresh read of the summary, and a
+                        # full sum paged off ORESTAR's own results screens.
+                        # Net -40,000 + 300 = -39,700, which then propagates as
+                        # an opening-balance gap for twelve further years.
+                        #
+                        # We follow the itemised record, which our figures
+                        # match to the cent. Matching the summary instead would
+                        # mean synthesising a second $40,000 row — disagreeing
+                        # with the record we currently match exactly, and
+                        # corrupting every donor and payee total on the site to
+                        # repair one balance.
+                        #
+                        # Gated on known completeness. Where the survey has not
+                        # measured a committee this stays None and the site
+                        # says nothing, because a line difference looks the
+                        # same whether ORESTAR over-reports or we under-hold.
+                        "rows_complete": _rows_complete_here,
+                        "summary_vs_itemised": (
+                            None if not _rows_complete_here or orestar_c is None
+                                    or orestar_e is None else
+                            round((orestar_c - our_c) + ((orestar_or or 0) - our_or)
+                                  - (orestar_e - our_e)
+                                  - ((orestar_od or 0) - our_od), 2)),
                         "discrepancy": delta_end,
                     }
 
