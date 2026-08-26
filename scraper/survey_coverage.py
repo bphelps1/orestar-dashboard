@@ -328,7 +328,22 @@ def main() -> int:
         log.info("Nothing flagged — nothing to survey.")
         return 0
 
-    surveyed = {} if args.recheck else _load_survey()
+    # --recheck forgets the TARGETS, not the whole survey.
+    #
+    # It used to start from an empty dict, and _save_survey writes whatever
+    # dict it is handed — so a recheck of 365 committees would have replaced a
+    # 1,617-committee file with 365 entries and silently discarded the other
+    # 1,252, each of which cost a real ORESTAR request to obtain. The flag is
+    # for re-measuring a subset whose counts have gone stale; that is what it
+    # does now.
+    surveyed = _load_survey()
+    if args.recheck:
+        _forgotten = [t for t in targets if t in surveyed]
+        for _t in _forgotten:
+            del surveyed[_t]
+        log.info("--recheck: forgetting %d recorded result(s) of the %d targeted; "
+                 "%d other committees keep theirs",
+                 len(_forgotten), len(targets), len(surveyed))
     todo = [t for t in targets if t not in surveyed]
     log.info("%d committees flagged, %d already surveyed, %d to go",
              len(targets), len(targets) - len(todo), len(todo))
