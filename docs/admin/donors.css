@@ -350,6 +350,12 @@
   background: #edf2f7; color: #718096; font-size: .72rem; vertical-align: middle;
 }
 
+/* The comparison is against a summary older than the committee's own filings,
+   so its dollar figure is not evidence of disagreement. Tinted rather than
+   grey so it reads as a caveat on the number beside it — these rows stay in
+   the list because the fix is to re-scrape them. */
+.bd-tag-stale { background: #fefcbf; color: #975a16; }
+
 /* Activity filed after ORESTAR's summary was captured. Shown next to the
    difference so a reader can see the committee is ahead of ORESTAR rather
    than in disagreement with it. */
