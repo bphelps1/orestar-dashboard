@@ -2356,6 +2356,29 @@ def aggregate_filers(
                                       delta_beg, delta_movement] if d is not None]
                 reconciles = not any(abs(d) > 0.01 for d in deltas)
                 _rows_complete_here = _ROW_COMPLETE.get(_name_to_fid.get(name, ""))
+                # A stale snapshot is not ORESTAR contradicting itself.
+                #
+                # summary_vs_itemised compares our line sums against the STORED
+                # summary. When that summary was captured before the committee
+                # filed, the difference is the capture time — exactly what #108
+                # labels as snapshot_stale — and saying "ORESTAR's summary
+                # disagrees with its own transactions" would assert something
+                # demonstrably untrue. Bring Balance to Salem PAC is the proof:
+                # its stored summary is $180,040 adrift, and ORESTAR's LIVE page
+                # reports our figure to the cent.
+                #
+                # Measured over the committees the note would otherwise appear
+                # on: 56 of 257, worth $536,395 — 69% of the labelled dollars —
+                # are stale rather than self-contradictory.
+                if _rows_complete_here and _sum_ts:
+                    _snap_day = datetime.fromtimestamp(_sum_ts).date()
+                    _lf = None
+                    if not filer_all.empty and "filed_date" in filer_all.columns:
+                        _lf_raw = pd.to_datetime(filer_all["filed_date"],
+                                                 errors="coerce").max()
+                        _lf = None if pd.isna(_lf_raw) else _lf_raw.date()
+                    if _lf is not None and _lf >= _snap_day:
+                        _rows_complete_here = None   # unknowable until re-scraped
                 if True:
                     yearly_discrepancies[yr_s] = {
                         # True when every line item agrees, so the UI can show
