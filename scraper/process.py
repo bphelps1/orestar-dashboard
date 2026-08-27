@@ -104,7 +104,21 @@ def _row_completeness() -> dict:
                     checked = datetime.fromisoformat(str(e["checked"])).date()
                 except ValueError:
                     checked = None
-            out[str(e["filer_id"])] = ((e.get("missing") or 0) <= 0, checked)
+            # EXACTLY equal, not "not short".
+            #
+            # `missing` is ORESTAR's count minus ours, so a surplus on our side
+            # comes through NEGATIVE and `<= 0` waved it through as complete.
+            # A surplus disqualifies the itemised comparison exactly as a
+            # shortfall does: the claim it supports is "our line sums ARE
+            # ORESTAR's itemised sums", and holding rows ORESTAR does not have
+            # breaks that just as thoroughly as lacking rows it does.
+            #
+            # Plumbers & Steamfitters PAC is the live case. A backfill left it
+            # holding 11,766 rows against ORESTAR's 11,750 — 16 surplus, all in
+            # 2026, inflating its contributions by $32,284.04. Under `<= 0` a
+            # fresh survey would have certified it complete and published a
+            # note blaming ORESTAR for a difference we introduced.
+            out[str(e["filer_id"])] = ((e.get("missing") or 0) == 0, checked)
         return out
     except Exception:
         return {}
