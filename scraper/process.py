@@ -96,8 +96,16 @@ def _row_completeness() -> dict:
     if not path.exists():
         return {}
     try:
-        return {str(e["filer_id"]): (e.get("missing") or 0) <= 0
-                for e in json.loads(path.read_text())}
+        out = {}
+        for e in json.loads(path.read_text()):
+            checked = None
+            if e.get("checked"):
+                try:
+                    checked = datetime.fromisoformat(str(e["checked"])).date()
+                except ValueError:
+                    checked = None
+            out[str(e["filer_id"])] = ((e.get("missing") or 0) <= 0, checked)
+        return out
     except Exception:
         return {}
 
@@ -2380,7 +2388,37 @@ def aggregate_filers(
                 deltas = [d for d in [delta_c, delta_e, delta_or, delta_od, delta_end,
                                       delta_beg, delta_movement] if d is not None]
                 reconciles = not any(abs(d) > 0.01 for d in deltas)
-                _rows_complete_here = _ROW_COMPLETE.get(_name_to_fid.get(name, ""))
+                # Completeness is PERISHABLE, and this treated it as permanent.
+                #
+                # The survey asks ORESTAR how many records it holds on a given
+                # day. An active committee files constantly, so "complete on
+                # 13 August" says nothing about a summary captured on 26
+                # August. Friends of Christine Drazan was certified complete at
+                # 4,062 rows, and by the time its summary was re-scraped
+                # ORESTAR held 4,294 for 2026 against our 4,249 — 45 rows
+                # short. The note nevertheless told readers that ORESTAR's
+                # summary disagreed with its own transactions, over $243,465,
+                # when the truth was simply that we were behind.
+                #
+                # 213 of the 220 committees carrying that note, worth $491,534,
+                # had a certificate older than the summary being compared. So
+                # the certificate only counts when it is at least as recent as
+                # the summary. This is the same failure #113 fixed for stale
+                # SNAPSHOTS, in the other direction: there we compared against
+                # an old summary, here we vouch with an old survey.
+                #
+                # It costs real coverage — Ferrioli's 2006 gap is verified and
+                # loses its note because nobody re-surveyed it — and that is
+                # the right trade. A silent row is recoverable; a confident
+                # wrong attribution is not. Re-running the survey restores
+                # every note it withdraws, with evidence behind it.
+                _rc = _ROW_COMPLETE.get(_name_to_fid.get(name, ""))
+                _rows_complete_here = None
+                if _rc is not None:
+                    _complete, _checked = _rc
+                    if _checked is not None and _sum_ts:
+                        _sday = datetime.fromtimestamp(float(_sum_ts)).date()
+                        _rows_complete_here = _complete if _checked >= _sday else None
                 # A stale snapshot is not ORESTAR contradicting itself.
                 #
                 # summary_vs_itemised compares our line sums against the STORED
