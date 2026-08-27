@@ -104,7 +104,26 @@ def _row_completeness() -> dict:
                     checked = datetime.fromisoformat(str(e["checked"])).date()
                 except ValueError:
                     checked = None
-            # EXACTLY equal, not "not short".
+            # Judged on the RAW COUNTS, not on `missing`.
+            #
+            # `missing` is written as max(orestar - ours, 0) — clamped — so a
+            # surplus on our side arrives as 0 and is indistinguishable from a
+            # perfect match. Testing `missing == 0` therefore behaves exactly
+            # like `<= 0` and cannot see a surplus at all. The raw `orestar`
+            # and `held` counts are recorded alongside it and are unambiguous,
+            # so they decide.
+            #
+            # A surplus disqualifies the itemised comparison exactly as a
+            # shortfall does: the claim it supports is "our line sums ARE
+            # ORESTAR's itemised sums", and holding rows ORESTAR does not have
+            # breaks that as thoroughly as lacking rows it does.
+            #
+            # Plumbers & Steamfitters PAC is the live case — 11,766 held
+            # against ORESTAR's 11,750, sixteen surplus rows worth $32,284.04,
+            # every one of them a withdrawn filing our append-only pipeline
+            # never removed. Its re-survey recorded missing=0, which would have
+            # certified it complete and published a note blaming ORESTAR for a
+            # difference that is ours.
             #
             # `missing` is ORESTAR's count minus ours, so a surplus on our side
             # comes through NEGATIVE and `<= 0` waved it through as complete.
@@ -118,7 +137,12 @@ def _row_completeness() -> dict:
             # 2026, inflating its contributions by $32,284.04. Under `<= 0` a
             # fresh survey would have certified it complete and published a
             # note blaming ORESTAR for a difference we introduced.
-            out[str(e["filer_id"])] = ((e.get("missing") or 0) == 0, checked)
+            _o, _h = e.get("orestar"), e.get("held")
+            if _o is not None and _h is not None:
+                _complete = (int(_o) == int(_h))
+            else:                       # older survey rows without the counts
+                _complete = (e.get("missing") or 0) == 0
+            out[str(e["filer_id"])] = (_complete, checked)
         return out
     except Exception:
         return {}
