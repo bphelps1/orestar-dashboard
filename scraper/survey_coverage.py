@@ -240,12 +240,19 @@ def report() -> int:
         return 1
     rows = json.loads(SURVEY_PATH.read_text())
     short = [r for r in rows if (r.get("missing") or 0) > 0]
-    clean = [r for r in rows if (r.get("missing") or 0) <= 0]
+    over  = [r for r in rows if (r.get("surplus") or 0) > 0]
+    # "clean" means the counts AGREE. A committee holding rows ORESTAR does not
+    # have is not clean; it was previously counted as such because `missing` is
+    # clamped at zero.
+    clean = [r for r in rows
+             if (r.get("missing") or 0) == 0 and (r.get("surplus") or 0) == 0]
     d_short = sum(abs(r.get("delta") or 0) for r in short)
     d_clean = sum(abs(r.get("delta") or 0) for r in clean)
 
     print()
     print(f"  committees surveyed          : {len(rows):,}")
+    print(f"  SURPLUS ROWS (we hold extra) : {len(over):,}   "
+          f"{sum(r.get('surplus') or 0 for r in over):,} rows")
     print(f"  MISSING ROWS (backfill helps): {len(short):,}   ${d_short:,.0f} of delta")
     print(f"  complete (backfill cannot)   : {len(clean):,}   ${d_clean:,.0f} of delta")
     print(f"  rows missing in total        : {sum(r['missing'] for r in short):,}")
@@ -429,6 +436,14 @@ def main() -> int:
                 "orestar": n,
                 "held": ours,
                 "missing": max(n - ours, 0),
+                # Recorded rather than discarded. `missing` is clamped at zero
+                # so the backfill's sort and "how many rows to recover" stay
+                # meaningful, but that clamp made a SURPLUS invisible — we hold
+                # rows ORESTAR no longer returns, because withdrawn and
+                # superseded filings vanish from ORESTAR and nothing in this
+                # pipeline ever removes them. Plumbers & Steamfitters PAC held
+                # 16 such rows worth $32,284.04 and surveyed as "missing: 0".
+                "surplus": max(ours - n, 0),
                 "delta": meta.get("delta"),
                 "dormant": meta.get("dormant"),
                 "checked": today.isoformat(),
