@@ -240,16 +240,6 @@
   "checked": "2026-08-13"
  },
  {
-  "filer_id": "221",
-  "name": "Plumbers & Steamfitters PAC",
-  "orestar": 11750,
-  "held": 11708,
-  "missing": 42,
-  "delta": 17223.78,
-  "dormant": false,
-  "checked": "2026-08-27"
- },
- {
   "filer_id": "307",
   "name": "Douglas County Republican Central Committee",
   "orestar": 8031,
@@ -4950,16 +4940,6 @@
   "checked": "2026-08-13"
  },
  {
-  "filer_id": "19751",
-  "name": "Friends of Lisa Fragala",
-  "orestar": 708,
-  "held": 705,
-  "missing": 3,
-  "delta": -500.0,
-  "dormant": false,
-  "checked": "2026-08-27"
- },
- {
   "filer_id": "4749",
   "name": "Coalition for a Healthy Oregon",
   "orestar": 480,
@@ -9188,36 +9168,6 @@
   "delta": -0.25,
   "dormant": false,
   "checked": "2026-08-13"
- },
- {
-  "filer_id": "328",
-  "name": "Linn County Democratic Central Committee",
-  "orestar": 5021,
-  "held": 5020,
-  "missing": 1,
-  "delta": -115.0,
-  "dormant": false,
-  "checked": "2026-08-27"
- },
- {
-  "filer_id": "15984",
-  "name": "Friends of Jeff Helfrich",
-  "orestar": 3369,
-  "held": 3368,
-  "missing": 1,
-  "delta": 92.46,
-  "dormant": false,
-  "checked": "2026-08-27"
- },
- {
-  "filer_id": "24304",
-  "name": "Oregon REALTORS Political Action Committee 2",
-  "orestar": 185,
-  "held": 184,
-  "missing": 1,
-  "delta": 50.0,
-  "dormant": false,
-  "checked": "2026-08-27"
  },
  {
   "filer_id": "4936",
@@ -16397,6 +16347,56 @@
   "missing": 0,
   "delta": 1.3,
   "dormant": false,
+  "checked": "2026-08-27"
+ },
+ {
+  "filer_id": "221",
+  "name": "Plumbers & Steamfitters PAC",
+  "orestar": 11750,
+  "held": 11766,
+  "missing": 0,
+  "delta": 32284.04,
+  "dormant": false,
+  "checked": "2026-08-27"
+ },
+ {
+  "filer_id": "19751",
+  "name": "Friends of Lisa Fragala",
+  "orestar": 708,
+  "held": 709,
+  "missing": 0,
+  "delta": 8000.0,
+  "dormant": false,
+  "checked": "2026-08-27"
+ },
+ {
+  "filer_id": "15984",
+  "name": "Friends of Jeff Helfrich",
+  "orestar": 3369,
+  "held": 3370,
+  "missing": 0,
+  "delta": 167.46,
+  "dormant": false,
+  "checked": "2026-08-27"
+ },
+ {
+  "filer_id": "328",
+  "name": "",
+  "orestar": 5021,
+  "held": 5021,
+  "missing": 0,
+  "delta": null,
+  "dormant": null,
+  "checked": "2026-08-27"
+ },
+ {
+  "filer_id": "24304",
+  "name": "",
+  "orestar": 185,
+  "held": 185,
+  "missing": 0,
+  "delta": null,
+  "dormant": null,
   "checked": "2026-08-27"
  }
 ]
