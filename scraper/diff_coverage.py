@@ -245,6 +245,38 @@ def orestar_ids(page, filer_id: str, start: date, end: date,
 # Persistence
 # ---------------------------------------------------------------------------
 
+def _prioritise(targets: list[dict], entries: dict) -> list[dict]:
+    """Order committees so the scarce request budget lands where it matters.
+
+    A diff going stale is not uniformly harmful, and that decides the order.
+
+    Where withdrawn rows are currently being SUBTRACTED from a balance, an
+    out-of-date answer actively moves a number: if a filer re-files a
+    transaction ORESTAR starts counting it again, and until we re-check we keep
+    excluding it. Those are re-checked first, oldest first.
+
+    Everything else is cheaper to be wrong about. A committee never diffed
+    costs only the information we do not yet have, and one diffed clean has
+    nothing being subtracted, so a stale answer there changes no figure at all.
+
+    Deliberately NOT an expiry rule. An earlier draft of this ignored the
+    withdrawn list once it was older than the summary being compared, which
+    would have re-included Plumbers & Steamfitters PAC's sixteen correctly
+    withdrawn rows — re-flagging it for $32,284.04 — because of the calendar,
+    with no evidence that anything had changed. Age decides what to RE-MEASURE.
+    Only a measurement changes an answer.
+    """
+    def rank(t):
+        e = entries.get(str(t["filer_id"]))
+        checked = (e or {}).get("checked") or ""
+        if e and e.get("surplus"):
+            return (0, checked)                  # subtracting money on old evidence
+        if not e:
+            return (1, "")                       # never measured
+        return (2, checked)                      # measured, nothing at stake
+    return sorted(targets, key=rank)
+
+
 def _load() -> dict:
     if not DIFF_PATH.exists():
         return {}
@@ -326,6 +358,8 @@ def main() -> int:
     entries = _load()
     if not args.recheck:
         targets = [t for t in targets if str(t["filer_id"]) not in entries]
+    else:
+        targets = _prioritise(targets, entries)
     if args.limit:
         targets = targets[:args.limit]
     if not targets:

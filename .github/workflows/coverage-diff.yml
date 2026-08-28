@@ -1,0 +1,192 @@
+name: Coverage Diff (which ROWS differ from ORESTAR)
+
+# Compares transaction IDs against ORESTAR, committee by committee.
+#
+# The count survey answers "how many rows does ORESTAR have?" in one search.
+# That is cheap and it is the right first pass, but it cannot settle
+# completeness: ORESTAR's search returns superseded originals we drop on
+# purpose, so a committee holding everything it should still reports fewer rows
+# than ORESTAR, permanently. A count cannot tell "a row we should not have"
+# from "a row we correctly removed", which is why that test has been wrong in
+# both directions.
+#
+# Diffing the IDs settles it, and costs far more: this pages entire result sets
+# fifty rows at a time, where the survey spends one search. Filer 221 takes ten
+# minutes and seven recursive window splits. Sweeping all 668 flagged
+# committees is days of scraping, so this runs as a slow rolling re-check
+# rather than a nightly full pass — the point is that every committee is
+# eventually re-measured, not that all of them are current at once.
+#
+# Order matters more than coverage here. diff_coverage.py's --recheck
+# prioritises committees where withdrawn rows are actively being SUBTRACTED
+# from a balance, because those are the only ones where a stale answer moves a
+# number: if a filer re-files a withdrawn transaction ORESTAR counts it again,
+# and until we re-measure we keep excluding it. Committees with nothing
+# withdrawn can wait.
+#
+# Note what this workflow deliberately does NOT do: expire the withdrawn list
+# by age. An earlier design ignored it once it was older than the summary being
+# compared, which would have re-included Plumbers & Steamfitters PAC's sixteen
+# correctly withdrawn rows — re-flagging it for $32,284.04 — on the strength of
+# the calendar, with nothing having changed. Age decides what to re-measure.
+# Only a measurement changes an answer.
+
+on:
+  schedule:
+    # 09:00 UTC daily, well clear of the 15:00 daily refresh. One slice per day
+    # against a set this size is slow on purpose: it is a rolling re-check, and
+    # ORESTAR's rate limiting is the binding constraint, not our patience.
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+    inputs:
+      filer_ids:
+        description: "Space-separated filer IDs, or blank for flagged committees"
+        required: false
+        default: ""
+        type: string
+      limit:
+        description: "Stop after this many committees (0 = until the time budget)"
+        required: false
+        default: "0"
+        type: string
+      recheck:
+        description: "Re-diff committees already recorded, worst-staleness first"
+        required: false
+        default: "true"
+        type: boolean
+      chain_index:
+        description: "Internal: which run of the retrigger chain this is"
+        required: false
+        default: "1"
+
+permissions:
+  contents: write
+  actions: write
+
+# Shares the ORESTAR lane with every other scraper. This is the most
+# request-hungry job in the repo, so it must take its turn rather than compete
+# with the daily refresh for the same rate limit.
+concurrency:
+  group: orestar-scrape
+  cancel-in-progress: false
+
+jobs:
+  diff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Wait for other ORESTAR jobs
+        uses: ./.github/actions/await-orestar
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: scraper/requirements.txt
+
+      - name: Install Python dependencies
+        run: pip install -r scraper/requirements.txt
+
+      - name: Install Playwright browser + system dependencies
+        timeout-minutes: 25
+        run: bash scripts/install_playwright.sh
+
+      - name: Install Xvfb (virtual display for headed browser)
+        run: sudo apt-get install -y xvfb
+
+      - name: Diff coverage
+        id: diff
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.filer_ids }}" ]; then
+            ARGS="$ARGS --filer-ids ${{ inputs.filer_ids }}"
+          else
+            ARGS="$ARGS --flagged"
+          fi
+          if [ "${{ inputs.limit }}" != "0" ] && [ -n "${{ inputs.limit }}" ]; then
+            ARGS="$ARGS --limit ${{ inputs.limit }}"
+          fi
+          # Default true, including on the schedule, where `inputs` is empty.
+          # Without --recheck a scheduled run only ever measures committees
+          # never seen before, so the rolling re-check would never roll — the
+          # committees that matter most are precisely the ones already recorded.
+          if [ "${{ inputs.recheck }}" != "false" ]; then
+            ARGS="$ARGS --recheck"
+          fi
+          # Comfortably inside the job's 90 minutes, so the script always stops
+          # on its own terms rather than being killed mid-committee.
+          ARGS="$ARGS --max-minutes 70"
+          xvfb-run --auto-servernum python scraper/diff_coverage.py $ARGS 2>&1 | tee /tmp/diff.log
+
+          # Progress read from the script's own report, not inferred from a git
+          # diff. A chain that decides whether to continue by guessing is how
+          # the backfill kept queueing runs that did nothing.
+          DIFFED=$(grep -oE "Diffed [0-9]+ committees this run" /tmp/diff.log | grep -oE "[0-9]+" | head -1)
+          echo "diffed=${DIFFED:-0}" >> "$GITHUB_OUTPUT"
+          echo "This run diffed ${DIFFED:-0} committees."
+
+      # always(), NOT !cancelled().
+      #
+      # A job timeout is reported as "cancelled", so !cancelled() skips this
+      # step exactly when it matters most. diff_coverage.py saves after every
+      # committee precisely so a cut-off run keeps what it measured; a commit
+      # step that refuses to run then throws all of it away. The survey learned
+      # this by losing 96 committees' worth of work.
+      - name: Commit diff results
+        if: always()
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ ! -f data/coverage_diff.json ]; then
+            echo "No diff file — this run measured nothing to commit."
+            exit 0
+          fi
+          git add data/coverage_diff.json
+          if git diff --staged --quiet; then
+            echo "No diff progress to commit."
+            exit 0
+          fi
+          git commit -m "data: coverage diff progress [skip ci]"
+          git pull --rebase origin ${{ github.ref_name }} || true
+          git push
+
+      - name: Re-trigger if committees remain
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Two hard stops, because an unbounded chain that makes no progress is
+          # worse than no chain: 12 runs, and a run that diffed ZERO committees
+          # ends it.
+          #
+          # 12 rather than the survey's 40. Each run here is a full 70-minute
+          # budget of heavy paging, so twelve is already most of a day of the
+          # ORESTAR lane. This is a rolling re-check with a daily schedule
+          # behind it — yielding costs nothing, because every committee
+          # measured is committed and tomorrow's run picks up the staleness
+          # ordering exactly where this one left off.
+          CHAIN=${{ inputs.chain_index || '1' }}
+          if [ "$CHAIN" -ge 12 ] 2>/dev/null; then
+            echo "Chain limit reached ($CHAIN) — the daily schedule continues from here."
+            exit 0
+          fi
+          if [ "${{ steps.diff.outputs.diffed }}" = "0" ]; then
+            echo "This run diffed nothing — stopping rather than queueing another blocked run."
+            exit 0
+          fi
+          NEXT=$((CHAIN + 1))
+          echo "Chaining run $NEXT..."
+          bash scripts/dispatch_retry.sh coverage-diff.yml --ref ${{ github.ref_name }} \
+            -f chain_index="$NEXT" \
+            -f limit="${{ inputs.limit }}" \
+            -f filer_ids="${{ inputs.filer_ids }}" \
+            -f recheck="${{ inputs.recheck }}"
