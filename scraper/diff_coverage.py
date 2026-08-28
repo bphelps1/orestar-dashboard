@@ -77,6 +77,12 @@ DIFF_PATH = DATA_DIR / "coverage_diff.json"
 # ORESTAR shows 50 rows per page and stops offering "Next" after 100 of them.
 # Not documented anywhere; measured by paging filer 221 and getting exactly
 # 5,000 of 5,266 rows with the button quietly disabled.
+# Two re-checks of committees whose withdrawn rows are moving a balance for
+# every one committee measured for the first time. Any finite ratio prevents
+# starvation; this one says re-checking is twice as urgent as new coverage
+# without ever letting new coverage stop.
+RECHECK_PER_NEW = 2
+
 PAGE_ROWS = 50
 UI_ROW_CAP = 5_000
 
@@ -253,28 +259,52 @@ def _prioritise(targets: list[dict], entries: dict) -> list[dict]:
     Where withdrawn rows are currently being SUBTRACTED from a balance, an
     out-of-date answer actively moves a number: if a filer re-files a
     transaction ORESTAR starts counting it again, and until we re-check we keep
-    excluding it. Those are re-checked first, oldest first.
+    excluding it. Those want re-checking soonest.
 
-    Everything else is cheaper to be wrong about. A committee never diffed
-    costs only the information we do not yet have, and one diffed clean has
-    nothing being subtracted, so a stale answer there changes no figure at all.
+    A committee never measured costs only the information we do not yet have.
+    One measured clean has nothing being subtracted, so a stale answer there
+    changes no figure at all, and it goes last.
 
-    Deliberately NOT an expiry rule. An earlier draft of this ignored the
-    withdrawn list once it was older than the summary being compared, which
-    would have re-included Plumbers & Steamfitters PAC's sixteen correctly
-    withdrawn rows — re-flagging it for $32,284.04 — because of the calendar,
-    with no evidence that anything had changed. Age decides what to RE-MEASURE.
-    Only a measurement changes an answer.
+    But a strict priority order STARVES. Re-checking a committee only moves it
+    to the back of its own group rather than out of it, so the withdrawn group
+    never empties — and once it grows past what a day of runs can process,
+    committees never measured are never reached, permanently. The survey puts
+    roughly 126 of 691 committees in that group, so that is the steady state,
+    not an edge case.
+
+    So the two urgent groups are INTERLEAVED at a fixed ratio instead: two
+    re-checks for every one first measurement. Both make progress regardless of
+    how large either grows, and the ratio decides how fast — not whether.
+
+    Deliberately NOT an expiry rule. An earlier draft ignored the withdrawn
+    list once it was older than the summary being compared, which would have
+    re-included Plumbers & Steamfitters PAC's sixteen correctly withdrawn rows
+    — re-flagging it for $32,284.04 — because of the calendar, with no evidence
+    anything had changed. Age decides what to RE-MEASURE. Only a measurement
+    changes an answer.
     """
-    def rank(t):
+    recheck, fresh, lazy = [], [], []
+    for t in targets:
         e = entries.get(str(t["filer_id"]))
-        checked = (e or {}).get("checked") or ""
         if e and e.get("surplus"):
-            return (0, checked)                  # subtracting money on old evidence
-        if not e:
-            return (1, "")                       # never measured
-        return (2, checked)                      # measured, nothing at stake
-    return sorted(targets, key=rank)
+            recheck.append((e.get("checked") or "", t))
+        elif not e:
+            fresh.append(t)
+        else:
+            lazy.append((e.get("checked") or "", t))
+    recheck.sort(key=lambda x: x[0])          # oldest evidence first
+    lazy.sort(key=lambda x: x[0])
+
+    out: list[dict] = []
+    ri = fi = 0
+    rq = [t for _, t in recheck]
+    while ri < len(rq) or fi < len(fresh):
+        for _ in range(RECHECK_PER_NEW):      # two re-checks...
+            if ri < len(rq):
+                out.append(rq[ri]); ri += 1
+        if fi < len(fresh):                   # ...then one never measured
+            out.append(fresh[fi]); fi += 1
+    return out + [t for _, t in lazy]
 
 
 def _load() -> dict:
