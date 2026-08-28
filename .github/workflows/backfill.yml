@@ -263,9 +263,58 @@ jobs:
             exit 0
           fi
 
-          # Manual filer-targeted: done (daily refresh will aggregate)
+          # Manual filer-targeted: chain on whatever is left.
+          #
+          # This used to declare success unconditionally, on the assumption
+          # that one run finishes the whole list. It does not. fetch.py breaks
+          # out of the filer loop after two consecutive rate-limit failures,
+          # and F5 throttles a runner after roughly 25 searches — so a
+          # 21-filer request processed TWO committees, recovered zero rows,
+          # and reported "Filer-targeted backfill complete." Nineteen
+          # committees were never attempted and nothing said so.
+          #
+          # Auto and date-range modes both chain; only this branch did not.
+          # completed_backfills.txt already records what the scraper actually
+          # finished — the same evidence auto mode uses, and deliberately not
+          # the requested list, because filers the run never reached appear in
+          # neither the completed nor the incomplete file.
           if [ -n "$FILER_IDS" ]; then
-            echo "Filer-targeted backfill complete."
+            COMPLETED_FILE="data/completed_backfills.txt"
+            REMAIN=""
+            for fid in $FILER_IDS; do
+              if [ -f "$COMPLETED_FILE" ] && grep -qx "$fid" "$COMPLETED_FILE"; then
+                continue
+              fi
+              REMAIN="$REMAIN $fid"
+            done
+            REMAIN=$(echo "$REMAIN" | xargs || true)
+            if [ -z "$REMAIN" ]; then
+              echo "Filer-targeted backfill complete — every requested filer finished."
+              exit 0
+            fi
+            CHAIN="${{ github.event.inputs.chain_index || '1' }}"
+            if [ "$CHAIN" -ge 40 ] 2>/dev/null; then
+              echo "Chain limit reached ($CHAIN) with these still unfinished: $REMAIN"
+              exit 0
+            fi
+            # A run that finished NOTHING would otherwise queue an identical
+            # run forever. Rate limiting is the expected reason, and it clears
+            # with time rather than with retries, so stop and let the operator
+            # (or the next scheduled run) resume.
+            FINISHED=$(echo "$FILER_IDS" | wc -w)
+            LEFT=$(echo "$REMAIN" | wc -w)
+            if [ "$FINISHED" = "$LEFT" ]; then
+              echo "This run finished no filers — stopping rather than queueing an identical run."
+              echo "Still unfinished: $REMAIN"
+              exit 0
+            fi
+            NEXT=$((CHAIN + 1))
+            echo "Chaining run $NEXT for $LEFT unfinished filer(s): $REMAIN"
+            bash scripts/dispatch_retry.sh backfill.yml --ref main \
+              -f filer_ids="$REMAIN" \
+              -f start_year="${{ inputs.start_year }}" \
+              -f date_field="${{ inputs.date_field }}" \
+              -f chain_index="$NEXT"
             exit 0
           fi
 
