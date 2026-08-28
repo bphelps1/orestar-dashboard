@@ -2411,6 +2411,26 @@ function updateCohIndicator(profile) {
              `The balance here is rolled forward from ORESTAR's own transaction record.</div>`;
     })();
 
+    // Rows ORESTAR has withdrawn since we collected them.
+    //
+    // A filer can withdraw or supersede a filing; ORESTAR stops returning it
+    // and stops counting it. We keep the row — it is real history and belongs
+    // in contributor totals — but the balance follows ORESTAR and leaves it
+    // out. Identified by diffing transaction IDs against ORESTAR, never by
+    // comparing counts, which cannot tell a withdrawn row from a superseded
+    // one we correctly dropped.
+    const withdrawnNote = (() => {
+      const w = profile.orestar_withdrawn;
+      if (!w || !w.count) return "";
+      return `<div class="disc-note">${w.count} transaction${w.count === 1 ? "" : "s"}` +
+             `${w.amount ? ` totalling ${fmt$(Math.abs(w.amount))}` : ""} ` +
+             `${w.count === 1 ? "is" : "are"} still listed here but no longer returned by ` +
+             `ORESTAR — withdrawn or superseded filings. ORESTAR does not count ` +
+             `${w.count === 1 ? "it" : "them"} toward this balance, so neither does the ` +
+             `figure above. The record${w.count === 1 ? " is" : "s are"} kept rather than ` +
+             `deleted.</div>`;
+    })();
+
     popover.innerHTML = `
       <div class="disc-row"><span>ORESTAR ending cash balance:</span><span>${orestarEnding != null ? fmt$(orestarEnding) : "N/A"}</span></div>
       <div class="disc-row"><span>Calculated cash on hand:</span><span>${fmt$(calcCoh)}</span></div>
@@ -2418,6 +2438,7 @@ function updateCohIndicator(profile) {
       ${loanNote}
       ${itemisedNote}
       ${chainNote}
+      ${withdrawnNote}
       ${exemptLoanNoteText(profile) ? `<div class="disc-note">${esc(exemptLoanNoteText(profile))}</div>` : ""}
       <div class="disc-ts">ORESTAR account summary scraped at: ${formatTimestamp(scrapeTs)}</div>
     `;

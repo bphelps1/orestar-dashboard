@@ -78,6 +78,47 @@ def _chain_breaks(yearly: dict) -> dict:
 
 
 _ROW_COMPLETE: dict = {}
+_WITHDRAWN: dict = {}
+
+
+def _row_diff() -> tuple[dict, dict]:
+    """The row-level diff, when one has been run.
+
+    Returns ({filer_id: (complete, checked_date)}, {filer_id: {withdrawn ids}}).
+
+    diff_coverage.py compares tran_id SETS rather than counts, which is the
+    only thing that can settle completeness here: ORESTAR's search returns
+    superseded originals we drop on purpose, so a committee holding everything
+    it should still reports fewer rows than ORESTAR, permanently. Counts have
+    now been wrong in both directions — `held >= orestar` certified committees
+    carrying surplus, `held == orestar` rejects committees where supersession
+    worked. The diff distinguishes all three cases explicitly.
+
+    `complete: null` means the diff could not be trusted (ORESTAR's results UI
+    stops at 5,000 rows silently, so a short collection is refused rather than
+    merged). That is carried through as None — unknown, not clean.
+    """
+    path = DATA_DIR / "coverage_diff.json"
+    if not path.exists():
+        return {}, {}
+    try:
+        complete, withdrawn = {}, {}
+        for e in json.loads(path.read_text()):
+            fid = str(e["filer_id"])
+            checked = None
+            if e.get("checked"):
+                try:
+                    checked = datetime.fromisoformat(str(e["checked"])).date()
+                except ValueError:
+                    checked = None
+            if e.get("complete") is not None:
+                complete[fid] = (bool(e["complete"]), checked)
+            ids = {str(i) for i in (e.get("surplus") or [])}
+            if ids:
+                withdrawn[fid] = ids
+        return complete, withdrawn
+    except Exception:
+        return {}, {}
 
 
 def _row_completeness() -> dict:
@@ -1445,8 +1486,18 @@ def aggregate_filers(
         _name_to_fid: dict[str, str] = {n: ids[-1] for n, ids in _name_to_fids.items()}
         # Loaded once here rather than per filer: 7,263 committees would
         # otherwise re-read and re-parse the same file.
-        global _ROW_COMPLETE
+        global _ROW_COMPLETE, _WITHDRAWN
         _ROW_COMPLETE = _row_completeness()
+        # The row diff wins wherever it exists. It is expensive — it pages
+        # entire result sets where the survey spends one search — so it covers
+        # only committees someone chose to run it on, and the count survey
+        # still answers for the rest.
+        _diff_complete, _WITHDRAWN = _row_diff()
+        if _diff_complete:
+            _ROW_COMPLETE.update(_diff_complete)
+            log.info("row-level diff available for %d committees (authoritative "
+                     "over the count survey); %d hold withdrawn rows",
+                     len(_diff_complete), len(_WITHDRAWN))
         log.info("row-completeness known for %d committees (from the coverage survey)",
                  len(_ROW_COMPLETE))
         unique_fids = sorted({f for ids in _name_to_fids.values() for f in ids})
@@ -1700,12 +1751,42 @@ def aggregate_filers(
         # a transaction it cannot date, so the balance excludes it too. Applied
         # to the cash frames only — the rows stay in contributor totals, donor
         # aggregates and transaction listings, where they are perfectly valid.
+        # Rows ORESTAR has WITHDRAWN, held out of the balance but not deleted.
+        #
+        # A filer can withdraw or supersede a filing; ORESTAR then stops
+        # returning it, and nothing in this pipeline ever removes it. Our store
+        # only drifts upward, invisibly, until something forces it into view —
+        # Plumbers & Steamfitters PAC carried 16 such rows worth $32,284.04 and
+        # surveyed as "missing: 0", because a count cannot see them.
+        #
+        # ORESTAR does not count these, so the balance must not either. The
+        # rows themselves stay: they are real history, they belong in
+        # contributor totals, donor aggregates and transaction listings, and
+        # deleting on the strength of a scraper's output is a far riskier
+        # operation than declining to add a number up. Same treatment the
+        # undated rows get above, and for the same reason.
+        #
+        # Only from diff_coverage.py, never from a count. Identity is the only
+        # evidence precise enough to name a row as withdrawn.
+        _withdrawn_here = _WITHDRAWN.get(_name_to_fid.get(name, "")) or set()
+
         def _dated(_f):
-            if _f is None or _f.empty or "_undated" not in _f.columns:
+            if _f is None or _f.empty:
                 return _f
-            return _f[~_f["_undated"].fillna(False)]
+            if "_undated" in _f.columns:
+                _f = _f[~_f["_undated"].fillna(False)]
+            if _withdrawn_here and not _f.empty and "tran_id" in _f.columns:
+                _f = _f[~_f["tran_id"].astype(str).isin(_withdrawn_here)]
+            return _f
         _c_for_coh = _dated(_c_for_coh)
         _e_for_coh = _dated(_e_for_coh)
+        # Disbursements and balance adjustments go through the same filter.
+        # Today every withdrawn row found is a type-C contribution, so these
+        # are guards rather than corrections — but a filter covering three of
+        # five cash frames is the #99 bug waiting to happen again, where a
+        # correction reached some consumers and not the rest.
+        _od_for_coh = _dated(filer_od)
+        _ba_for_coh = _dated(filer_ba)
         # Exempt loans, where ORESTAR's own summary says it did not count one.
         #
         # #96 made ORESTAR's reported figure decide for NON-exempt loans, which
@@ -1827,7 +1908,7 @@ def aggregate_filers(
                         nets[yr_s] = nets.get(yr_s, 0.0) + sign * float(amt)
             return nets
 
-        yearly_nets = _yearly_net(_c_for_coh, _e_for_coh, _or_for_coh, filer_od, filer_ba)
+        yearly_nets = _yearly_net(_c_for_coh, _e_for_coh, _or_for_coh, _od_for_coh, _ba_for_coh)
 
         # The same nets, attributed by FILING year instead of transaction year.
         #
@@ -1862,7 +1943,7 @@ def aggregate_filers(
         def _net_2006(row_filter):
             total = 0.0
             for _f, _sign in [(_c_for_coh, 1), (_or_for_coh, 1), (_e_for_coh, -1),
-                              (filer_od, -1), (filer_ba, 1)]:
+                              (_od_for_coh, -1), (_ba_for_coh, 1)]:
                 if _f.empty or "year" not in _f.columns:
                     continue
                 _g = _f[_f["year"] == 2006]
@@ -1890,7 +1971,7 @@ def aggregate_filers(
 
         _filed_frames = []
         for _f, _sign in [(_c_for_coh, 1), (_or_for_coh, 1), (_e_for_coh, -1),
-                          (filer_od, -1), (filer_ba, 1)]:
+                          (_od_for_coh, -1), (_ba_for_coh, 1)]:
             if not _f.empty and "filed_date" in _f.columns:
                 _g = _f.copy()
                 _g["_fy"] = pd.to_datetime(_g["filed_date"], errors="coerce").dt.year
@@ -1983,7 +2064,7 @@ def aggregate_filers(
         if _asof_ts:
             _asof_cut = pd.Timestamp(datetime.fromtimestamp(_asof_ts))
             for _f, _sign in [(_c_for_coh, 1), (_or_for_coh, 1), (_e_for_coh, -1),
-                              (filer_od, -1), (filer_ba, 1)]:
+                              (_od_for_coh, -1), (_ba_for_coh, 1)]:
                 if _f.empty or "year" not in _f.columns or "filed_date" not in _f.columns:
                     continue
                 _g = _f.copy()
@@ -2590,11 +2671,11 @@ def aggregate_filers(
         # re-adds on render exactly what the server just took out — #99, which
         # showed Ted Wheeler $726,880 against a stored $1,530.14.
         or_monthly = monthly_sum(_or_for_coh,         "other_receipts")
-        od_monthly = monthly_sum(filer_od,            "other_disbursements")
+        od_monthly = monthly_sum(_od_for_coh,         "other_disbursements")
         # Balance adjustments were missing from the timeline entirely, so any
         # balance recomputed from it could not match ours no matter what else
         # was corrected — the information simply was not there.
-        ba_monthly = monthly_sum(filer_ba,            "balance_adjustments")
+        ba_monthly = monthly_sum(_ba_for_coh,         "balance_adjustments")
         count_monthly_filer = filer_all.groupby("month").size().rename("count")
         tl_df = pd.concat([c_monthly, i_monthly, li_monthly, ce_monthly, ik_monthly,
                            lo_monthly, or_monthly, od_monthly, ba_monthly,
@@ -2807,6 +2888,17 @@ def aggregate_filers(
             # balance forward from transactions and that arithmetic is sound.
             # Recording it is what lets the site say so.
             "orestar_chain_breaks": _chain_breaks(_name_to_yearly.get(name, {})),
+            # Rows ORESTAR has withdrawn, kept in the dataset but out of the
+            # balance. Surfaced so a reader who finds one in the transaction
+            # list is told why it is not in the total, rather than concluding
+            # the arithmetic is broken.
+            "orestar_withdrawn": {
+                "count": len(_withdrawn_here),
+                "amount": round(float(
+                    filer_all.loc[filer_all["tran_id"].astype(str).isin(_withdrawn_here),
+                                  "amount"].sum()) if (_withdrawn_here and not filer_all.empty
+                                                       and "tran_id" in filer_all.columns) else 0.0, 2),
+            } if _withdrawn_here else {},
             # Exempt loan principal held out of cash because ORESTAR's own
             # statement records no receipts at all in those years. Carried per
             # year so the site can say WHY a figure omits a transaction the
