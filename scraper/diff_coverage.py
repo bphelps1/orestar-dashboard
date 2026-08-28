@@ -74,15 +74,15 @@ import supabase_sync
 DATA_DIR = Path(__file__).parent.parent / "data"
 DIFF_PATH = DATA_DIR / "coverage_diff.json"
 
-# ORESTAR shows 50 rows per page and stops offering "Next" after 100 of them.
-# Not documented anywhere; measured by paging filer 221 and getting exactly
-# 5,000 of 5,266 rows with the button quietly disabled.
 # Two re-checks of committees whose withdrawn rows are moving a balance for
 # every one committee measured for the first time. Any finite ratio prevents
 # starvation; this one says re-checking is twice as urgent as new coverage
 # without ever letting new coverage stop.
 RECHECK_PER_NEW = 2
 
+# ORESTAR shows 50 rows per page and stops offering "Next" after 100 of them.
+# Not documented anywhere; measured by paging filer 221 and getting exactly
+# 5,000 of 5,266 rows with the button quietly disabled.
 PAGE_ROWS = 50
 UI_ROW_CAP = 5_000
 
@@ -342,6 +342,26 @@ def report() -> int:
           f"{sum(len(r['missing']) for r in mis):,} rows")
     print(f"  superseded (correctly gone): {len(sup):,}   "
           f"{sum(len(r['superseded']) for r in sup):,} rows")
+    # Progress against the set that actually matters.
+    #
+    # The rolling re-check has no natural finish — by design, since a committee
+    # measured last week can change tomorrow. But "diff every filer with a
+    # remaining discrepancy" DOES have one, and without this the only way to
+    # know whether it had been reached was to count JSON entries by hand.
+    try:
+        flagged = {str(f["filer_id"]) for f in SC._flagged_committees()}
+    except Exception:                                     # noqa: BLE001
+        flagged = set()
+    if flagged:
+        seen = flagged & set(entries)
+        todo = flagged - set(entries)
+        stale = sorted((e.get("checked") or "") for f, e in entries.items() if f in flagged)
+        print(f"\n  flagged committees         : {len(flagged):,}")
+        print(f"    measured at least once   : {len(seen):,}  ({len(seen)/len(flagged)*100:.0f}%)")
+        print(f"    never measured           : {len(todo):,}")
+        if stale:
+            print(f"    oldest measurement       : {stale[0]}")
+
     failed = [r for r in rows if r.get("complete") is None]
     if failed:
         print(f"  could not be diffed        : {len(failed):,}  "
