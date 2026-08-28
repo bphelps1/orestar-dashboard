@@ -92,30 +92,44 @@
   "checked": "2026-08-28"
  },
  {
-  "filer_id": "22512",
-  "name": "Kipperlyn For Community",
-  "orestar": 145,
-  "held": 149,
+  "filer_id": "21770",
+  "name": "Committee to Elect Jeremy Gordon",
+  "orestar": 284,
+  "held": 283,
   "complete": false,
   "surplus": [
-   "5618357",
-   "5618361",
-   "5618363",
-   "5618365"
+   "5606415",
+   "5658825",
+   "5658829",
+   "5659725",
+   "5701066",
+   "5701068",
+   "5701072"
   ],
-  "missing": [],
+  "missing": [
+   "5606352",
+   "5658759",
+   "5658777",
+   "5658787",
+   "5658799",
+   "5658801",
+   "5658813",
+   "5748245"
+  ],
   "superseded": [],
   "checked": "2026-08-28"
  },
  {
-  "filer_id": "618",
-  "name": "Deschutes County Republican Central Committee",
-  "orestar": 6252,
-  "held": 6254,
+  "filer_id": "291",
+  "name": "Benton County Democratic Central Committee",
+  "orestar": 7630,
+  "held": 7634,
   "complete": false,
   "surplus": [
-   "5576888",
-   "5657886"
+   "5669756",
+   "5760623",
+   "5763679",
+   "5776009"
   ],
   "missing": [],
   "superseded": [],
@@ -142,44 +156,46 @@
   "checked": "2026-08-28"
  },
  {
-  "filer_id": "24537",
-  "name": "Manny for Salem",
-  "orestar": 104,
-  "held": 104,
+  "filer_id": "24707",
+  "name": "Elana for Bend",
+  "orestar": 93,
+  "held": 94,
   "complete": false,
   "surplus": [
-   "5599156"
+   "5656557"
   ],
-  "missing": [
-   "5480481"
-  ],
+  "missing": [],
   "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "22512",
+  "name": "Kipperlyn For Community",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "618",
+  "name": "Deschutes County Republican Central Committee",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "24537",
+  "name": "Manny for Salem",
+  "complete": null,
   "checked": "2026-08-28"
  },
  {
   "filer_id": "24770",
   "name": "Yes for Canby's Neighborhood Schools",
-  "orestar": 143,
-  "held": 144,
-  "complete": false,
-  "surplus": [
-   "5624284"
-  ],
-  "missing": [],
-  "superseded": [],
+  "complete": null,
   "checked": "2026-08-28"
  },
  {
   "filer_id": "24572",
   "name": "Friends of Rachel Philip",
-  "orestar": 172,
-  "held": 173,
-  "complete": false,
-  "surplus": [
-   "5648743"
-  ],
-  "missing": [],
-  "superseded": [],
+  "complete": null,
   "checked": "2026-08-28"
  },
  {
@@ -899,6 +915,570 @@
   "name": "Jeremy Beausoleil Smith for Portland City Council",
   "orestar": 530,
   "held": 530,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "13991",
+  "name": "John Hutzler for Auditor",
+  "orestar": 263,
+  "held": 263,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "346",
+  "name": "Wasco County Democratic Central Committee",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "14465",
+  "name": "Committee to Elect Kirk Oakes Klamath County Commissioner",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "15453",
+  "name": "Brian Wolfe for Sheriff",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "4630",
+  "name": "Money Is Not Democracy",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "300",
+  "name": "Coos County Republican Central Committee",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "344",
+  "name": "Union County Republican Central Committee",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "22874",
+  "name": "Baker County Republican Women",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "20236",
+  "name": "Love Lake Oswego Parks Committee",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "16986",
+  "name": "Friends of Chris Boice",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "20170",
+  "name": "Friends of Jose Gonzalez",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "2196",
+  "name": "HARNEY COUNTY REPUBLICAN CENTRAL COMMITTEE",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "24501",
+  "name": "Elect Isabella Lee Tibbetts",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "24429",
+  "name": "Heylin for Deschutes",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "4212",
+  "name": "Friends of Chuck Riley",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "13185",
+  "name": "Grant County Democratic Central Committee",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "23541",
+  "name": "Paul 4 Salem",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "15769",
+  "name": "Friends of Joelle Davis",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "15669",
+  "name": "Keep Stayton Livable",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "14911",
+  "name": "Tualatin Citizens for Good Government",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "19340",
+  "name": "Committee to Elect Henry Balensifer",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "15229",
+  "name": "Andy Long for Sheriff Committee",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "24681",
+  "name": "Friends for Neyssa-sary Change",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "19589",
+  "name": "Friends of Wendy Kroger",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "21891",
+  "name": "Schools For All",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "20081",
+  "name": "People for Lincoln County Libraries",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "24981",
+  "name": "Friends of Val Pratt",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "24693",
+  "name": "Dudley for Oregon",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "3061",
+  "name": "Jones, Dick, Citizens for",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "5698",
+  "name": "Todd Anderson for Sheriff Committee",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "317",
+  "name": "Jefferson County Republican Party",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "24816",
+  "name": "Bassett for Oregon",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "296",
+  "name": "Clatsop County Republican Party",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "6568",
+  "name": "Richard Kreitzer for Assessor",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "19231",
+  "name": "Friends of Polk Fire",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "17949",
+  "name": "Committee to Elect Sharon Nasset",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "17101",
+  "name": "Lisa Seales for Bend City Council",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "17596",
+  "name": "Freedom from Aerial Herbicides Alliance",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "14545",
+  "name": "Bob Andrews for Mayor",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "15290",
+  "name": "Denise Bacon for County Commissioner",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "16545",
+  "name": "Freedom Oregon",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "21823",
+  "name": "Ed Diehl for Oregon",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "14024",
+  "name": "Redmond Firefighters Association",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "5793",
+  "name": "Hennagin 4 L.O.",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "20266",
+  "name": "Friends of Howard Memorial Sports Park",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "15616",
+  "name": "Friends of Melissa Cribbins",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "21841",
+  "name": "Move Oregon's Border - Douglas County",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "297",
+  "name": "Columbia County Democratic Central Committee",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "24365",
+  "name": "Friends of Jamie Collins",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "16023",
+  "name": "Riley Hill for City Council",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "22699",
+  "name": "Committee to Elect April Dobson",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "24601",
+  "name": "ELECT CURRY COMMISSIONER LYNN COKER",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "18489",
+  "name": "Stop the Funding",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "320",
+  "name": "Klamath County Democratic Central Committee",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "4745",
+  "name": "Oregonians for Immigration Reform Political Action Committee",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "14265",
+  "name": "Friends for Malinowski",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "12585",
+  "name": "Committee to Re-Elect Tim Evinger",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "12842",
+  "name": "Committee to Retain Judge Grant",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "14515",
+  "name": "Friends of Chris Gorsek",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "15610",
+  "name": "Friends of Lew Barnes",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "6285",
+  "name": "Shari Anderson, Treasurer",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "9366",
+  "name": "Committee to Elect Carolyn Oakley",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "19321",
+  "name": "Committee to Elect Kim Schmith",
+  "orestar": 105,
+  "held": 105,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "15658",
+  "name": "Friends of Joe Pishioneri",
+  "orestar": 641,
+  "held": 641,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "5797",
+  "name": "Kittelman for Senate",
+  "orestar": 664,
+  "held": 664,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "15835",
+  "name": "Penny for Corvallis",
+  "orestar": 33,
+  "held": 33,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "6066",
+  "name": "The Committee to Elect Bob Wolfe Sheriff",
+  "orestar": 2,
+  "held": 2,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "5575",
+  "name": "Anette Spickard for Assessor",
+  "orestar": 4,
+  "held": 4,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "15276",
+  "name": "Friends of John Swanson",
+  "orestar": 92,
+  "held": 92,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "15876",
+  "name": "Dick Gordon for Medford",
+  "orestar": 38,
+  "held": 38,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "290",
+  "name": "Baker County Republican Central Committee",
+  "orestar": 1231,
+  "held": 1231,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "23295",
+  "name": "Eli for Portland",
+  "orestar": 921,
+  "held": 921,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "21664",
+  "name": "Friends of Ivette Pantoja",
+  "orestar": 169,
+  "held": 169,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "13162",
+  "name": "Friends of Jim Kight",
+  "orestar": 35,
+  "held": 35,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "21229",
+  "name": "Friends of Richard Riggs",
+  "orestar": 56,
+  "held": 56,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "16185",
+  "name": "Friends of Andy High",
+  "orestar": 78,
+  "held": 78,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "17935",
+  "name": "Committee to Elect Jim Hamsher Grant County Judge",
+  "orestar": 15,
+  "held": 15,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "16876",
+  "name": "Citizens for Patrick Starnes",
+  "orestar": 48,
+  "held": 48,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "5029",
+  "name": "Bike Walk Vote PAC",
+  "orestar": 106,
+  "held": 106,
   "complete": true,
   "surplus": [],
   "missing": [],
