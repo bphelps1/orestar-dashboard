@@ -28,6 +28,161 @@
   "checked": "2026-08-27"
  },
  {
+  "filer_id": "19050",
+  "name": "Friends of Christine Drazan",
+  "orestar": 17652,
+  "held": 17625,
+  "complete": false,
+  "surplus": [
+   "5553505",
+   "5559277",
+   "5639005",
+   "5643445",
+   "5678813",
+   "5687716",
+   "5687718",
+   "5700993",
+   "5733678",
+   "5738486",
+   "5747872",
+   "5752074"
+  ],
+  "missing": [
+   "5560276",
+   "5578699",
+   "5675055",
+   "5675060",
+   "5675065",
+   "5699128",
+   "5751647",
+   "5780313",
+   "5780316",
+   "5780317",
+   "5780318",
+   "5780324",
+   "5780329",
+   "5780415",
+   "5780430",
+   "5780431",
+   "5780432",
+   "5780437",
+   "5780439",
+   "5780447",
+   "5780448",
+   "5780453",
+   "5780454",
+   "5780455",
+   "5780456",
+   "5780458",
+   "5780459",
+   "5780461",
+   "5780542",
+   "5780543",
+   "5780544",
+   "5780545",
+   "5780546",
+   "5780598",
+   "5780599",
+   "5780600",
+   "5780601",
+   "5780602",
+   "5780604"
+  ],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "22512",
+  "name": "Kipperlyn For Community",
+  "orestar": 145,
+  "held": 149,
+  "complete": false,
+  "surplus": [
+   "5618357",
+   "5618361",
+   "5618363",
+   "5618365"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "618",
+  "name": "Deschutes County Republican Central Committee",
+  "orestar": 6252,
+  "held": 6254,
+  "complete": false,
+  "surplus": [
+   "5576888",
+   "5657886"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "4792",
+  "name": "Friends of Tina Kotek",
+  "orestar": 29264,
+  "held": 29259,
+  "complete": false,
+  "surplus": [
+   "5560903"
+  ],
+  "missing": [
+   "5745606",
+   "5751922",
+   "5751923",
+   "5780308",
+   "5780325",
+   "5780499"
+  ],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "24537",
+  "name": "Manny for Salem",
+  "orestar": 104,
+  "held": 104,
+  "complete": false,
+  "surplus": [
+   "5599156"
+  ],
+  "missing": [
+   "5480481"
+  ],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "24770",
+  "name": "Yes for Canby's Neighborhood Schools",
+  "orestar": 143,
+  "held": 144,
+  "complete": false,
+  "surplus": [
+   "5624284"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "24572",
+  "name": "Friends of Rachel Philip",
+  "orestar": 172,
+  "held": 173,
+  "complete": false,
+  "surplus": [
+   "5648743"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
   "filer_id": "15343",
   "name": "",
   "orestar": 93,
@@ -52,5 +207,702 @@
    "2041931"
   ],
   "checked": "2026-08-27"
+ },
+ {
+  "filer_id": "16459",
+  "name": "Friends of Rob Nosse",
+  "orestar": 4533,
+  "held": 4533,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "3215",
+  "name": "Friends of Ted Ferrioli",
+  "orestar": 3122,
+  "held": 3122,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "19768",
+  "name": "Friends of Ashley Hartmeier-Prigg",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "24797",
+  "name": "Diane Sykes for Judge",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "17629",
+  "name": "Friends of Eric Zimmerman",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "5067",
+  "name": "ChamberPAC",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "19990",
+  "name": "Tyler Miller",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "324",
+  "name": "Democratic Party of Lane County",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "17983",
+  "name": "Oregon First",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "17884",
+  "name": "Friends of Matt Wingard",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "5528",
+  "name": "Oregon Working Families Party",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "21075",
+  "name": "Total Recall PAC",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "15764",
+  "name": "Friends of Daniel Bunn",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "19751",
+  "name": "Friends of Lisa Fragala",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "20099",
+  "name": "Campos for Oregon",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "51",
+  "name": "Credit Union Legislative Action Fund",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "18661",
+  "name": "Jason for Bend",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "24642",
+  "name": "Benham for Oregon",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "312",
+  "name": "Hood River County Democrats",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "21700",
+  "name": "Friends of Kit Johnston",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "22530",
+  "name": "Sandy Chung (ACLU of Oregon)",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "16508",
+  "name": "Friends of Paul Evans",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "23238",
+  "name": "Evergreen PAC",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "21742",
+  "name": "Friends of Steve Bates",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "5208",
+  "name": "Friends of Tobias Read",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "18374",
+  "name": "Morrow County Republican Central Committee",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "5686",
+  "name": "Friends of Lew Frederick",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "19343",
+  "name": "Jef Green (AFT-Oregon)",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "23277",
+  "name": "Friends of Julie Hoy",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "319",
+  "name": "Josephine County Republican Central Committee",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "18980",
+  "name": "Committee to Elect Judge James C. Egan",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "5700",
+  "name": "Friends of Serena Cruz",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "18297",
+  "name": "Acupuncture For Oregonians",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "5699",
+  "name": "Committee to Elect Pat Riggs-Henson",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "23525",
+  "name": "Friends of Jenny Kamprath",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "5587",
+  "name": "David Douglas Community for Schools",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "6030",
+  "name": "Taylor for City Council",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "16769",
+  "name": "Owens For Oregon",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "5041",
+  "name": "Crook County Democratic Central Committee",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "21708",
+  "name": "Christine Goodwin for Oregon",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "23285",
+  "name": "Building a Stronger Oregon",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "22682",
+  "name": "Friends of Amy Tatom",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "6044",
+  "name": "Bartel for Eugene Water & Electric Board",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "23290",
+  "name": "Friends of Jake Schlack",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "22720",
+  "name": "Support Hood River County Schools",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "5127",
+  "name": "Friends of Sal Peralta",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "69",
+  "name": "Friends of Naturopathic Medicine ",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "20631",
+  "name": "Friends of John Barofsky",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "18613",
+  "name": "Anne Marie Levis for 4J School Board",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "19568",
+  "name": "Elizabeth Smith for Keizer City Council",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "24826",
+  "name": "Citizens for Schools and Community",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "18384",
+  "name": "Brian Hines",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "4737",
+  "name": "Linn Benton Chapter of the Pacific Green Party",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "1777",
+  "name": "Elect Bob Ekstrom Committee",
+  "complete": null,
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "21238",
+  "name": "Yes on Fire District",
+  "orestar": 100,
+  "held": 100,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "1838",
+  "name": "Oregon City Police Officers Association Political Action Committee",
+  "orestar": 8,
+  "held": 8,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "21811",
+  "name": "Friends of Maria Rubio",
+  "orestar": 15,
+  "held": 15,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "15476",
+  "name": "Committee to Elect Bill Elfering",
+  "orestar": 41,
+  "held": 41,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "19",
+  "name": "BikePAC of Oregon, Inc",
+  "orestar": 40,
+  "held": 40,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "15529",
+  "name": "Felton for District Attorney",
+  "orestar": 222,
+  "held": 222,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "17427",
+  "name": "Leslie Weber (Stand for Children, Inc.)",
+  "orestar": 7,
+  "held": 7,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "18309",
+  "name": "Harney County Democratic Central Committee",
+  "orestar": 44,
+  "held": 44,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "16012",
+  "name": "Citizens for Improving North Santiam Schools",
+  "orestar": 43,
+  "held": 43,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "15832",
+  "name": "Young Republicans of Oregon Political Action Committee, Inc.",
+  "orestar": 16,
+  "held": 16,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "14242",
+  "name": "Friends of Craig Pope",
+  "orestar": 399,
+  "held": 399,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "345",
+  "name": "Wallowa County Republicans",
+  "orestar": 274,
+  "held": 274,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "17575",
+  "name": "Public Employee Choice Act Committee",
+  "orestar": 94,
+  "held": 94,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "17762",
+  "name": "Friends of Jerry Brummer",
+  "orestar": 51,
+  "held": 51,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "14859",
+  "name": "Aldie Howard",
+  "orestar": 5,
+  "held": 5,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "21336",
+  "name": "Citizens for a Safer Linn County",
+  "orestar": 142,
+  "held": 142,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "16386",
+  "name": "Harvey Political Campaign",
+  "orestar": 177,
+  "held": 177,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "16881",
+  "name": "Oregon Reagan PAC",
+  "orestar": 132,
+  "held": 132,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "13084",
+  "name": "John Simpson for EWEB Committee",
+  "orestar": 54,
+  "held": 54,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "21284",
+  "name": "Friends of Sherry Smith",
+  "orestar": 23,
+  "held": 23,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "17245",
+  "name": "Capitol Watch Political Action Committee",
+  "orestar": 134,
+  "held": 134,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "17980",
+  "name": "Yes 4 Corbett Kids",
+  "orestar": 67,
+  "held": 67,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "4043",
+  "name": "Multnomah County Pacific Green Party",
+  "orestar": 10,
+  "held": 10,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "22788",
+  "name": "Nathan McClintock for North Bend School Board",
+  "orestar": 6,
+  "held": 6,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "3524",
+  "name": "Brauer, Christopher R., Elect, Circuit Court Judge Committee",
+  "orestar": 8,
+  "held": 8,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "12500",
+  "name": "Committee to Elect Diane McKeel for Multnomah County Commissioner",
+  "orestar": 454,
+  "held": 454,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "15392",
+  "name": "Committee to Elect Frank Skrah Sheriff",
+  "orestar": 26,
+  "held": 26,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "18770",
+  "name": "Committee to Elect Kevin Stine",
+  "orestar": 424,
+  "held": 424,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "13192",
+  "name": "Grand Ronde for Open and Honest Leadership",
+  "orestar": 119,
+  "held": 119,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "21530",
+  "name": "Dawn Lesley for Action",
+  "orestar": 1476,
+  "held": 1476,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "12879",
+  "name": "Committee to Support David A. Schutt, Lake County District Attorney",
+  "orestar": 65,
+  "held": 65,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "13883",
+  "name": "Friends of Russ Isham",
+  "orestar": 4,
+  "held": 4,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
+ },
+ {
+  "filer_id": "23411",
+  "name": "Jeremy Beausoleil Smith for Portland City Council",
+  "orestar": 530,
+  "held": 530,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-28"
  }
 ]
