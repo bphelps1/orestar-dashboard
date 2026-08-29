@@ -283,6 +283,24 @@
   "checked": "2026-08-29"
  },
  {
+  "filer_id": "24622",
+  "name": "Friends of Troy Cribbins",
+  "orestar": 119,
+  "held": 125,
+  "complete": false,
+  "surplus": [
+   "5516785",
+   "5557396",
+   "5557408",
+   "5557410",
+   "5557411",
+   "5557412"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
   "filer_id": "24681",
   "name": "Friends for Neyssa-sary Change",
   "orestar": 370,
@@ -432,6 +450,24 @@
    "5586349"
   ],
   "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24993",
+  "name": "Go Portland Go",
+  "orestar": 127,
+  "held": 128,
+  "complete": false,
+  "surplus": [
+   "5700874",
+   "5717999",
+   "5726019"
+  ],
+  "missing": [
+   "5684973",
+   "5716344"
+  ],
   "superseded": [],
   "checked": "2026-08-29"
  },
@@ -595,6 +631,48 @@
    "5752736",
    "5766594"
   ],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "125",
+  "name": "Oregon Bankers PAC",
+  "orestar": 6146,
+  "held": 6148,
+  "complete": false,
+  "surplus": [
+   "5656838",
+   "5693285"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24020",
+  "name": "We The People",
+  "orestar": 119,
+  "held": 121,
+  "complete": false,
+  "surplus": [
+   "5379122",
+   "5767225"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24427",
+  "name": "Let Us Paddle PAC",
+  "orestar": 159,
+  "held": 161,
+  "complete": false,
+  "surplus": [
+   "5589183",
+   "5589185"
+  ],
+  "missing": [],
   "superseded": [],
   "checked": "2026-08-29"
  },
@@ -1089,6 +1167,60 @@
   "complete": false,
   "surplus": [
    "5699986"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24973",
+  "name": "Esther for Portland",
+  "orestar": 109,
+  "held": 109,
+  "complete": false,
+  "surplus": [
+   "5686841"
+  ],
+  "missing": [
+   "5686840"
+  ],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24854",
+  "name": "Friends of Cristian",
+  "orestar": 111,
+  "held": 112,
+  "complete": false,
+  "surplus": [
+   "5596871"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24888",
+  "name": "Friends of Bri Williams",
+  "orestar": 127,
+  "held": 128,
+  "complete": false,
+  "surplus": [
+   "5703440"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "18748",
+  "name": "Yes for Hillsboro Schools",
+  "orestar": 166,
+  "held": 167,
+  "complete": false,
+  "surplus": [
+   "5764701"
   ],
   "missing": [],
   "superseded": [],
@@ -5657,6 +5789,451 @@
   "filer_id": "24647",
   "complete": null,
   "name": "Torrie Philippi-Griggs for Morrow County Commissioner",
+  "last_attempt": "2026-08-29",
+  "last_failure": "unusable_window",
+  "failure_count": 1
+ },
+ {
+  "filer_id": "14585",
+  "name": "Craig Dirksen for Metro",
+  "orestar": 101,
+  "held": 101,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24643",
+  "name": "Jasmine for the People",
+  "orestar": 103,
+  "held": 103,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "17618",
+  "name": "ARRASMITH FOR JACKSON COUNTY ASSESSOR",
+  "orestar": 104,
+  "held": 104,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24173",
+  "name": "Jordan Rooklyn for Ashland Schools",
+  "orestar": 104,
+  "held": 104,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "5888",
+  "name": "Friends of Kathy George",
+  "orestar": 106,
+  "held": 106,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "14216",
+  "name": "Friends of Jeff",
+  "orestar": 107,
+  "held": 107,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "21995",
+  "name": "Brent Barker for Oregon",
+  "orestar": 108,
+  "held": 108,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "15846",
+  "name": "Citizens to Elect John Cook",
+  "orestar": 109,
+  "held": 109,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "13051",
+  "name": "Friends of Stu Rasmussen",
+  "orestar": 109,
+  "held": 109,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "22493",
+  "name": "Friends of the MACRD",
+  "orestar": 110,
+  "held": 110,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "22001",
+  "name": "Friends of Greg Evans",
+  "orestar": 112,
+  "held": 112,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "8165",
+  "name": "Stefan Ostrach For LCC",
+  "orestar": 115,
+  "held": 115,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "13037",
+  "name": "Tim Knapp for Mayor",
+  "orestar": 116,
+  "held": 116,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "13680",
+  "name": "Gonzalez for School Board",
+  "orestar": 117,
+  "held": 117,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "14405",
+  "name": "Friends of Mike Forest",
+  "orestar": 119,
+  "held": 119,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "16542",
+  "name": "Friends of Religious Freedom Committee",
+  "orestar": 120,
+  "held": 120,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24808",
+  "name": "Friends of Roy Kaufmann for HD18",
+  "orestar": 122,
+  "held": 122,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "6304",
+  "name": "Citizens for School Renovation",
+  "orestar": 123,
+  "held": 123,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24217",
+  "name": "Save Gladstone Schools",
+  "orestar": 125,
+  "held": 125,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "20675",
+  "name": "WinWithWantz",
+  "orestar": 128,
+  "held": 128,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "12811",
+  "name": "Committee to Retain Judge Keith B Rogers",
+  "orestar": 130,
+  "held": 130,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "14541",
+  "name": "Committee to Reelect George Endicott Redmond Mayor",
+  "orestar": 131,
+  "held": 131,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "6087",
+  "name": "Hillsboro Committee",
+  "orestar": 137,
+  "held": 137,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "15776",
+  "name": "Northwest Tea Party State PAC",
+  "orestar": 137,
+  "held": 137,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24273",
+  "name": "Noemi Legaspi PAC",
+  "orestar": 137,
+  "held": 137,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "14295",
+  "name": "Scott Lee for county commission",
+  "orestar": 140,
+  "held": 140,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "23578",
+  "name": "Wilsonville Voices United",
+  "orestar": 140,
+  "held": 140,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "13333",
+  "name": "Citizens for \"Safe Schools for Our Community\"",
+  "orestar": 144,
+  "held": 144,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "19275",
+  "name": "Oregon Trail PAC",
+  "orestar": 145,
+  "held": 145,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "18997",
+  "name": "Friends of Dave McCall",
+  "orestar": 145,
+  "held": 145,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "16969",
+  "name": "Sonnleitner for Zone 3 PCC",
+  "orestar": 151,
+  "held": 151,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "17352",
+  "name": "Committee to Elect Lilia Caballero",
+  "orestar": 157,
+  "held": 157,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "14280",
+  "name": "Friends of Dick Anderson",
+  "orestar": 158,
+  "held": 158,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "23188",
+  "name": "Friends of Drew Farmer",
+  "orestar": 158,
+  "held": 158,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "19742",
+  "name": "Friends of Tya",
+  "orestar": 161,
+  "held": 161,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "16061",
+  "name": "Women's Leadership Coalition PAC",
+  "orestar": 166,
+  "held": 166,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "23604",
+  "name": "Michael Saperstein for Senate",
+  "orestar": 167,
+  "held": 167,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "19040",
+  "name": "Friends for David McCall",
+  "orestar": 170,
+  "held": 170,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "20391",
+  "name": "Ruth Linoz for Springfield",
+  "orestar": 175,
+  "held": 175,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24345",
+  "complete": null,
+  "name": "Friends of Ayla",
+  "last_attempt": "2026-08-29",
+  "last_failure": "unusable_window",
+  "failure_count": 1
+ },
+ {
+  "filer_id": "24388",
+  "complete": null,
+  "name": "Livability Oregon",
   "last_attempt": "2026-08-29",
   "last_failure": "unusable_window",
   "failure_count": 1
