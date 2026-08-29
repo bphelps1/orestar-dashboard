@@ -1,5 +1,34 @@
 [
  {
+  "filer_id": "324",
+  "name": "Democratic Party of Lane County",
+  "orestar": 11963,
+  "held": 11980,
+  "complete": false,
+  "surplus": [
+   "3536434",
+   "3542102",
+   "3542103",
+   "3548360",
+   "3557942",
+   "3567333",
+   "3587134",
+   "3618015",
+   "3618016",
+   "3796337",
+   "3796338",
+   "5614658",
+   "5626058",
+   "5626060",
+   "5639122",
+   "5639126",
+   "5672021"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
   "filer_id": "221",
   "name": "",
   "orestar": 11750,
@@ -191,6 +220,21 @@
   "checked": "2026-08-29"
  },
  {
+  "filer_id": "24826",
+  "name": "Citizens for Schools and Community",
+  "orestar": 100,
+  "held": 103,
+  "complete": false,
+  "surplus": [
+   "5564226",
+   "5564227",
+   "5564228"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
   "filer_id": "618",
   "name": "Deschutes County Republican Central Committee",
   "orestar": 6252,
@@ -206,6 +250,20 @@
   "last_attempt": "2026-08-29",
   "last_failure": "unusable_window",
   "failure_count": 2
+ },
+ {
+  "filer_id": "23525",
+  "name": "Friends of Jenny Kamprath",
+  "orestar": 82,
+  "held": 84,
+  "complete": false,
+  "surplus": [
+   "4889996",
+   "4914039"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "24707",
@@ -312,6 +370,45 @@
   "checked": "2026-08-29"
  },
  {
+  "filer_id": "24642",
+  "name": "Benham for Oregon",
+  "orestar": 120,
+  "held": 121,
+  "complete": false,
+  "surplus": [
+   "5629962"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "20631",
+  "name": "Friends of John Barofsky",
+  "orestar": 162,
+  "held": 163,
+  "complete": false,
+  "surplus": [
+   "5597177"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24816",
+  "name": "Bassett for Oregon",
+  "orestar": 288,
+  "held": 289,
+  "complete": false,
+  "surplus": [
+   "5726250"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
   "filer_id": "15343",
   "name": "",
   "orestar": 93,
@@ -362,10 +459,13 @@
  {
   "filer_id": "24797",
   "name": "Diane Sykes for Judge",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 265,
+  "held": 265,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "17629",
@@ -395,28 +495,26 @@
   "checked": "2026-08-29"
  },
  {
-  "filer_id": "324",
-  "name": "Democratic Party of Lane County",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
- },
- {
   "filer_id": "17983",
   "name": "Oregon First",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 101,
+  "held": 101,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "17884",
   "name": "Friends of Matt Wingard",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 124,
+  "held": 124,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "5528",
@@ -478,14 +576,6 @@
   "failure_count": 1
  },
  {
-  "filer_id": "24642",
-  "name": "Benham for Oregon",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
- },
- {
   "filer_id": "312",
   "name": "Hood River County Democrats",
   "complete": null,
@@ -523,10 +613,13 @@
  {
   "filer_id": "21742",
   "name": "Friends of Steve Bates",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 117,
+  "held": 117,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "5208",
@@ -627,20 +720,15 @@
   "failure_count": 1
  },
  {
-  "filer_id": "23525",
-  "name": "Friends of Jenny Kamprath",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
- },
- {
   "filer_id": "5587",
   "name": "David Douglas Community for Schools",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 191,
+  "held": 191,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "6030",
@@ -752,14 +840,6 @@
   "failure_count": 1
  },
  {
-  "filer_id": "20631",
-  "name": "Friends of John Barofsky",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
- },
- {
   "filer_id": "18613",
   "name": "Anne Marie Levis for 4J School Board",
   "orestar": 36,
@@ -780,14 +860,6 @@
   "missing": [],
   "superseded": [],
   "checked": "2026-08-29"
- },
- {
-  "filer_id": "24826",
-  "name": "Citizens for Schools and Community",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
  },
  {
   "filer_id": "18384",
@@ -1215,10 +1287,13 @@
  {
   "filer_id": "15453",
   "name": "Brian Wolfe for Sheriff",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 228,
+  "held": 228,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "4630",
@@ -1261,10 +1336,13 @@
  {
   "filer_id": "20236",
   "name": "Love Lake Oswego Parks Committee",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 210,
+  "held": 210,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "16986",
@@ -1277,10 +1355,13 @@
  {
   "filer_id": "20170",
   "name": "Friends of Jose Gonzalez",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 103,
+  "held": 103,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "2196",
@@ -1296,10 +1377,13 @@
  {
   "filer_id": "24501",
   "name": "Elect Isabella Lee Tibbetts",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 113,
+  "held": 113,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "4212",
@@ -1323,10 +1407,13 @@
  {
   "filer_id": "23541",
   "name": "Paul 4 Salem",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 103,
+  "held": 103,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "15769",
@@ -1353,10 +1440,13 @@
  {
   "filer_id": "14911",
   "name": "Tualatin Citizens for Good Government",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 154,
+  "held": 154,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "19340",
@@ -1468,14 +1558,6 @@
   "failure_count": 1
  },
  {
-  "filer_id": "24816",
-  "name": "Bassett for Oregon",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
- },
- {
   "filer_id": "296",
   "name": "Clatsop County Republican Party",
   "complete": null,
@@ -1549,10 +1631,13 @@
  {
   "filer_id": "15290",
   "name": "Denise Bacon for County Commissioner",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 261,
+  "held": 261,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "16545",
@@ -1577,25 +1662,31 @@
   "filer_id": "14024",
   "name": "Redmond Firefighters Association",
   "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "last_attempt": "2026-08-29",
+  "last_failure": "unusable_window",
+  "failure_count": 2
  },
  {
   "filer_id": "5793",
   "name": "Hennagin 4 L.O.",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 107,
+  "held": 107,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "20266",
   "name": "Friends of Howard Memorial Sports Park",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 86,
+  "held": 86,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "15616",
@@ -1665,10 +1756,13 @@
  {
   "filer_id": "18489",
   "name": "Stop the Funding",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 150,
+  "held": 150,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "320",
@@ -1697,18 +1791,24 @@
  {
   "filer_id": "12585",
   "name": "Committee to Re-Elect Tim Evinger",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 147,
+  "held": 147,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "12842",
   "name": "Committee to Retain Judge Grant",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 238,
+  "held": 238,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "14515",
@@ -1721,10 +1821,13 @@
  {
   "filer_id": "15610",
   "name": "Friends of Lew Barnes",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 149,
+  "held": 149,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "6285",
@@ -2431,6 +2534,256 @@
   "filer_id": "17582",
   "complete": null,
   "name": "Committee to Elect Bill Baertlein",
+  "last_attempt": "2026-08-29",
+  "last_failure": "unusable_window",
+  "failure_count": 1
+ },
+ {
+  "filer_id": "13503",
+  "name": "Supporters of Redmond Community Center",
+  "orestar": 5,
+  "held": 5,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "21569",
+  "name": "Recall Ted Wheeler",
+  "orestar": 5,
+  "held": 5,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "5676",
+  "name": "Committee to Elect Mark Labhart",
+  "orestar": 5,
+  "held": 5,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "887",
+  "name": "Wilson, Janice, Committee to Re-Elect Judge",
+  "orestar": 5,
+  "held": 5,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "12942",
+  "name": "Thomas M. Chereck Jr.",
+  "orestar": 5,
+  "held": 5,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "840",
+  "name": "Gillette, Committee to Re-Elect Justice (W. Michael)",
+  "orestar": 5,
+  "held": 5,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "15082",
+  "name": "Friends of Richard Burke",
+  "orestar": 6,
+  "held": 6,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "22519",
+  "name": "Elect Clint Scherf",
+  "orestar": 6,
+  "held": 6,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "22664",
+  "name": "Kids for Success",
+  "orestar": 6,
+  "held": 6,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "18853",
+  "name": "Committee to Elect Don Russell",
+  "orestar": 7,
+  "held": 7,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "23738",
+  "name": "CB Citizens For Responsible Spending",
+  "orestar": 7,
+  "held": 7,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "21452",
+  "name": "Friends of Greg Stoll",
+  "orestar": 7,
+  "held": 7,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "16909",
+  "name": "Elect Steve Johnson",
+  "orestar": 7,
+  "held": 7,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "14550",
+  "name": "Pamela Burkholder Turner Re-election Campaign Account",
+  "orestar": 7,
+  "held": 7,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "13001",
+  "name": "Supporters of Murray for County Commissioner",
+  "orestar": 7,
+  "held": 7,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "22102",
+  "name": "Friends of Banks Fire",
+  "orestar": 8,
+  "held": 8,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "5339",
+  "name": "Friends of David Newell",
+  "orestar": 8,
+  "held": 8,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24623",
+  "name": "Elect Mark Adams",
+  "orestar": 8,
+  "held": 8,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "18604",
+  "name": "Oregonians for Open Government",
+  "orestar": 8,
+  "held": 8,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "22957",
+  "name": "Friends of Michael Williams",
+  "orestar": 8,
+  "held": 8,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "17118",
+  "name": "George for Astoria",
+  "orestar": 8,
+  "held": 8,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "23951",
+  "name": "Friends of David Golobay",
+  "orestar": 9,
+  "held": 9,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "8527",
+  "complete": null,
+  "name": "Committee to Re-Elect Barton",
   "last_attempt": "2026-08-29",
   "last_failure": "unusable_window",
   "failure_count": 1
