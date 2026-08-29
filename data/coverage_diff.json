@@ -166,6 +166,45 @@
   "checked": "2026-08-29"
  },
  {
+  "filer_id": "317",
+  "name": "Jefferson County Republican Party",
+  "orestar": 748,
+  "held": 753,
+  "complete": false,
+  "surplus": [
+   "4084714",
+   "4095537",
+   "4150011",
+   "4162179",
+   "4193892",
+   "4200306"
+  ],
+  "missing": [
+   "149900"
+  ],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24681",
+  "name": "Friends for Neyssa-sary Change",
+  "orestar": 370,
+  "held": 374,
+  "complete": false,
+  "surplus": [
+   "5556849",
+   "5619008",
+   "5619010",
+   "5619017",
+   "5626526"
+  ],
+  "missing": [
+   "5673102"
+  ],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
   "filer_id": "291",
   "name": "Benton County Democratic Central Committee",
   "orestar": 7630,
@@ -260,6 +299,51 @@
   "surplus": [
    "4889996",
    "4914039"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "5208",
+  "name": "Friends of Tobias Read",
+  "orestar": 12954,
+  "held": 12954,
+  "complete": false,
+  "surplus": [
+   "4785488",
+   "5617236"
+  ],
+  "missing": [
+   "5780311",
+   "5780312"
+  ],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "5041",
+  "name": "Crook County Democratic Central Committee",
+  "orestar": 1002,
+  "held": 1004,
+  "complete": false,
+  "surplus": [
+   "5685298",
+   "5738730"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "16986",
+  "name": "Friends of Chris Boice",
+  "orestar": 798,
+  "held": 800,
+  "complete": false,
+  "surplus": [
+   "5537219",
+   "5710381"
   ],
   "missing": [],
   "superseded": [],
@@ -409,6 +493,110 @@
   "checked": "2026-08-29"
  },
  {
+  "filer_id": "5067",
+  "name": "ChamberPAC",
+  "orestar": 559,
+  "held": 560,
+  "complete": false,
+  "surplus": [
+   "5697866"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "19751",
+  "name": "Friends of Lisa Fragala",
+  "orestar": 710,
+  "held": 711,
+  "complete": false,
+  "surplus": [
+   "5635159"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "21700",
+  "name": "Friends of Kit Johnston",
+  "orestar": 333,
+  "held": 334,
+  "complete": false,
+  "surplus": [
+   "5615428"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "23238",
+  "name": "Evergreen PAC",
+  "orestar": 998,
+  "held": 999,
+  "complete": false,
+  "surplus": [
+   "5610563"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "23277",
+  "name": "Friends of Julie Hoy",
+  "orestar": 797,
+  "held": 798,
+  "complete": false,
+  "surplus": [
+   "5627777"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24693",
+  "name": "Dudley for Oregon",
+  "orestar": 818,
+  "held": 819,
+  "complete": false,
+  "surplus": [
+   "5535671"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "22699",
+  "name": "Committee to Elect April Dobson",
+  "orestar": 723,
+  "held": 724,
+  "complete": false,
+  "surplus": [
+   "5425421"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24819",
+  "name": "Recall SC Mayor Lena Richardson",
+  "orestar": 11,
+  "held": 12,
+  "complete": false,
+  "surplus": [
+   "5564105"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
   "filer_id": "15343",
   "name": "",
   "orestar": 93,
@@ -470,18 +658,13 @@
  {
   "filer_id": "17629",
   "name": "Friends of Eric Zimmerman",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
- },
- {
-  "filer_id": "5067",
-  "name": "ChamberPAC",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 1012,
+  "held": 1012,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "19990",
@@ -528,9 +711,9 @@
   "filer_id": "21075",
   "name": "Total Recall PAC",
   "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "last_attempt": "2026-08-29",
+  "last_failure": "unusable_window",
+  "failure_count": 2
  },
  {
   "filer_id": "15764",
@@ -542,14 +725,6 @@
   "missing": [],
   "superseded": [],
   "checked": "2026-08-29"
- },
- {
-  "filer_id": "19751",
-  "name": "Friends of Lisa Fragala",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
  },
  {
   "filer_id": "20099",
@@ -584,14 +759,6 @@
   "failure_count": 1
  },
  {
-  "filer_id": "21700",
-  "name": "Friends of Kit Johnston",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
- },
- {
   "filer_id": "22530",
   "name": "Sandy Chung (ACLU of Oregon)",
   "orestar": 48,
@@ -603,14 +770,6 @@
   "checked": "2026-08-29"
  },
  {
-  "filer_id": "23238",
-  "name": "Evergreen PAC",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
- },
- {
   "filer_id": "21742",
   "name": "Friends of Steve Bates",
   "orestar": 117,
@@ -620,14 +779,6 @@
   "missing": [],
   "superseded": [],
   "checked": "2026-08-29"
- },
- {
-  "filer_id": "5208",
-  "name": "Friends of Tobias Read",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
  },
  {
   "filer_id": "18374",
@@ -661,14 +812,6 @@
   "missing": [],
   "superseded": [],
   "checked": "2026-08-29"
- },
- {
-  "filer_id": "23277",
-  "name": "Friends of Julie Hoy",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
  },
  {
   "filer_id": "319",
@@ -714,10 +857,13 @@
  {
   "filer_id": "5699",
   "name": "Committee to Elect Pat Riggs-Henson",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 679,
+  "held": 679,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "5587",
@@ -753,20 +899,15 @@
   "checked": "2026-08-29"
  },
  {
-  "filer_id": "5041",
-  "name": "Crook County Democratic Central Committee",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
- },
- {
   "filer_id": "21708",
   "name": "Christine Goodwin for Oregon",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 663,
+  "held": 663,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "23285",
@@ -834,10 +975,13 @@
  {
   "filer_id": "69",
   "name": "Friends of Naturopathic Medicine ",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 348,
+  "held": 348,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "18613",
@@ -1328,10 +1472,13 @@
  {
   "filer_id": "22874",
   "name": "Baker County Republican Women",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 469,
+  "held": 469,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "20236",
@@ -1343,14 +1490,6 @@
   "missing": [],
   "superseded": [],
   "checked": "2026-08-29"
- },
- {
-  "filer_id": "16986",
-  "name": "Friends of Chris Boice",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
  },
  {
   "filer_id": "20170",
@@ -1471,14 +1610,6 @@
   "checked": "2026-08-29"
  },
  {
-  "filer_id": "24681",
-  "name": "Friends for Neyssa-sary Change",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
- },
- {
   "filer_id": "19589",
   "name": "Friends of Wendy Kroger",
   "orestar": 47,
@@ -1520,14 +1651,6 @@
   "checked": "2026-08-29"
  },
  {
-  "filer_id": "24693",
-  "name": "Dudley for Oregon",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
- },
- {
   "filer_id": "3061",
   "name": "Jones, Dick, Citizens for",
   "orestar": 10,
@@ -1550,20 +1673,15 @@
   "checked": "2026-08-29"
  },
  {
-  "filer_id": "317",
-  "name": "Jefferson County Republican Party",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
- },
- {
   "filer_id": "296",
   "name": "Clatsop County Republican Party",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 538,
+  "held": 538,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "6568",
@@ -1612,10 +1730,13 @@
  {
   "filer_id": "17596",
   "name": "Freedom from Aerial Herbicides Alliance",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 310,
+  "held": 310,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "14545",
@@ -1710,18 +1831,24 @@
  {
   "filer_id": "297",
   "name": "Columbia County Democratic Central Committee",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 461,
+  "held": 461,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "24365",
   "name": "Friends of Jamie Collins",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 861,
+  "held": 861,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "16023",
@@ -1733,14 +1860,6 @@
   "missing": [],
   "superseded": [],
   "checked": "2026-08-29"
- },
- {
-  "filer_id": "22699",
-  "name": "Committee to Elect April Dobson",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
  },
  {
   "filer_id": "24601",
@@ -1775,18 +1894,24 @@
  {
   "filer_id": "4745",
   "name": "Oregonians for Immigration Reform Political Action Committee",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 831,
+  "held": 831,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "14265",
   "name": "Friends for Malinowski",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 925,
+  "held": 925,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "12585",
@@ -2784,6 +2909,234 @@
   "filer_id": "8527",
   "complete": null,
   "name": "Committee to Re-Elect Barton",
+  "last_attempt": "2026-08-29",
+  "last_failure": "unusable_window",
+  "failure_count": 1
+ },
+ {
+  "filer_id": "25172",
+  "name": "Nate for Judge",
+  "orestar": 7,
+  "held": 7,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "22619",
+  "name": "Douglas County Citizens for Sensible Schools",
+  "orestar": 10,
+  "held": 10,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "15040",
+  "name": "Kris Howatt for Gresham Barlow Board",
+  "orestar": 10,
+  "held": 10,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "21194",
+  "name": "Friends of Rick Harrington",
+  "orestar": 10,
+  "held": 10,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "14745",
+  "name": "Elect Sandra Roumagoux",
+  "orestar": 11,
+  "held": 11,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "15596",
+  "name": "Committee to Elect Judge Lynn R Nakamoto",
+  "orestar": 11,
+  "held": 11,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "19596",
+  "name": "Instant Runoff Voting for Beaverton",
+  "orestar": 11,
+  "held": 11,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "18417",
+  "name": "Oregon Right to Vote",
+  "orestar": 11,
+  "held": 11,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "18668",
+  "name": "Committee to elect Kristina Mann for Central School Board 2017",
+  "orestar": 11,
+  "held": 11,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "23647",
+  "name": "John Hanlin for Sheriff",
+  "orestar": 12,
+  "held": 12,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "15575",
+  "name": "Friends of Sandra Abercrombie",
+  "orestar": 12,
+  "held": 12,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "10467",
+  "name": "Committee to Elect Paul Frasier Coos County Oregon District Attorney",
+  "orestar": 12,
+  "held": 12,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "367",
+  "name": "Second District Democratic Committee",
+  "orestar": 12,
+  "held": 12,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "271",
+  "name": "Sprint Northwest Political Action Committee",
+  "orestar": 12,
+  "held": 12,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "19052",
+  "name": "Brian Nava, Treasurer",
+  "orestar": 12,
+  "held": 12,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "22556",
+  "name": "Friends of Octavio for Tualatin",
+  "orestar": 13,
+  "held": 13,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "4608",
+  "name": "Libertarian Party of Washington County",
+  "orestar": 13,
+  "held": 13,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "5789",
+  "name": "For Tigards Future",
+  "orestar": 13,
+  "held": 13,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "5674",
+  "name": "White City Political Action Committee",
+  "orestar": 13,
+  "held": 13,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "6124",
+  "name": "Citizens for Truth and Jobs",
+  "orestar": 13,
+  "held": 13,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "15041",
+  "complete": null,
+  "name": "Citizens for Better Schools - Elect Kim Wallan Committee",
   "last_attempt": "2026-08-29",
   "last_failure": "unusable_window",
   "failure_count": 1
