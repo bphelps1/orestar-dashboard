@@ -30,7 +30,7 @@
  {
   "filer_id": "19050",
   "name": "Friends of Christine Drazan",
-  "orestar": 17652,
+  "orestar": 17667,
   "held": 17625,
   "complete": false,
   "surplus": [
@@ -86,10 +86,25 @@
    "5780600",
    "5780601",
    "5780602",
-   "5780604"
+   "5780604",
+   "5780745",
+   "5780747",
+   "5780750",
+   "5780753",
+   "5780759",
+   "5780761",
+   "5780774",
+   "5780776",
+   "5780777",
+   "5780778",
+   "5780779",
+   "5780781",
+   "5780783",
+   "5780785",
+   "5780787"
   ],
   "superseded": [],
-  "checked": "2026-08-28"
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "21770",
@@ -150,9 +165,28 @@
   "missing": [],
   "superseded": [],
   "checked": "2026-08-28",
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_recheck",
-  "failure_count": 1
+  "last_attempt": "2026-08-29",
+  "last_failure": "unusable_window",
+  "failure_count": 2
+ },
+ {
+  "filer_id": "19768",
+  "name": "Friends of Ashley Hartmeier-Prigg",
+  "orestar": 1042,
+  "held": 1044,
+  "complete": false,
+  "surplus": [
+   "5528950",
+   "5648223",
+   "5650942",
+   "5650943"
+  ],
+  "missing": [
+   "5375290",
+   "5528948"
+  ],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "618",
@@ -167,9 +201,9 @@
   "missing": [],
   "superseded": [],
   "checked": "2026-08-28",
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_recheck",
-  "failure_count": 1
+  "last_attempt": "2026-08-29",
+  "last_failure": "unusable_window",
+  "failure_count": 2
  },
  {
   "filer_id": "24707",
@@ -187,7 +221,7 @@
  {
   "filer_id": "4792",
   "name": "Friends of Tina Kotek",
-  "orestar": 29264,
+  "orestar": 29268,
   "held": 29259,
   "complete": false,
   "surplus": [
@@ -195,17 +229,18 @@
   ],
   "missing": [
    "5745606",
+   "5745611",
+   "5745613",
    "5751922",
    "5751923",
+   "5754887",
    "5780308",
    "5780325",
-   "5780499"
+   "5780499",
+   "5784344"
   ],
   "superseded": [],
-  "checked": "2026-08-28",
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_recheck",
-  "failure_count": 1
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "24537",
@@ -295,14 +330,6 @@
   "missing": [],
   "superseded": [],
   "checked": "2026-08-28"
- },
- {
-  "filer_id": "19768",
-  "name": "Friends of Ashley Hartmeier-Prigg",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
  },
  {
   "filer_id": "24797",
