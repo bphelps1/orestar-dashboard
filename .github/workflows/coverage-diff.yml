@@ -33,10 +33,22 @@ name: Coverage Diff (which ROWS differ from ORESTAR)
 
 on:
   schedule:
-    # 09:00 UTC daily, well clear of the 15:00 daily refresh. One slice per day
-    # against a set this size is slow on purpose: it is a rolling re-check, and
-    # ORESTAR's rate limiting is the binding constraint, not our patience.
-    - cron: "0 9 * * *"
+    # Every three hours, offset from the top of the hour to stay clear of the
+    # 15:00 daily refresh.
+    #
+    # Daily was right for a steady-state re-check and wrong for the backlog we
+    # actually have. Every run trips the F5 breaker after roughly 48
+    # committees, and that path deliberately does NOT chain — a blocked runner
+    # needs a real cooldown, not an immediate successor. So the schedule is the
+    # only thing that resumes the sweep, and at one run a day the 528
+    # committees still outstanding take about eleven days.
+    #
+    # Three hours is many times the ~18-minute cooldown that was observed, so
+    # each run starts clean, and eight runs a day clears the backlog in under
+    # two. Once every committee has been measured once this can go back to
+    # daily: the steady-state job is re-checking committees whose withdrawn
+    # rows move a balance, which is a far smaller set.
+    - cron: "20 */3 * * *"
   workflow_dispatch:
     inputs:
       filer_ids:
