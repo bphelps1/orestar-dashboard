@@ -161,20 +161,26 @@ jobs:
         id: commit
         if: always()
         run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           if [ ! -f data/coverage_diff.json ]; then
             echo "No diff file — this run measured nothing to commit."
             exit 0
           fi
-          git add data/coverage_diff.json
-          if git diff --staged --quiet; then
-            echo "No diff progress to commit."
-            exit 0
-          fi
-          git commit -m "data: coverage diff progress [skip ci]"
-          git pull --rebase origin ${{ github.ref_name }} || true
-          git push
+          # push_data.sh, not a bare `git push`.
+          #
+          # A bare push has no retry, and GitHub answered one with
+          #
+          #     ! [remote rejected] main -> main (Internal Server Error)
+          #
+          # which threw away 44 measured committees and stopped the chain,
+          # because the re-trigger step correctly refuses to continue when the
+          # results were not saved. The measurement was fine; only the push
+          # failed, and it failed transiently.
+          #
+          # The helper already solves this — three attempts with backoff, and a
+          # shallow re-sync if the push is rejected rather than 500s. It exists
+          # because the same class of failure hit the data pipeline before.
+          bash scripts/push_data.sh "data: coverage diff progress [skip ci]" \
+            data/coverage_diff.json
 
       - name: Re-trigger if committees remain
         # A cancellation is an instruction to STOP. `always()` by itself made
@@ -185,10 +191,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Three hard stops, because an unbounded chain that makes no progress
-          # is worse than no chain: 12 runs, a run with ZERO usable committees,
-          # and the F5 breaker. A blocked runner needs a real cooldown; launching
-          # its replacement immediately just transfers the null cascade to a
-          # new job. The daily schedule resumes from the saved ordering.
+          # is worse than no chain: 12 runs, and a run with ZERO usable
+          # committees. The F5 breaker is deliberately NOT one of them — see
+          # the breaker note below: a fresh runner is a fresh IP.
           #
           # 12 rather than the survey's 40. Each run here is a full 70-minute
           # budget of heavy paging, so twelve is already most of a day of the
