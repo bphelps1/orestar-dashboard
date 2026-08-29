@@ -281,6 +281,23 @@
   "checked": "2026-08-29"
  },
  {
+  "filer_id": "22134",
+  "name": "Rick Gray for the House",
+  "orestar": 22,
+  "held": 27,
+  "complete": false,
+  "surplus": [
+   "4120090",
+   "4120165",
+   "4147195",
+   "4181521",
+   "4198004"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
   "filer_id": "291",
   "name": "Benton County Democratic Central Committee",
   "orestar": 7630,
@@ -344,6 +361,21 @@
    "5564226",
    "5564227",
    "5564228"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24830",
+  "name": "Sweet Home Citizens for Safe & Fiscally Sound Schools",
+  "orestar": 26,
+  "held": 29,
+  "complete": false,
+  "surplus": [
+   "5666607",
+   "5666643",
+   "5666645"
   ],
   "missing": [],
   "superseded": [],
@@ -434,6 +466,20 @@
   "surplus": [
    "5549521",
    "5700653"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24442",
+  "name": "Friends of Brandi Martindale",
+  "orestar": 24,
+  "held": 26,
+  "complete": false,
+  "surplus": [
+   "5535712",
+   "5589793"
   ],
   "missing": [],
   "superseded": [],
@@ -735,6 +781,45 @@
   "complete": false,
   "surplus": [
    "5716690"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "306",
+  "name": "Douglas County Democratic Central Committee",
+  "orestar": 5005,
+  "held": 5006,
+  "complete": false,
+  "surplus": [
+   "5708303"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24818",
+  "name": "Friends of SCS Fire District",
+  "orestar": 23,
+  "held": 24,
+  "complete": false,
+  "surplus": [
+   "5563850"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24846",
+  "name": "Beverage for Union County",
+  "orestar": 27,
+  "held": 28,
+  "complete": false,
+  "surplus": [
+   "5669628"
   ],
   "missing": [],
   "superseded": [],
@@ -3402,6 +3487,484 @@
   "filer_id": "16461",
   "complete": null,
   "name": "Sandi Mann for Lane County Commissioner-District 4",
+  "last_attempt": "2026-08-29",
+  "last_failure": "unusable_window",
+  "failure_count": 1
+ },
+ {
+  "filer_id": "13313",
+  "name": "Committee to Elect Floyd W. Collins",
+  "orestar": 17,
+  "held": 17,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "14374",
+  "name": "Friends of Sherry Hall",
+  "orestar": 17,
+  "held": 17,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "21205",
+  "name": "Move Oregon's Border - Sherman County",
+  "orestar": 18,
+  "held": 18,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "17553",
+  "name": "Capitol Watch Issues Committee",
+  "orestar": 18,
+  "held": 18,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "16111",
+  "name": "Recall Grafton Sterling",
+  "orestar": 18,
+  "held": 18,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "19968",
+  "name": "Debbie Radie for POM Commissioner",
+  "orestar": 18,
+  "held": 18,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "21202",
+  "name": "Move Oregon's Border -Baker County",
+  "orestar": 19,
+  "held": 19,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24682",
+  "name": "Alex for Albany",
+  "orestar": 19,
+  "held": 19,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "19661",
+  "name": "Michael Morris for Council",
+  "orestar": 19,
+  "held": 19,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "330",
+  "name": "Malheur County Democratic Central Committee",
+  "orestar": 19,
+  "held": 19,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "13114",
+  "name": "Committee to Elect Susan Roberts",
+  "orestar": 19,
+  "held": 19,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "20968",
+  "name": "Gresham's Finest PAC",
+  "orestar": 20,
+  "held": 20,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "12907",
+  "name": "Friends of Pete Boucot",
+  "orestar": 20,
+  "held": 20,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "13082",
+  "name": "Constitution Party Of Columbia County",
+  "orestar": 20,
+  "held": 20,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "18634",
+  "name": "Friends of Tillamook Bay Fire & Rescue",
+  "orestar": 20,
+  "held": 20,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "15703",
+  "name": "YES FOR KIDS",
+  "orestar": 20,
+  "held": 20,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "5628",
+  "name": "Yaquina Bay Economic Foundation PAC",
+  "orestar": 20,
+  "held": 20,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "16051",
+  "name": "Middle Class PAC",
+  "orestar": 20,
+  "held": 20,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "25115",
+  "name": "Friends of Yousef",
+  "orestar": 21,
+  "held": 21,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "18202",
+  "name": "Citizens for Career & Technical Education",
+  "orestar": 21,
+  "held": 21,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "15604",
+  "name": "The Committee to Elect Judge Vance Day",
+  "orestar": 21,
+  "held": 21,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "19748",
+  "name": "Tolls Need Voter Approval",
+  "orestar": 21,
+  "held": 21,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "20205",
+  "name": "shane rollins candidate for sheriff",
+  "orestar": 22,
+  "held": 22,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "16114",
+  "name": "Recall Patricia Holloway",
+  "orestar": 22,
+  "held": 22,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "13282",
+  "name": "Campaign to Elect Michael Castillo",
+  "orestar": 22,
+  "held": 22,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "12571",
+  "name": "Citizens for Frank Iverson",
+  "orestar": 23,
+  "held": 23,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "13355",
+  "name": "Elect Mark Townes",
+  "orestar": 23,
+  "held": 23,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "19697",
+  "name": "No Debt for Public Pensions",
+  "orestar": 23,
+  "held": 23,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "5414",
+  "name": "Mary Starrett for Governor",
+  "orestar": 24,
+  "held": 24,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "15230",
+  "name": "Terry Parker for Metro",
+  "orestar": 27,
+  "held": 27,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "14553",
+  "name": "Supporters of Ted Crawford",
+  "orestar": 27,
+  "held": 27,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "8525",
+  "name": "John Turman for School Board",
+  "orestar": 27,
+  "held": 27,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "22811",
+  "name": "Rask for School Board",
+  "orestar": 28,
+  "held": 28,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "19430",
+  "name": "Tami Little for Clackamas County Assessor",
+  "orestar": 28,
+  "held": 28,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "17094",
+  "name": "Blackburn4Mayor",
+  "orestar": 29,
+  "held": 29,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "15906",
+  "name": "Committee to Elect Rich Rosenthal",
+  "orestar": 29,
+  "held": 29,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "8687",
+  "name": "Committee to Elect Mike Avent",
+  "orestar": 29,
+  "held": 29,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "23836",
+  "name": "Friends of Jack",
+  "orestar": 29,
+  "held": 29,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "14027",
+  "name": "Accountability for District 2",
+  "orestar": 29,
+  "held": 29,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "15000",
+  "name": "Citizens for Bruce McCain",
+  "orestar": 30,
+  "held": 30,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "13137",
+  "name": "Committee to Re-elect Colleen Johnson Mayor of La Grande",
+  "orestar": 30,
+  "held": 30,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "14059",
+  "name": "Salmon For All Oregon PAC",
+  "orestar": 31,
+  "held": 31,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "1602",
+  "complete": null,
+  "name": "Citizens for Ken Strobeck",
+  "last_attempt": "2026-08-29",
+  "last_failure": "unusable_window",
+  "failure_count": 1
+ },
+ {
+  "filer_id": "13721",
+  "complete": null,
+  "name": "Committee to Elect Earl Scott",
   "last_attempt": "2026-08-29",
   "last_failure": "unusable_window",
   "failure_count": 1
