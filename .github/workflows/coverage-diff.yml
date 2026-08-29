@@ -205,6 +205,10 @@ jobs:
             echo "Diff results were not committed successfully — stopping the chain."
             exit 0
           fi
+          if [ -n "${{ inputs.filer_ids }}" ]; then
+            echo "Targeted filer run complete — targeted runs never chain."
+            exit 0
+          fi
           if [ "$CHAIN" -ge 12 ] 2>/dev/null; then
             echo "Chain limit reached ($CHAIN) — the daily schedule continues from here."
             exit 0
