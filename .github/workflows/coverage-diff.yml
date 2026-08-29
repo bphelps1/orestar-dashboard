@@ -63,11 +63,11 @@ permissions:
   contents: write
   actions: write
 
-# Shares the ORESTAR lane with every other scraper. This is the most
-# request-hungry job in the repo, so it must take its turn rather than compete
-# with the daily refresh for the same rate limit.
+# Keep only one diff run pending/running. Cross-workflow serialization is done
+# by await-orestar below; sharing a concurrency group with another self-chaining
+# workflow lets GitHub evict the older pending run when a third one is queued.
 concurrency:
-  group: orestar-scrape
+  group: coverage-diff
   cancel-in-progress: false
 
 jobs:
@@ -81,8 +81,6 @@ jobs:
 
       - name: Wait for other ORESTAR jobs
         uses: ./.github/actions/await-orestar
-        with:
-          fetch-depth: 1
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -106,6 +104,7 @@ jobs:
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
+          set -o pipefail
           ARGS=""
           if [ -n "${{ inputs.filer_ids }}" ]; then
             ARGS="$ARGS --filer-ids ${{ inputs.filer_ids }}"
@@ -127,12 +126,29 @@ jobs:
           ARGS="$ARGS --max-minutes 70"
           xvfb-run --auto-servernum python scraper/diff_coverage.py $ARGS 2>&1 | tee /tmp/diff.log
 
-          # Progress read from the script's own report, not inferred from a git
-          # diff. A chain that decides whether to continue by guessing is how
-          # the backfill kept queueing runs that did nothing.
-          DIFFED=$(grep -oE "Diffed [0-9]+ committees this run" /tmp/diff.log | grep -oE "[0-9]+" | head -1)
-          echo "diffed=${DIFFED:-0}" >> "$GITHUB_OUTPUT"
-          echo "This run diffed ${DIFFED:-0} committees."
+          # Stable counters emitted by the collector. `attempted` and
+          # `unusable` make a cooldown visible; `usable` alone cannot distinguish
+          # a clean slice from one that burned most of its budget filing nulls.
+          RESULT=$(grep '^RUN_RESULT ' /tmp/diff.log | tail -1 || true)
+          ATTEMPTED=0
+          USABLE=0
+          UNUSABLE=0
+          BLOCKED=0
+          for KV in $RESULT; do
+            case "$KV" in
+              attempted=*) ATTEMPTED=${KV#attempted=} ;;
+              usable=*)    USABLE=${KV#usable=} ;;
+              unusable=*)  UNUSABLE=${KV#unusable=} ;;
+              blocked=*)   BLOCKED=${KV#blocked=} ;;
+            esac
+          done
+          echo "attempted=$ATTEMPTED" >> "$GITHUB_OUTPUT"
+          echo "usable=$USABLE" >> "$GITHUB_OUTPUT"
+          echo "unusable=$UNUSABLE" >> "$GITHUB_OUTPUT"
+          echo "blocked=$BLOCKED" >> "$GITHUB_OUTPUT"
+          # Backward-compatible name used by the chain guard below.
+          echo "diffed=$USABLE" >> "$GITHUB_OUTPUT"
+          echo "Attempted $ATTEMPTED committees: $USABLE usable, $UNUSABLE unusable, blocked=$BLOCKED."
 
       # always(), NOT !cancelled().
       #
@@ -142,6 +158,7 @@ jobs:
       # step that refuses to run then throws all of it away. The survey learned
       # this by losing 96 committees' worth of work.
       - name: Commit diff results
+        id: commit
         if: always()
         run: |
           git config user.name  "github-actions[bot]"
@@ -160,13 +177,18 @@ jobs:
           git push
 
       - name: Re-trigger if committees remain
-        if: always()
+        # A cancellation is an instruction to STOP. `always()` by itself made
+        # cancellation impossible: the cancelled run immediately dispatched
+        # its successor, which did the same when cancelled again.
+        if: always() && !cancelled()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Two hard stops, because an unbounded chain that makes no progress is
-          # worse than no chain: 12 runs, and a run that diffed ZERO committees
-          # ends it.
+          # Three hard stops, because an unbounded chain that makes no progress
+          # is worse than no chain: 12 runs, a run with ZERO usable committees,
+          # and the F5 breaker. A blocked runner needs a real cooldown; launching
+          # its replacement immediately just transfers the null cascade to a
+          # new job. The daily schedule resumes from the saved ordering.
           #
           # 12 rather than the survey's 40. Each run here is a full 70-minute
           # budget of heavy paging, so twelve is already most of a day of the
@@ -175,18 +197,37 @@ jobs:
           # measured is committed and tomorrow's run picks up the staleness
           # ordering exactly where this one left off.
           CHAIN=${{ inputs.chain_index || '1' }}
+          if [ "${{ steps.diff.outcome }}" != "success" ]; then
+            echo "Diff step did not finish successfully — stopping the chain."
+            exit 0
+          fi
+          if [ "${{ steps.commit.outcome }}" != "success" ]; then
+            echo "Diff results were not committed successfully — stopping the chain."
+            exit 0
+          fi
           if [ "$CHAIN" -ge 12 ] 2>/dev/null; then
             echo "Chain limit reached ($CHAIN) — the daily schedule continues from here."
             exit 0
           fi
-          if [ "${{ steps.diff.outputs.diffed }}" = "0" ]; then
-            echo "This run diffed nothing — stopping rather than queueing another blocked run."
+          if [ "${{ steps.diff.outputs.blocked }}" = "1" ]; then
+            echo "F5 breaker tripped — stopping the chain for a real cooldown."
+            exit 0
+          fi
+          if [ "${{ steps.diff.outputs.usable }}" = "0" ]; then
+            echo "This run produced no usable diffs — stopping rather than queueing another blocked run."
             exit 0
           fi
           NEXT=$((CHAIN + 1))
+          RECHECK="${{ inputs.recheck }}"
+          # Scheduled events have no inputs context. Match the collector step's
+          # scheduled default instead of dispatching an empty value for a
+          # boolean workflow input.
+          if [ -z "$RECHECK" ]; then
+            RECHECK="true"
+          fi
           echo "Chaining run $NEXT..."
           bash scripts/dispatch_retry.sh coverage-diff.yml --ref ${{ github.ref_name }} \
             -f chain_index="$NEXT" \
             -f limit="${{ inputs.limit }}" \
             -f filer_ids="${{ inputs.filer_ids }}" \
-            -f recheck="${{ inputs.recheck }}"
+            -f recheck="$RECHECK"

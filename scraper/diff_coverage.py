@@ -80,11 +80,23 @@ DIFF_PATH = DATA_DIR / "coverage_diff.json"
 # without ever letting new coverage stop.
 RECHECK_PER_NEW = 2
 
+# A blocked results page is a runner-wide condition, not fifty independent
+# committee failures. Two consecutive unusable committees are enough to stop
+# the slice, commit what was learned, and leave a real cooldown before the next
+# scheduled attempt.
+MAX_CONSECUTIVE_FAILURES = 2
+
 # ORESTAR shows 50 rows per page and stops offering "Next" after 100 of them.
 # Not documented anywhere; measured by paging filer 221 and getting exactly
 # 5,000 of 5,266 rows with the button quietly disabled.
 PAGE_ROWS = 50
 UI_ROW_CAP = 5_000
+
+# The failed runs made roughly 600 paginated requests through two very large
+# committees before F5 stopped rendering counts for about eighteen minutes.
+# Pace both searches and Next clicks below that observed burst rate. Throughput
+# is secondary here: a fast partial answer is deliberately not an answer.
+ORESTAR_REQUEST_DELAY = max(3.0, F.REQUEST_DELAY)
 
 log = logging.getLogger("diff_coverage")
 
@@ -170,6 +182,22 @@ def _parse_rows(text: str) -> dict[str, dict]:
     return out
 
 
+def _wait_for_new_rows(page, seen: set[str], timeout_seconds: int = 20) -> dict[str, dict]:
+    """Wait until the results table contains at least one previously unseen ID.
+
+    A fixed sleep after clicking Next is not a page-change guarantee. Under
+    load the old, non-empty page can remain visible for several seconds; reading
+    it again silently loses a page while still looking like a successful parse.
+    """
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        current = _parse_rows(page.inner_text("body"))
+        if current and (not seen or set(current) - seen):
+            return current
+        page.wait_for_timeout(250)
+    return {}
+
+
 def _collect_window(page, filer_id: str, start: date, end: date) -> dict | None:
     """Every row ORESTAR returns for one window, or None if it cannot be trusted.
 
@@ -177,6 +205,9 @@ def _collect_window(page, filer_id: str, start: date, end: date) -> dict | None:
     empty result. Half a result set looks exactly like a committee that has
     fewer rows than it does, and that is how a diff manufactures surplus.
     """
+    # Recursive windows issue searches too; pacing only Next clicks leaves a
+    # burst at every split boundary.
+    page.wait_for_timeout(int(ORESTAR_REQUEST_DELAY * 1000))
     reported = SC.orestar_count(page, filer_id, start, end)
     if reported is None:
         log.warning("Filer %s %s→%s: no record count read", filer_id, start, end)
@@ -186,23 +217,36 @@ def _collect_window(page, filer_id: str, start: date, end: date) -> dict | None:
     if reported > UI_ROW_CAP:
         return {"reported": reported, "rows": None}      # caller must split
 
-    rows: dict[str, dict] = {}
-    for _ in range(int(UI_ROW_CAP / PAGE_ROWS) + 2):
-        rows.update(_parse_rows(page.inner_text("body")))
+    first_page = _wait_for_new_rows(page, set())
+    if not first_page:
+        log.warning("Filer %s %s→%s: first result page never rendered",
+                    filer_id, start, end)
+        return None
+
+    rows: dict[str, dict] = dict(first_page)
+    max_pages = (reported + PAGE_ROWS - 1) // PAGE_ROWS
+    pages_read = 1
+    while len(rows) < reported and pages_read < max_pages:
         nxt = [b for b in page.query_selector_all('input[value="Next"]') if b.is_enabled()]
         if not nxt:
             break
-        before = len(rows)
         try:
             nxt[0].click()
-            page.wait_for_timeout(2000)
+            # This is both polite pacing and the minimum wait before polling the
+            # content. The poll below, rather than this delay, proves progress.
+            page.wait_for_timeout(int(ORESTAR_REQUEST_DELAY * 1000))
         except Exception as e:                            # noqa: BLE001
             log.warning("Filer %s %s→%s: paging stopped (%s)", filer_id, start, end, e)
-            break
-        if len(_parse_rows(page.inner_text("body"))) == 0 and len(rows) == before:
-            break
+            return None
+        current = _wait_for_new_rows(page, set(rows))
+        if not current:
+            log.warning("Filer %s %s→%s: Next produced no new rows after page %d",
+                        filer_id, start, end, pages_read)
+            return None
+        rows.update(current)
+        pages_read += 1
 
-    if len(rows) < reported:
+    if len(rows) != reported:
         log.warning("Filer %s %s→%s: collected %d of %d — window UNUSABLE",
                     filer_id, start, end, len(rows), reported)
         return None
@@ -213,10 +257,9 @@ def _split(start: date, end: date) -> list[tuple[date, date]]:
     """Halve a window. Returns [] when it can no longer be divided."""
     if start >= end:
         return []
-    mid = start + (end - start) / 2
-    mid = date(mid.year, mid.month, mid.day)
-    if mid <= start or mid >= end:
-        return []
+    # Integer day arithmetic deliberately allows mid == start. That is the
+    # correct split for a two-day window: [day one], [day two].
+    mid = start + timedelta(days=(end - start).days // 2)
     return [(start, mid), (mid + timedelta(days=1), end)]
 
 
@@ -283,27 +326,58 @@ def _prioritise(targets: list[dict], entries: dict) -> list[dict]:
     anything had changed. Age decides what to RE-MEASURE. Only a measurement
     changes an answer.
     """
-    recheck, fresh, lazy = [], [], []
+    recheck, failed, fresh, lazy = [], [], [], []
+    today = date.today().isoformat()
     for t in targets:
         e = entries.get(str(t["filer_id"]))
-        if e and e.get("surplus"):
-            recheck.append((e.get("checked") or "", t))
-        elif not e:
+        if not e:
             fresh.append(t)
+            continue
+        if e.get("complete") is None:
+            attempted = e.get("last_attempt") or e.get("checked") or ""
+            # A chained successor is not a cooldown. Retrying the same refusal
+            # again minutes later recreates the cascade under a new run ID.
+            # Manual targeted runs without --recheck can still force a retry;
+            # the rolling sweep waits until the next day.
+            if attempted >= today:
+                continue
+            failed.append((attempted, t))
+            continue
+        # A chain is several slices of one sweep, not permission to remeasure
+        # the same expensive committee in every slice. checked is the last
+        # usable measurement; last_attempt also suppresses a same-day retry
+        # after a failed recheck whose prior evidence was preserved.
+        if (e.get("last_attempt") or e.get("checked") or "") >= today:
+            continue
+        if e.get("surplus"):
+            recheck.append((e.get("checked") or "", t))
         else:
             lazy.append((e.get("checked") or "", t))
     recheck.sort(key=lambda x: x[0])          # oldest evidence first
+    failed.sort(key=lambda x: x[0])
     lazy.sort(key=lambda x: x[0])
 
+    # Recovery attempts and first measurements alternate. One deterministic
+    # bad filer cannot starve new coverage, while transient F5 casualties are
+    # still retried on the next eligible daily run after a real cooldown.
+    work: list[dict] = []
+    fi = ni = 0
+    fq = [t for _, t in failed]
+    while fi < len(fq) or ni < len(fresh):
+        if fi < len(fq):
+            work.append(fq[fi]); fi += 1
+        if ni < len(fresh):
+            work.append(fresh[ni]); ni += 1
+
     out: list[dict] = []
-    ri = fi = 0
+    ri = wi = 0
     rq = [t for _, t in recheck]
-    while ri < len(rq) or fi < len(fresh):
+    while ri < len(rq) or wi < len(work):
         for _ in range(RECHECK_PER_NEW):      # two re-checks...
             if ri < len(rq):
                 out.append(rq[ri]); ri += 1
-        if fi < len(fresh):                   # ...then one never measured
-            out.append(fresh[fi]); fi += 1
+        if wi < len(work):                    # ...then one recovery/new item
+            out.append(work[wi]); wi += 1
     return out + [t for _, t in lazy]
 
 
@@ -320,6 +394,27 @@ def _save(entries: dict) -> None:
     DIFF_PATH.parent.mkdir(parents=True, exist_ok=True)
     rows = sorted(entries.values(), key=lambda e: -(len(e.get("surplus") or [])))
     DIFF_PATH.write_text(json.dumps(rows, indent=1))
+
+
+def _record_failure(entries: dict, target: dict, reason: str) -> dict:
+    """Record an unusable attempt without destroying earlier usable evidence."""
+    fid = str(target["filer_id"])
+    prior = entries.get(fid) or {}
+    entry = dict(prior)
+    if prior.get("complete") is None:
+        # Legacy failures wrote checked even though nothing was checked. Keep
+        # attempt timing separate so downstream freshness cannot mistake this
+        # refusal for a measurement.
+        entry.pop("checked", None)
+        entry.update({"filer_id": fid, "complete": None})
+    else:
+        entry.setdefault("filer_id", fid)
+    entry["name"] = target.get("name") or entry.get("name", "")
+    entry["last_attempt"] = date.today().isoformat()
+    entry["last_failure"] = reason
+    entry["failure_count"] = int(entry.get("failure_count") or 0) + 1
+    entries[fid] = entry
+    return entry
 
 
 def report() -> int:
@@ -353,9 +448,11 @@ def report() -> int:
     except Exception:                                     # noqa: BLE001
         flagged = set()
     if flagged:
-        seen = flagged & set(entries)
-        todo = flagged - set(entries)
-        stale = sorted((e.get("checked") or "") for f, e in entries.items() if f in flagged)
+        usable_ids = {f for f, e in entries.items() if e.get("complete") is not None}
+        seen = flagged & usable_ids
+        todo = flagged - usable_ids
+        stale = sorted((e.get("checked") or "") for f, e in entries.items()
+                       if f in seen and e.get("checked"))
         print(f"\n  flagged committees         : {len(flagged):,}")
         print(f"    measured at least once   : {len(seen):,}  ({len(seen)/len(flagged)*100:.0f}%)")
         print(f"    never measured           : {len(todo):,}")
@@ -407,8 +504,15 @@ def main() -> int:
 
     entries = _load()
     if not args.recheck:
-        targets = [t for t in targets if str(t["filer_id"]) not in entries]
-    else:
+        # A refusal is not a measurement. Retry first-attempt failures rather
+        # than treating the mere presence of a JSON object as completed work.
+        targets = [t for t in targets
+                   if (entries.get(str(t["filer_id"])) or {}).get("complete") is None]
+    elif not args.filer_ids:
+        # The rolling flagged sweep needs staleness ordering and same-day
+        # suppression. An explicit --filer-ids --recheck is a deliberate force
+        # request (and is useful for a small post-deploy canary), so preserve
+        # exactly the caller's list instead of silently filtering it.
         targets = _prioritise(targets, entries)
     if args.limit:
         targets = targets[:args.limit]
@@ -419,6 +523,10 @@ def main() -> int:
     start, end = date(args.start_year, 1, 1), date.today()
     deadline = time.monotonic() + args.max_minutes * 60 if args.max_minutes else None
     done = 0
+    attempted = 0
+    unusable = 0
+    consecutive_failures = 0
+    blocked = False
 
     with sync_playwright() as p:
         browser, _ctx, page = F.setup_browser(p)
@@ -429,15 +537,44 @@ def main() -> int:
                     break
                 fid = str(t["filer_id"])
                 log.info("=== Diffing filer %s %s ===", fid, t.get("name", ""))
-                theirs = orestar_ids(page, fid, start, end)
+                attempted += 1
+                failure_reason = "unusable_window"
+                try:
+                    theirs = orestar_ids(page, fid, start, end)
+                except F.SessionExpiredError as exc:
+                    # survey_coverage already treats this as a recoverable
+                    # runner/session condition. Keep the same semantics here
+                    # instead of failing the job before RUN_RESULT is emitted.
+                    log.warning("Filer %s: session expired (%s)", fid, exc)
+                    failure_reason = "session_expired"
+                    theirs = None
                 if theirs is None:
-                    # Recorded as a FAILURE, not as "no differences". The whole
-                    # point of this tool is that an unusable result must never
-                    # be mistaken for a clean one.
-                    entries[fid] = {"filer_id": fid, "name": t.get("name", ""),
-                                    "complete": None, "checked": date.today().isoformat()}
+                    # Preserve a previous usable result on a failed recheck. Its
+                    # checked date remains the date of the evidence, while this
+                    # attempt is recorded separately. First attempts remain an
+                    # explicit unknown and override unsafe count-only evidence.
+                    _record_failure(entries, t, failure_reason)
                     _save(entries)
+                    unusable += 1
+                    consecutive_failures += 1
+                    if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                        blocked = True
+                        log.warning("%d committees in a row unusable — stopping this "
+                                    "runner before the F5 cooldown becomes a null cascade.",
+                                    consecutive_failures)
+                        break
+                    # A broken browser/session should not poison the next
+                    # committee. If the block is IP-wide the next refusal will
+                    # trip the runner breaker; if it is session-local this
+                    # gives the collector one clean chance to recover.
+                    log.warning("Restarting the browser after an unusable result.")
+                    try:
+                        browser.close()
+                    except Exception:                    # noqa: BLE001
+                        pass
+                    browser, _ctx, page = F.setup_browser(p)
                     continue
+                consecutive_failures = 0
                 ours, superseded_by_us = _held_ids(fid, start, end)
                 surplus = sorted(ours - set(theirs))
                 absent = set(theirs) - ours
@@ -473,6 +610,11 @@ def main() -> int:
             browser.close()
 
     log.info("Diffed %d committees this run.", done)
+    log.info("Attempted %d committees; usable %d; unusable %d; blocked %s",
+             attempted, done, unusable, "yes" if blocked else "no")
+    # Stable machine-readable line for the workflow's chain guard.
+    print(f"RUN_RESULT attempted={attempted} usable={done} "
+          f"unusable={unusable} blocked={1 if blocked else 0}")
     return 0
 
 

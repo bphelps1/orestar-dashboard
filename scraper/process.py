@@ -81,6 +81,33 @@ _ROW_COMPLETE: dict = {}
 _WITHDRAWN: dict = {}
 
 
+def _withdrawn_for_filers(filer_ids, evidence: dict | None = None) -> set[str]:
+    """Union row-level withdrawn IDs across one canonical aggregate."""
+    source = _WITHDRAWN if evidence is None else evidence
+    out: set[str] = set()
+    for fid in filer_ids or []:
+        out.update(source.get(str(fid)) or set())
+    return out
+
+
+def _aggregate_row_verdict(filer_ids, summary_ts,
+                           evidence: dict | None = None) -> bool | None:
+    """Completeness for an aggregate, requiring current evidence for every filer."""
+    source = _ROW_COMPLETE if evidence is None else evidence
+    rows = [source.get(str(fid)) for fid in (filer_ids or [])]
+    if not rows or any(row is None for row in rows):
+        return None
+    verdicts = [row[0] for row in rows]
+    if False in verdicts:
+        return False
+    if not all(verdict is True for verdict in verdicts) or not summary_ts:
+        return None
+    summary_day = datetime.fromtimestamp(float(summary_ts)).date()
+    checked_days = [row[1] for row in rows]
+    return True if all(day is not None and day >= summary_day
+                       for day in checked_days) else None
+
+
 def _row_diff() -> tuple[dict, dict]:
     """The row-level diff, when one has been run.
 
@@ -111,8 +138,13 @@ def _row_diff() -> tuple[dict, dict]:
                     checked = datetime.fromisoformat(str(e["checked"])).date()
                 except ValueError:
                     checked = None
-            if e.get("complete") is not None:
-                complete[fid] = (bool(e["complete"]), checked)
+            # Presence matters. `complete: null` is an explicit refusal from
+            # the identity diff and must override the count survey with
+            # unknown; omitting it here silently falls back to the very
+            # count-only evidence this file says is not authoritative.
+            if "complete" in e:
+                verdict = None if e["complete"] is None else bool(e["complete"])
+                complete[fid] = (verdict, checked)
             ids = {str(i) for i in (e.get("surplus") or [])}
             if ids:
                 withdrawn[fid] = ids
@@ -1446,6 +1478,8 @@ def aggregate_filers(
     # ── Scrape ORESTAR Account Summary ───────────────────────────────────────
     # Build canonical-name → filer-id mapping so we can look up ORESTAR data.
     _filer_id_col = "filer id" if "filer id" in df.columns else None
+    _name_to_fids: dict[str, list[str]] = {}
+    _name_to_fid: dict[str, str] = {}
     _orestar_data: dict[str, dict] = {}  # canonical name → full summary dict
     # Loaded here, ahead of the first use. The balance comparison below now
     # derives from this file, so reading it later left _yearly_summaries
@@ -1473,7 +1507,7 @@ def aggregate_filers(
         # 2018's entire apparent gap: ours $8,632,365 against ORESTAR's
         # $6,362,423, purely because the other committee's $4.6M was folded in
         # on our side only.
-        _name_to_fids: dict[str, list[str]] = (
+        _name_to_fids = (
             df[[filer_col, _filer_id_col]]
             .dropna(subset=[_filer_id_col])
             .assign(_fid=lambda x: x[_filer_id_col].astype(str).str.strip())
@@ -1483,7 +1517,7 @@ def aggregate_filers(
             .to_dict()
         )
         # Kept for callers that only need a representative id.
-        _name_to_fid: dict[str, str] = {n: ids[-1] for n, ids in _name_to_fids.items()}
+        _name_to_fid = {n: ids[-1] for n, ids in _name_to_fids.items()}
         # Loaded once here rather than per filer: 7,263 committees would
         # otherwise re-read and re-parse the same file.
         global _ROW_COMPLETE, _WITHDRAWN
@@ -1495,9 +1529,11 @@ def aggregate_filers(
         _diff_complete, _WITHDRAWN = _row_diff()
         if _diff_complete:
             _ROW_COMPLETE.update(_diff_complete)
-            log.info("row-level diff available for %d committees (authoritative "
-                     "over the count survey); %d hold withdrawn rows",
-                     len(_diff_complete), len(_WITHDRAWN))
+            _diff_usable = sum(v[0] is not None for v in _diff_complete.values())
+            log.info("row-level diff available for %d committees (%d usable, %d "
+                     "explicitly unknown; authoritative over the count survey); "
+                     "%d hold withdrawn rows", len(_diff_complete), _diff_usable,
+                     len(_diff_complete) - _diff_usable, len(_WITHDRAWN))
         log.info("row-completeness known for %d committees (from the coverage survey)",
                  len(_ROW_COMPLETE))
         unique_fids = sorted({f for ids in _name_to_fids.values() for f in ids})
@@ -1554,6 +1590,11 @@ def aggregate_filers(
             merged = dict(parts[0])
             for k in _SUMMABLE:
                 merged[k] = round(sum(float(p.get(k) or 0) for p in parts), 2)
+            # Freshness for an aggregate is bounded by its newest component.
+            # Using parts[0]'s timestamp can let older row-diff evidence certify
+            # a canonical name even though another committee's summary was
+            # captured later.
+            merged["ts"] = max(float(p.get("ts") or 0) for p in parts)
             merged["merged_filer_ids"] = fids     # so the join is auditable
             _orestar_data[canon_name] = merged
         if _partial_merge:
@@ -1768,7 +1809,11 @@ def aggregate_filers(
         #
         # Only from diff_coverage.py, never from a count. Identity is the only
         # evidence precise enough to name a row as withdrawn.
-        _withdrawn_here = _WITHDRAWN.get(_name_to_fid.get(name, "")) or set()
+        # Aggregation is by canonical name, and one name can span several filer
+        # IDs. Union the row-level evidence across the same set of committees;
+        # consulting one representative ID can leave another committee's known
+        # withdrawn rows in the combined balance.
+        _withdrawn_here = _withdrawn_for_filers(_name_to_fids.get(name, []))
 
         def _dated(_f):
             if _f is None or _f.empty:
@@ -2531,13 +2576,12 @@ def aggregate_filers(
                 # the right trade. A silent row is recoverable; a confident
                 # wrong attribution is not. Re-running the survey restores
                 # every note it withdraws, with evidence behind it.
-                _rc = _ROW_COMPLETE.get(_name_to_fid.get(name, ""))
-                _rows_complete_here = None
-                if _rc is not None:
-                    _complete, _checked = _rc
-                    if _checked is not None and _sum_ts:
-                        _sday = datetime.fromtimestamp(float(_sum_ts)).date()
-                        _rows_complete_here = _complete if _checked >= _sday else None
+                # The summary and transaction totals above cover every filer ID
+                # behind this canonical name, so completeness must cover that
+                # same set. One representative committee cannot certify an
+                # aggregate containing several committees.
+                _rows_complete_here = _aggregate_row_verdict(
+                    _name_to_fids.get(name, []), _sum_ts)
                 # A stale snapshot is not ORESTAR contradicting itself.
                 #
                 # summary_vs_itemised compares our line sums against the STORED

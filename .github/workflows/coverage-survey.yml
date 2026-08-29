@@ -36,11 +36,11 @@ permissions:
   contents: write
   actions: write
 
-# Shares the ORESTAR lane with every other scraper. A survey is cheap per
-# committee but there are 1,617 of them, so it must take its turn rather than
-# compete with the daily refresh for the same rate limit.
+# Keep only one survey run pending/running. Cross-workflow serialization is
+# handled by await-orestar; a shared group lets GitHub evict an older pending
+# run when two self-chaining workflows dispatch near each other.
 concurrency:
-  group: orestar-scrape
+  group: coverage-survey
   cancel-in-progress: false
 
 jobs:
@@ -54,8 +54,6 @@ jobs:
 
       - name: Wait for other ORESTAR jobs
         uses: ./.github/actions/await-orestar
-        with:
-          fetch-depth: 1
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -116,6 +114,7 @@ jobs:
       # step refused to run. A guard that fires on the case it was written to
       # protect is worse than no guard.
       - name: Commit survey results
+        id: commit
         if: always()
         run: |
           git config user.name  "github-actions[bot]"
@@ -137,7 +136,10 @@ jobs:
           git push
 
       - name: Re-trigger if the survey is unfinished
-        if: always()
+        # A manual cancellation is a request to stop the chain, not to create
+        # its replacement. The commit step above may still preserve partial
+        # progress, but only a non-cancelled run may dispatch a successor.
+        if: always() && !cancelled()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
@@ -150,6 +152,14 @@ jobs:
           # worse than no chain: 40 runs maximum, and a run that surveyed ZERO
           # committees ends it — continuing would only queue more blocked runs.
           CHAIN=${{ inputs.chain_index }}
+          if [ "${{ steps.survey.outcome }}" != "success" ]; then
+            echo "Survey step did not finish successfully — stopping the chain."
+            exit 0
+          fi
+          if [ "${{ steps.commit.outcome }}" != "success" ]; then
+            echo "Survey results were not committed successfully — stopping the chain."
+            exit 0
+          fi
           if [ "$CHAIN" -ge 40 ]; then
             echo "Chain limit reached ($CHAIN) — stopping."
             exit 0

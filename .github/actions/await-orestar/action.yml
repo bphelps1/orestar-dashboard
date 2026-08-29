@@ -5,7 +5,7 @@ description: >
 
 # Why this exists, and why it is not a concurrency group.
 #
-# Four workflows scrape ORESTAR. They cannot share one concurrency group,
+# Every workflow that scrapes ORESTAR is listed below. They cannot share one concurrency group,
 # because GitHub keeps only ONE pending run per group and cancels any earlier
 # one — so a self-retriggering chain silently evicted a scheduled job twice,
 # with zero jobs recorded and a status indistinguishable from a manual cancel.
@@ -61,7 +61,9 @@ runs:
         .github/workflows/earliest-balances.yml
         .github/workflows/filer-metadata.yml
         .github/workflows/candidate-filings.yml
-        .github/workflows/backfill.yml'
+        .github/workflows/backfill.yml
+        .github/workflows/coverage-diff.yml
+        .github/workflows/coverage-survey.yml'
 
         ME_STARTED=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
                        -q .run_started_at 2>/dev/null || echo "")
