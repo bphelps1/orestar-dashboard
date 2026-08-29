@@ -352,6 +352,24 @@
   "checked": "2026-08-29"
  },
  {
+  "filer_id": "24775",
+  "name": "Friends of John Grant",
+  "orestar": 39,
+  "held": 42,
+  "complete": false,
+  "surplus": [
+   "5549529",
+   "5550774",
+   "5555737",
+   "5578754"
+  ],
+  "missing": [
+   "5555738"
+  ],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
   "filer_id": "24826",
   "name": "Citizens for Schools and Community",
   "orestar": 100,
@@ -376,6 +394,21 @@
    "5666607",
    "5666643",
    "5666645"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24695",
+  "name": "Greg Mead for Jefferson County Commissioner",
+  "orestar": 42,
+  "held": 45,
+  "complete": false,
+  "surplus": [
+   "5575709",
+   "5575710",
+   "5586349"
   ],
   "missing": [],
   "superseded": [],
@@ -480,6 +513,20 @@
   "surplus": [
    "5535712",
    "5589793"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24389",
+  "name": "B.J. For Oregon",
+  "orestar": 34,
+  "held": 36,
+  "complete": false,
+  "surplus": [
+   "5547600",
+   "5547624"
   ],
   "missing": [],
   "superseded": [],
@@ -820,6 +867,32 @@
   "complete": false,
   "surplus": [
    "5669628"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24241",
+  "name": "Claudia for Kids",
+  "orestar": 39,
+  "held": 40,
+  "complete": false,
+  "surplus": [
+   "5666395"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24256",
+  "name": "Corrie Gant for Bandon Schools",
+  "orestar": 43,
+  "held": 44,
+  "complete": false,
+  "surplus": [
+   "5668239"
   ],
   "missing": [],
   "superseded": [],
@@ -3965,6 +4038,495 @@
   "filer_id": "13721",
   "complete": null,
   "name": "Committee to Elect Earl Scott",
+  "last_attempt": "2026-08-29",
+  "last_failure": "unusable_window",
+  "failure_count": 1
+ },
+ {
+  "filer_id": "337",
+  "name": "Polk County Democratic Central Committee",
+  "orestar": 5394,
+  "held": 5394,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24614",
+  "name": "Take Back Oregon",
+  "orestar": 31,
+  "held": 31,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24024",
+  "name": "Seth Taylor",
+  "orestar": 31,
+  "held": 31,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "25048",
+  "name": "Joshua for Gresham",
+  "orestar": 32,
+  "held": 32,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "17166",
+  "name": "Freedom From Pesticides Alliance",
+  "orestar": 32,
+  "held": 32,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "13472",
+  "name": "Friends of Gail Holmes",
+  "orestar": 32,
+  "held": 32,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "18774",
+  "name": "No to One Gro",
+  "orestar": 32,
+  "held": 32,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "12562",
+  "name": "Committee to Elect Ed Truax",
+  "orestar": 33,
+  "held": 33,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "18903",
+  "name": "Michael Hunter HD 19",
+  "orestar": 33,
+  "held": 33,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "25006",
+  "name": "Friends of David Sharyan",
+  "orestar": 33,
+  "held": 33,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "4420",
+  "name": "HearPAC",
+  "orestar": 34,
+  "held": 34,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "7605",
+  "name": "Jackson County Pacific Green Party",
+  "orestar": 34,
+  "held": 34,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "16218",
+  "name": "Friends of Silver Falls School District",
+  "orestar": 34,
+  "held": 34,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "23751",
+  "name": "Committee for David Tate",
+  "orestar": 34,
+  "held": 34,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "13494",
+  "name": "Gladstone Political Action Committee",
+  "orestar": 35,
+  "held": 35,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "14616",
+  "name": "Committee to recall Assessor Adam Colby",
+  "orestar": 35,
+  "held": 35,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "17982",
+  "name": "Oregonians for Truth In Politics PAC",
+  "orestar": 35,
+  "held": 35,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "17162",
+  "name": "Bend Good Government Committee",
+  "orestar": 35,
+  "held": 35,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "8145",
+  "name": "Committee To Elect Jim Relaford",
+  "orestar": 36,
+  "held": 36,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "16112",
+  "name": "Justesen For Oregon",
+  "orestar": 36,
+  "held": 36,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "9026",
+  "name": "Grants Pass Josephine County Chamber Supporting Local Commerce",
+  "orestar": 37,
+  "held": 37,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "289",
+  "name": "Baker County Democratic Central Committee",
+  "orestar": 37,
+  "held": 37,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "6745",
+  "name": "Keep Rob Gordon Sheriff",
+  "orestar": 37,
+  "held": 37,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "19491",
+  "name": "Oregon Single Payer Advocates",
+  "orestar": 37,
+  "held": 37,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "15059",
+  "name": "Multnomah County Young Democrats",
+  "orestar": 37,
+  "held": 37,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "5788",
+  "name": "Committee to Elect Scot Langton Deschutes County Assessor",
+  "orestar": 37,
+  "held": 37,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24432",
+  "name": "Creekside Quarter",
+  "orestar": 38,
+  "held": 38,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "15775",
+  "name": "Simmons For Commissioner",
+  "orestar": 38,
+  "held": 38,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "15615",
+  "name": "Committee in Support of Eli F Stephens",
+  "orestar": 38,
+  "held": 38,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "5570",
+  "name": "Committee to Elect John Elliott",
+  "orestar": 38,
+  "held": 38,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24473",
+  "name": "Matt Lyon for Judge",
+  "orestar": 39,
+  "held": 39,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "14149",
+  "name": "Committee to Elect Justin Nelson",
+  "orestar": 39,
+  "held": 39,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "20143",
+  "name": "Sandi Mann for Lane County Commissioner 2020",
+  "orestar": 39,
+  "held": 39,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "18773",
+  "name": "Keep it Creswell",
+  "orestar": 39,
+  "held": 39,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "18879",
+  "name": "Voters for Kathy Martin-Willis",
+  "orestar": 40,
+  "held": 40,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "13962",
+  "name": "Citizens Against Recall",
+  "orestar": 40,
+  "held": 40,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "2434",
+  "name": "Fifth Congressional District Republican Party",
+  "orestar": 42,
+  "held": 42,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "21286",
+  "name": "Friends of Tristan Irvin",
+  "orestar": 43,
+  "held": 43,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "15973",
+  "name": "Friends of John Wilson",
+  "orestar": 43,
+  "held": 43,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "15199",
+  "name": "Teressa Raiford for Multnomah County Commissioner",
+  "orestar": 43,
+  "held": 43,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "5790",
+  "name": "Supporters of Daphne Wuest for City Commissioner",
+  "orestar": 45,
+  "held": 45,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "5482",
+  "name": "The Wright is Right for Judge Committee",
+  "orestar": 45,
+  "held": 45,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "14105",
+  "name": "OAASIS PAC",
+  "orestar": 45,
+  "held": 45,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "17029",
+  "complete": null,
+  "name": "Crook County Citizens for Walt Wagner",
+  "last_attempt": "2026-08-29",
+  "last_failure": "unusable_window",
+  "failure_count": 1
+ },
+ {
+  "filer_id": "15803",
+  "complete": null,
+  "name": "Oregon's Sheriffs",
   "last_attempt": "2026-08-29",
   "last_failure": "unusable_window",
   "failure_count": 1
