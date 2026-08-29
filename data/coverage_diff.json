@@ -1,5 +1,81 @@
 [
  {
+  "filer_id": "5528",
+  "name": "Oregon Working Families Party",
+  "orestar": 3348,
+  "held": 3379,
+  "complete": false,
+  "surplus": [
+   "5758726",
+   "5758731",
+   "5758733",
+   "5758734",
+   "5758735",
+   "5758736",
+   "5758737",
+   "5758738",
+   "5758739",
+   "5758740",
+   "5758741",
+   "5758742",
+   "5758743",
+   "5758744",
+   "5758745",
+   "5758746",
+   "5758747",
+   "5758749",
+   "5758751",
+   "5758752",
+   "5758753",
+   "5758754",
+   "5758755",
+   "5758756",
+   "5758757",
+   "5758758",
+   "5758763",
+   "5758764",
+   "5758766",
+   "5758772",
+   "5767716"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "319",
+  "name": "Josephine County Republican Central Committee",
+  "orestar": 4818,
+  "held": 4836,
+  "complete": false,
+  "surplus": [
+   "5513778",
+   "5513782",
+   "5513789",
+   "5513815",
+   "5515010",
+   "5515047",
+   "5524678",
+   "5524681",
+   "5558437",
+   "5578139",
+   "5596105",
+   "5601549",
+   "5601560",
+   "5627393",
+   "5636376",
+   "5636493",
+   "5636494",
+   "5636495",
+   "5641095"
+  ],
+  "missing": [
+   "5513821"
+  ],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
   "filer_id": "324",
   "name": "Democratic Party of Lane County",
   "orestar": 11963,
@@ -350,6 +426,20 @@
   "checked": "2026-08-29"
  },
  {
+  "filer_id": "21823",
+  "name": "Ed Diehl for Oregon",
+  "orestar": 1598,
+  "held": 1600,
+  "complete": false,
+  "surplus": [
+   "5549521",
+   "5700653"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
   "filer_id": "24707",
   "name": "Elana for Bend",
   "orestar": 93,
@@ -597,6 +687,60 @@
   "checked": "2026-08-29"
  },
  {
+  "filer_id": "20099",
+  "name": "Campos for Oregon",
+  "orestar": 1275,
+  "held": 1275,
+  "complete": false,
+  "surplus": [
+   "5586163"
+  ],
+  "missing": [
+   "5066926"
+  ],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "51",
+  "name": "Credit Union Legislative Action Fund",
+  "orestar": 3069,
+  "held": 3070,
+  "complete": false,
+  "surplus": [
+   "5661401"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "300",
+  "name": "Coos County Republican Central Committee",
+  "orestar": 1715,
+  "held": 1716,
+  "complete": false,
+  "surplus": [
+   "5654474"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24948",
+  "name": "Friends of Lyndi Reichenbach",
+  "orestar": 15,
+  "held": 16,
+  "complete": false,
+  "surplus": [
+   "5716690"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
   "filer_id": "15343",
   "name": "",
   "orestar": 93,
@@ -700,14 +844,6 @@
   "checked": "2026-08-29"
  },
  {
-  "filer_id": "5528",
-  "name": "Oregon Working Families Party",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
- },
- {
   "filer_id": "21075",
   "name": "Total Recall PAC",
   "complete": null,
@@ -727,36 +863,26 @@
   "checked": "2026-08-29"
  },
  {
-  "filer_id": "20099",
-  "name": "Campos for Oregon",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
- },
- {
-  "filer_id": "51",
-  "name": "Credit Union Legislative Action Fund",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
- },
- {
   "filer_id": "18661",
   "name": "Jason for Bend",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 1404,
+  "held": 1404,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "312",
   "name": "Hood River County Democrats",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 1188,
+  "held": 1188,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "22530",
@@ -812,14 +938,6 @@
   "missing": [],
   "superseded": [],
   "checked": "2026-08-29"
- },
- {
-  "filer_id": "319",
-  "name": "Josephine County Republican Central Committee",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
  },
  {
   "filer_id": "18980",
@@ -913,9 +1031,9 @@
   "filer_id": "23285",
   "name": "Building a Stronger Oregon",
   "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "last_attempt": "2026-08-29",
+  "last_failure": "unusable_window",
+  "failure_count": 2
  },
  {
   "filer_id": "22682",
@@ -1415,10 +1533,13 @@
  {
   "filer_id": "346",
   "name": "Wasco County Democratic Central Committee",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 1703,
+  "held": 1703,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "14465",
@@ -1449,14 +1570,6 @@
   "missing": [],
   "superseded": [],
   "checked": "2026-08-29"
- },
- {
-  "filer_id": "300",
-  "name": "Coos County Republican Central Committee",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
  },
  {
   "filer_id": "344",
@@ -1527,10 +1640,13 @@
  {
   "filer_id": "4212",
   "name": "Friends of Chuck Riley",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 1318,
+  "held": 1318,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "13185",
@@ -1772,14 +1888,6 @@
   "checked": "2026-08-29"
  },
  {
-  "filer_id": "21823",
-  "name": "Ed Diehl for Oregon",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
- },
- {
   "filer_id": "14024",
   "name": "Redmond Firefighters Association",
   "complete": null,
@@ -1812,10 +1920,13 @@
  {
   "filer_id": "15616",
   "name": "Friends of Melissa Cribbins",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 1353,
+  "held": 1353,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "21841",
@@ -1886,10 +1997,13 @@
  {
   "filer_id": "320",
   "name": "Klamath County Democratic Central Committee",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 2225,
+  "held": 2225,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "4745",
@@ -1938,10 +2052,13 @@
  {
   "filer_id": "14515",
   "name": "Friends of Chris Gorsek",
-  "complete": null,
-  "last_attempt": "2026-08-28",
-  "last_failure": "historical_unusable_window",
-  "failure_count": 1
+  "orestar": 2864,
+  "held": 2864,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
  },
  {
   "filer_id": "15610",
@@ -3137,6 +3254,154 @@
   "filer_id": "15041",
   "complete": null,
   "name": "Citizens for Better Schools - Elect Kim Wallan Committee",
+  "last_attempt": "2026-08-29",
+  "last_failure": "unusable_window",
+  "failure_count": 1
+ },
+ {
+  "filer_id": "23267",
+  "name": "Friends of Tania Wildbill",
+  "orestar": 13,
+  "held": 13,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "15038",
+  "name": "POA COMMISSION CAMPAIGN WILLIAM HUNSINGER",
+  "orestar": 13,
+  "held": 13,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24927",
+  "name": "Friends of Mark Norman",
+  "orestar": 13,
+  "held": 13,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "14390",
+  "name": "Friends of Roberta Phillip",
+  "orestar": 14,
+  "held": 14,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "19583",
+  "name": "Amanda for Bend",
+  "orestar": 14,
+  "held": 14,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "2256",
+  "name": "Second Congressional District - Republican Party",
+  "orestar": 14,
+  "held": 14,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "23619",
+  "name": "Ed Mudd for Commissioner",
+  "orestar": 14,
+  "held": 14,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "22422",
+  "name": "Friends of Kate Schwarzler",
+  "orestar": 15,
+  "held": 15,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "14855",
+  "name": "Committee to Elect Paul Castilleja",
+  "orestar": 15,
+  "held": 15,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "25068",
+  "name": "Fudge 4 Oregon",
+  "orestar": 15,
+  "held": 15,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "16472",
+  "name": "YES KCC",
+  "orestar": 16,
+  "held": 16,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "24835",
+  "name": "Chad Hansen for Commissioner",
+  "orestar": 16,
+  "held": 16,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "13483",
+  "complete": null,
+  "name": "Steve Blanchard for city council",
+  "last_attempt": "2026-08-29",
+  "last_failure": "unusable_window",
+  "failure_count": 1
+ },
+ {
+  "filer_id": "16461",
+  "complete": null,
+  "name": "Sandi Mann for Lane County Commissioner-District 4",
   "last_attempt": "2026-08-29",
   "last_failure": "unusable_window",
   "failure_count": 1
