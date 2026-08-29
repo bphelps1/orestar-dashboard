@@ -213,10 +213,26 @@ jobs:
             echo "Chain limit reached ($CHAIN) — the daily schedule continues from here."
             exit 0
           fi
-          if [ "${{ steps.diff.outputs.blocked }}" = "1" ]; then
-            echo "F5 breaker tripped — stopping the chain for a real cooldown."
-            exit 0
-          fi
+          # A tripped breaker is NOT a reason to stop chaining.
+          #
+          # This used to exit here, on the reasoning that a blocked runner
+          # needs a real cooldown. That reasoning assumed the block follows the
+          # ACCOUNT. It does not: every run gets a fresh GitHub runner on a
+          # different IP, and F5 blocks the IP.
+          #
+          # Measured, not assumed. Run 33237734544 tripped the breaker and
+          # ended at 07:04. The next run started at 07:16 — twelve minutes
+          # later — and measured 47 committees without blocking.
+          #
+          # Stopping here made the SCHEDULE the only thing that resumes the
+          # sweep, because every run trips the breaker after ~48 committees. At
+          # one run a day that is eleven days for the committees outstanding;
+          # chaining clears the same backlog in a single chain.
+          #
+          # The usable==0 check below is the safety net that makes this safe to
+          # try: if a block ever did follow the account, the successor would
+          # measure nothing and end the chain, costing one run rather than
+          # twelve.
           if [ "${{ steps.diff.outputs.usable }}" = "0" ]; then
             echo "This run produced no usable diffs — stopping rather than queueing another blocked run."
             exit 0
