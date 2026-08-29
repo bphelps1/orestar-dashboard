@@ -294,6 +294,25 @@ def orestar_ids(page, filer_id: str, start: date, end: date,
 # Persistence
 # ---------------------------------------------------------------------------
 
+def _costs(filer_ids: list[str]) -> dict[str, int]:
+    """Rows we hold per committee — a good proxy for what measuring one costs.
+
+    ORESTAR is paged fifty rows at a time and every window over the cap costs
+    an extra search plus a full re-page of both halves, so cost is superlinear
+    in size. Our own row count is close enough to rank by and free to obtain.
+    """
+    if not filer_ids:
+        return {}
+    conn = supabase_sync._connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""select filer_id, count(*) from transactions
+                           where filer_id = any(%s) group by 1""", (list(filer_ids),))
+            return {str(r[0]): int(r[1]) for r in cur.fetchall()}
+    finally:
+        conn.close()
+
+
 def _prioritise(targets: list[dict], entries: dict) -> list[dict]:
     """Order committees so the scarce request budget lands where it matters.
 
@@ -353,9 +372,30 @@ def _prioritise(targets: list[dict], entries: dict) -> list[dict]:
             recheck.append((e.get("checked") or "", t))
         else:
             lazy.append((e.get("checked") or "", t))
-    recheck.sort(key=lambda x: x[0])          # oldest evidence first
-    failed.sort(key=lambda x: x[0])
-    lazy.sort(key=lambda x: x[0])
+    # Order by COST inside each tier, cheapest first.
+    #
+    # The interleave above balances committee COUNTS, and that is not the same
+    # as balancing work. Friends of Tina Kotek is 29,268 rows and needs fifteen
+    # recursive splits; the median flagged committee is eighty rows and needs
+    # one search. Two re-checks of the giants is not "two committees" of
+    # budget, it is the entire budget — and because they carry withdrawn rows
+    # they sort first every single day.
+    #
+    # Measured, not assumed: a 57-minute run spent every minute inside filers
+    # 4792 and 19050, measured three committees, tripped the F5 block and
+    # stopped the chain. At three per run the remaining 620 need roughly 200
+    # days. The count-based interleave fixed starvation on the count axis and
+    # left it untouched on the cost axis.
+    #
+    # Cheapest-first inverts that: 647 of 668 flagged committees fit in one
+    # window with no splitting at all.
+    _cost = _costs([str(t["filer_id"]) for t in targets])
+    def _c(t):
+        return _cost.get(str(t["filer_id"]), 0)
+    recheck.sort(key=lambda x: (x[0], _c(x[1])))   # oldest evidence, then cheapest
+    failed.sort(key=lambda x: (x[0], _c(x[1])))
+    fresh.sort(key=_c)                             # pure coverage: cheapest first
+    lazy.sort(key=lambda x: (x[0], _c(x[1])))
 
     # Recovery attempts and first measurements alternate. One deterministic
     # bad filer cannot starve new coverage, while transient F5 casualties are
@@ -378,7 +418,19 @@ def _prioritise(targets: list[dict], entries: dict) -> list[dict]:
                 out.append(rq[ri]); ri += 1
         if wi < len(work):                    # ...then one recovery/new item
             out.append(work[wi]); wi += 1
-    return out + [t for _, t in lazy]
+    out = out + [t for _, t in lazy]
+
+    # At most one over-cap committee per slice.
+    #
+    # A committee past UI_ROW_CAP cannot be answered by a single search: every
+    # window is split and re-paged, so one of them can cost more requests than
+    # a hundred ordinary committees and is the most likely thing to trip F5.
+    # Letting one through per run keeps the giants genuinely re-checked —
+    # they are where withdrawn rows actually live — without letting them own
+    # the budget. The rest move to the back rather than being dropped.
+    big = [t for t in out if _c(t) > UI_ROW_CAP]
+    small = [t for t in out if _c(t) <= UI_ROW_CAP]
+    return (big[:1] + small + big[1:]) if big else out
 
 
 def _load() -> dict:
