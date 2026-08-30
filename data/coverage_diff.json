@@ -2375,7 +2375,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-30"
  },
  {
   "filer_id": "17884",
@@ -2579,9 +2579,9 @@
   "filer_id": "23285",
   "name": "Building a Stronger Oregon",
   "complete": null,
-  "last_attempt": "2026-08-29",
+  "last_attempt": "2026-08-30",
   "last_failure": "unusable_window",
-  "failure_count": 2
+  "failure_count": 3
  },
  {
   "filer_id": "22682",
@@ -3170,7 +3170,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-30"
  },
  {
   "filer_id": "2196",
@@ -3225,7 +3225,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-30"
  },
  {
   "filer_id": "15769",
@@ -3475,7 +3475,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-30"
  },
  {
   "filer_id": "15616",
@@ -6678,13 +6678,15 @@
  {
   "filer_id": "21488",
   "name": "Michele Stroh for Senate",
-  "orestar": 82,
+  "orestar": 83,
   "held": 82,
-  "complete": true,
+  "complete": false,
   "surplus": [],
-  "missing": [],
+  "missing": [
+   "5784628"
+  ],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-30"
  },
  {
   "filer_id": "19380",
@@ -6695,7 +6697,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-30"
  },
  {
   "filer_id": "25003",
@@ -6706,7 +6708,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-30"
  },
  {
   "filer_id": "24608",
@@ -6717,7 +6719,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-30"
  },
  {
   "filer_id": "21296",
@@ -6728,7 +6730,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-30"
  },
  {
   "filer_id": "22219",
@@ -6739,7 +6741,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-30"
  },
  {
   "filer_id": "15878",
@@ -6750,7 +6752,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-30"
  },
  {
   "filer_id": "2884",
@@ -6761,7 +6763,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-30"
  },
  {
   "filer_id": "15254",
@@ -6772,7 +6774,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-30"
  },
  {
   "filer_id": "15375",
@@ -6783,7 +6785,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-30"
  },
  {
   "filer_id": "13934",
@@ -6794,7 +6796,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-30"
  },
  {
   "filer_id": "19814",
@@ -6805,7 +6807,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-30"
  },
  {
   "filer_id": "16175",
@@ -6816,7 +6818,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-30"
  },
  {
   "filer_id": "14344",
@@ -6827,7 +6829,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-30"
  },
  {
   "filer_id": "19447",
@@ -6838,7 +6840,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-30"
  },
  {
   "filer_id": "22633",
@@ -6849,7 +6851,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-30"
  },
  {
   "filer_id": "24431",
@@ -6860,7 +6862,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-30"
  },
  {
   "filer_id": "18358",
@@ -6871,7 +6873,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-30"
  },
  {
   "filer_id": "13368",
@@ -6882,7 +6884,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-30"
  },
  {
   "filer_id": "24482",
@@ -6893,7 +6895,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-30"
  },
  {
   "filer_id": "19383",
@@ -6904,7 +6906,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-30"
  },
  {
   "filer_id": "24129",
@@ -6915,7 +6917,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-30"
  },
  {
   "filer_id": "24849",
@@ -6948,7 +6950,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-30"
  },
  {
   "filer_id": "24643",
@@ -6959,7 +6961,10 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-29",
+  "last_attempt": "2026-08-30",
+  "last_failure": "unusable_window",
+  "failure_count": 1
  },
  {
   "filer_id": "17618",
@@ -6970,7 +6975,10 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-29",
+  "last_attempt": "2026-08-30",
+  "last_failure": "unusable_window",
+  "failure_count": 1
  },
  {
   "filer_id": "24173",
