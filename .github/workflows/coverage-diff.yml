@@ -10,12 +10,12 @@ name: Coverage Diff (which ROWS differ from ORESTAR)
 # from "a row we correctly removed", which is why that test has been wrong in
 # both directions.
 #
-# Diffing the IDs settles it, and costs far more: this pages entire result sets
-# fifty rows at a time, where the survey spends one search. Filer 221 takes ten
-# minutes and seven recursive window splits. Sweeping all 668 flagged
-# committees is days of scraping, so this runs as a slow rolling re-check
-# rather than a nightly full pass — the point is that every committee is
-# eventually re-measured, not that all of them are current at once.
+# Diffing the IDs settles it, and costs far more: this exports every complete
+# leaf and recursively narrows result sets over ORESTAR's cap, where the survey
+# spends one search. Sweeping all flagged committees is still days of scraping,
+# so this runs as a slow rolling re-check rather than a nightly full pass — the
+# point is that every committee is eventually re-measured, not that all of them
+# are current at once.
 #
 # Order matters more than coverage here. diff_coverage.py's --recheck
 # prioritises committees where withdrawn rows are actively being SUBTRACTED
@@ -73,7 +73,9 @@ concurrency:
 jobs:
   diff:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    # 30m coordination wait + up to 25m browser install + 70m collector,
+    # with room to commit evidence and emit the next targeted dispatch.
+    timeout-minutes: 150
 
     steps:
       - name: Check out repository
@@ -81,6 +83,10 @@ jobs:
 
       - name: Wait for other ORESTAR jobs
         uses: ./.github/actions/await-orestar
+        with:
+          # Waiting consumes the job timeout. Keep this bounded so the
+          # collector's own 70-minute deadline can always stop and commit.
+          max-wait-minutes: "30"
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -121,8 +127,9 @@ jobs:
           if [ "${{ inputs.recheck }}" != "false" ]; then
             ARGS="$ARGS --recheck"
           fi
-          # Comfortably inside the job's 90 minutes, so the script always stops
-          # on its own terms rather than being killed mid-committee.
+          # Comfortably inside the time left after the bounded coordination and
+          # setup steps, so the script stops on its own terms rather than being
+          # killed mid-committee.
           ARGS="$ARGS --max-minutes 70"
           xvfb-run --auto-servernum python scraper/diff_coverage.py $ARGS 2>&1 | tee /tmp/diff.log
 

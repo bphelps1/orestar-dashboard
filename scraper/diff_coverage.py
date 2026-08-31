@@ -35,17 +35,16 @@ ambiguous number:
                Genuinely absent; the backfill can recover these.
 
 The cost is real and is the reason this is a separate tool rather than the
-default. The count survey is one search per committee; this pages the entire
-result set, fifty rows at a time. Reserve it for committees where the answer
-changes a decision.
+default. The count survey is one search per committee; this exports every
+provably complete leaf and may need many disjoint searches to get below the
+export cap. Reserve it for committees where the answer changes a decision.
 
-ORESTAR caps the results UI at 100 pages — 5,000 rows — the same class of limit
-as the 4,999-row export cap. Past that the Next button simply stops, silently,
-so a naive pager returns 5,000 of 11,766 and the diff invents thousands of
-phantom "surplus" rows. Windows are therefore split until each reports under
-the cap, and a window whose collected total falls short of its own reported
-count is treated as FAILED rather than merged: a partial collection is worse
-than none, because it looks like an answer.
+ORESTAR caps the results UI at 100 pages — 5,000 rows — and its Excel export at
+4,999 rows. Windows are therefore split until each reports at most the export
+cap, then downloaded once. Every leaf is checked against its reported count,
+and every group of children is reconciled against its parent. A short or
+overlapping collection is treated as FAILED rather than merged: a partial
+collection is worse than none, because it looks like an answer.
 
 Usage:
     python scraper/diff_coverage.py --filer-ids 221 19050
@@ -56,8 +55,10 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import logging
+import re
 import sys
 import time
 from datetime import date, datetime, timedelta
@@ -65,6 +66,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
 
 import fetch as F
@@ -98,7 +100,37 @@ UI_ROW_CAP = 5_000
 # is secondary here: a fast partial answer is deliberately not an answer.
 ORESTAR_REQUEST_DELAY = max(3.0, F.REQUEST_DELAY)
 
+# Local dates are only a routing hint.  Keeping seeded windows below the UI cap
+# leaves room for rows that ORESTAR has and our database does not, while every
+# seeded window still covers a contiguous piece of the original date range.
+SEED_TARGET_ROWS = 4_000
+
 log = logging.getLogger("diff_coverage")
+
+Window = tuple[str, date, date, str | None, str | None, str | None]
+
+
+class CollectionDeadlineExceeded(RuntimeError):
+    """The current committee exhausted the run budget before it was provable."""
+
+
+class PartitionMismatchError(RuntimeError):
+    """Disjoint child searches did not reproduce their parent's true count."""
+
+
+def _check_deadline(deadline: float | None) -> None:
+    if deadline is not None and time.monotonic() >= deadline:
+        raise CollectionDeadlineExceeded("coverage-diff time budget reached")
+
+
+def _remaining_timeout_ms(deadline: float | None, ceiling_ms: int) -> int:
+    """A blocking-call timeout that cannot extend past ``deadline``."""
+    if deadline is None:
+        return ceiling_ms
+    remaining = int((deadline - time.monotonic()) * 1000)
+    if remaining <= 0:
+        raise CollectionDeadlineExceeded("coverage-diff time budget reached")
+    return min(ceiling_ms, remaining)
 
 
 # ---------------------------------------------------------------------------
@@ -182,51 +214,210 @@ def _parse_rows(text: str) -> dict[str, dict]:
     return out
 
 
-def _wait_for_new_rows(page, seen: set[str], timeout_seconds: int = 20) -> dict[str, dict]:
+def _wait_for_new_rows(
+    page,
+    seen: set[str],
+    timeout_seconds: int = 20,
+    deadline: float | None = None,
+) -> dict[str, dict]:
     """Wait until the results table contains at least one previously unseen ID.
 
     A fixed sleep after clicking Next is not a page-change guarantee. Under
     load the old, non-empty page can remain visible for several seconds; reading
     it again silently loses a page while still looking like a successful parse.
     """
-    deadline = time.monotonic() + timeout_seconds
-    while time.monotonic() < deadline:
+    _check_deadline(deadline)
+    poll_deadline = time.monotonic() + timeout_seconds
+    if deadline is not None:
+        poll_deadline = min(poll_deadline, deadline)
+    while time.monotonic() < poll_deadline:
         current = _parse_rows(page.inner_text("body"))
         if current and (not seen or set(current) - seen):
             return current
         page.wait_for_timeout(250)
+    _check_deadline(deadline)
     return {}
 
 
-def _collect_window(page, filer_id: str, start: date, end: date) -> dict | None:
+def _window_label(window: Window) -> str:
+    tran_type, start, end, amt_from, amt_to, payee_prefix = window
+    bits = [f"{tran_type} {start}→{end}"]
+    if amt_from is not None or amt_to is not None:
+        bits.append(f"${amt_from or '0'}-{amt_to or 'max'}")
+    if payee_prefix:
+        bits.append(f"payee~{payee_prefix}*")
+    return " ".join(bits)
+
+
+def _parse_export_rows(content: bytes) -> dict[str, dict] | None:
+    """Read transaction IDs from an ORESTAR Excel export in memory."""
+    if content[:4] == F._XLS_MAGIC:
+        engine = "xlrd"
+    elif content[:4] == F._XLSX_MAGIC:
+        engine = "openpyxl"
+    else:
+        return None
+    try:
+        import pandas as pd
+
+        frame = pd.read_excel(io.BytesIO(content), engine=engine, dtype=str)
+    except Exception as exc:                               # noqa: BLE001
+        log.warning("Could not parse ORESTAR Excel export (%s)", exc)
+        return None
+    columns = {str(column).strip().lower(): column for column in frame.columns}
+    id_column = columns.get("tran id") or columns.get("transaction id")
+    if id_column is None:
+        log.warning("ORESTAR Excel export has no transaction-ID column")
+        return None
+    rows: dict[str, dict] = {}
+    for raw_id in frame[id_column].dropna():
+        tran_id = str(raw_id).strip()
+        if tran_id.endswith(".0") and tran_id[:-2].isdigit():
+            tran_id = tran_id[:-2]
+        if tran_id.isdigit():
+            rows[tran_id] = {}
+    return rows
+
+
+def _export_rows(
+    page,
+    context,
+    filer_id: str,
+    label: str,
+    deadline: float | None = None,
+) -> dict[str, dict] | None:
+    """Download the current result set once instead of paging it 50 rows at a time."""
+    try:
+        csrf = page.evaluate("""() => {
+            const links = [...document.querySelectorAll('a[href*="OWASP_CSRFTOKEN"]')];
+            if (!links.length) return null;
+            const m = links[0].href.match(/OWASP_CSRFTOKEN=([^&"'\\s]+)/);
+            return m ? m[1] : null;
+        }""")
+    except Exception as exc:                               # noqa: BLE001
+        log.warning("Filer %s %s: could not read export token (%s)",
+                    filer_id, label, exc)
+        return None
+    if not csrf:
+        log.warning("Filer %s %s: no export token on results page", filer_id, label)
+        return None
+
+    results_url = page.url
+    session_match = re.search(r";(JSESSIONID_ORESTAR=[^?&\s]+)", results_url)
+    session_path = f";{session_match.group(1)}" if session_match else ""
+    export_url = f"{F.EXPORT_URL}{session_path}?OWASP_CSRFTOKEN={csrf}"
+    content = b""
+    try:
+        cookies = {cookie["name"]: cookie["value"] for cookie in context.cookies()}
+        response = F.requests.get(
+            export_url,
+            cookies=cookies,
+            headers={"User-Agent": F.USER_AGENT, "Referer": results_url},
+            timeout=max(0.001, _remaining_timeout_ms(deadline, 120_000) / 1000),
+        )
+        content_type = response.headers.get("Content-Type", "")
+        if "html" not in content_type.lower():
+            content = response.content
+    except Exception as exc:                               # noqa: BLE001
+        log.warning("Filer %s %s: direct export failed (%s)", filer_id, label, exc)
+
+    rows = _parse_export_rows(content)
+    if rows is None:
+        # ORESTAR occasionally rejects the cookie replay while allowing the same
+        # export in the browser session.  Use Playwright's temporary download as
+        # the fallback; nothing is written into the repository.
+        try:
+            with page.expect_download(
+                timeout=_remaining_timeout_ms(deadline, 60_000)
+            ) as download_info:
+                try:
+                    page.goto(
+                        export_url,
+                        wait_until="commit",
+                        timeout=_remaining_timeout_ms(deadline, 60_000),
+                    )
+                except PlaywrightError as exc:
+                    # A Content-Disposition response begins the download and
+                    # aborts the document navigation. Playwright reports that
+                    # successful hand-off as "Download is starting" even
+                    # though expect_download captured the file.
+                    if "Download is starting" not in str(exc):
+                        raise
+            content = Path(download_info.value.path()).read_bytes()
+        except Exception as exc:                           # noqa: BLE001
+            log.warning("Filer %s %s: browser export failed (%s)",
+                        filer_id, label, exc)
+            return None
+        rows = _parse_export_rows(content)
+    return rows
+
+
+def _collect_window(
+    page,
+    filer_id: str,
+    start: date,
+    end: date,
+    tran_type: str = "ALL",
+    amt_from: str | None = None,
+    amt_to: str | None = None,
+    payee_prefix: str | None = None,
+    deadline: float | None = None,
+    context=None,
+) -> dict | None:
     """Every row ORESTAR returns for one window, or None if it cannot be trusted.
 
     None means "do not use this window", and the caller must not treat it as an
     empty result. Half a result set looks exactly like a committee that has
     fewer rows than it does, and that is how a diff manufactures surplus.
     """
+    window: Window = (tran_type, start, end, amt_from, amt_to, payee_prefix)
+    label = _window_label(window)
+
     # Recursive windows issue searches too; pacing only Next clicks leaves a
     # burst at every split boundary.
+    _check_deadline(deadline)
     page.wait_for_timeout(int(ORESTAR_REQUEST_DELAY * 1000))
-    reported = SC.orestar_count(page, filer_id, start, end)
+    _check_deadline(deadline)
+    try:
+        reported = SC.orestar_count(
+            page, filer_id, start, end, tran_type, amt_from, amt_to, payee_prefix,
+            deadline=deadline,
+        )
+    except SC.SearchDeadlineExceeded as exc:
+        raise CollectionDeadlineExceeded(str(exc)) from exc
+    _check_deadline(deadline)
     if reported is None:
-        log.warning("Filer %s %s→%s: no record count read", filer_id, start, end)
+        log.warning("Filer %s %s: no record count read", filer_id, label)
         return None
     if reported == 0:
         return {"reported": 0, "rows": {}}
-    if reported > UI_ROW_CAP:
+    # An export holds at most 4,999 data rows; the UI itself holds 5,000.  Split
+    # at the lower limit so a completed leaf can be fetched in one request.
+    row_cap = min(UI_ROW_CAP, F.ORESTAR_ROW_CAP)
+    if reported > row_cap:
         return {"reported": reported, "rows": None}      # caller must split
 
-    first_page = _wait_for_new_rows(page, set())
+    if context is not None:
+        _check_deadline(deadline)
+        rows = _export_rows(page, context, filer_id, label, deadline)
+        _check_deadline(deadline)
+        if rows is None or len(rows) != reported:
+            log.warning("Filer %s %s: export contained %s of %d IDs — window UNUSABLE",
+                        filer_id, label, "unknown" if rows is None else len(rows),
+                        reported)
+            return None
+        return {"reported": reported, "rows": rows}
+
+    first_page = _wait_for_new_rows(page, set(), deadline=deadline)
     if not first_page:
-        log.warning("Filer %s %s→%s: first result page never rendered",
-                    filer_id, start, end)
+        log.warning("Filer %s %s: first result page never rendered", filer_id, label)
         return None
 
     rows: dict[str, dict] = dict(first_page)
     max_pages = (reported + PAGE_ROWS - 1) // PAGE_ROWS
     pages_read = 1
     while len(rows) < reported and pages_read < max_pages:
+        _check_deadline(deadline)
         nxt = [b for b in page.query_selector_all('input[value="Next"]') if b.is_enabled()]
         if not nxt:
             break
@@ -235,20 +426,23 @@ def _collect_window(page, filer_id: str, start: date, end: date) -> dict | None:
             # This is both polite pacing and the minimum wait before polling the
             # content. The poll below, rather than this delay, proves progress.
             page.wait_for_timeout(int(ORESTAR_REQUEST_DELAY * 1000))
+            _check_deadline(deadline)
         except Exception as e:                            # noqa: BLE001
-            log.warning("Filer %s %s→%s: paging stopped (%s)", filer_id, start, end, e)
+            if isinstance(e, CollectionDeadlineExceeded):
+                raise
+            log.warning("Filer %s %s: paging stopped (%s)", filer_id, label, e)
             return None
-        current = _wait_for_new_rows(page, set(rows))
+        current = _wait_for_new_rows(page, set(rows), deadline=deadline)
         if not current:
-            log.warning("Filer %s %s→%s: Next produced no new rows after page %d",
-                        filer_id, start, end, pages_read)
+            log.warning("Filer %s %s: Next produced no new rows after page %d",
+                        filer_id, label, pages_read)
             return None
         rows.update(current)
         pages_read += 1
 
     if len(rows) != reported:
-        log.warning("Filer %s %s→%s: collected %d of %d — window UNUSABLE",
-                    filer_id, start, end, len(rows), reported)
+        log.warning("Filer %s %s: collected %d of %d — window UNUSABLE",
+                    filer_id, label, len(rows), reported)
         return None
     return {"reported": reported, "rows": rows}
 
@@ -263,31 +457,181 @@ def _split(start: date, end: date) -> list[tuple[date, date]]:
     return [(start, mid), (mid + timedelta(days=1), end)]
 
 
-def orestar_ids(page, filer_id: str, start: date, end: date,
-                depth: int = 0) -> dict | None:
-    """Every Tran ID ORESTAR holds for this filer, splitting past the UI cap."""
-    win = _collect_window(page, filer_id, start, end)
-    if win is None:
-        return None
-    if win["rows"] is not None:
-        return win["rows"]
+def _date_seed_windows(
+    filer_id: str,
+    start: date,
+    end: date,
+    target_rows: int = SEED_TARGET_ROWS,
+) -> list[tuple[date, date]]:
+    """Build complete, contiguous date windows from the local row distribution.
 
-    halves = _split(start, end)
-    if not halves:
-        # A single day over the cap. Nothing here can divide it further, and
-        # returning what fits would be a lie, so refuse.
-        log.error("Filer %s %s: %d rows in one indivisible window — cannot diff",
-                  filer_id, start, win["reported"])
-        return None
-    log.info("Filer %s %s→%s: %d rows, over the %d cap — splitting",
-             filer_id, start, end, win["reported"], UI_ROW_CAP)
+    The local rows decide only where to put boundaries; they never decide which
+    dates to search.  The returned windows cover ``start`` through ``end`` with
+    no gaps, so ORESTAR-only dates remain in scope.  Every parent and the final
+    root are reconciled against ORESTAR's own count before the result is usable.
+    """
+    conn = supabase_sync._connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """select tran_date, count(*) from transactions
+                   where filer_id = %s and tran_date between %s and %s
+                   group by tran_date order by tran_date""",
+                (filer_id, start, end),
+            )
+            date_counts = cur.fetchall()
+    finally:
+        conn.close()
+
+    normalized: list[tuple[date, int]] = []
+    for raw_day, raw_count in date_counts:
+        day = raw_day.date() if isinstance(raw_day, datetime) else raw_day
+        if isinstance(day, str):
+            day = date.fromisoformat(day[:10])
+        normalized.append((day, int(raw_count)))
+    return _build_date_seed_windows(start, end, normalized, target_rows)
+
+
+def _build_date_seed_windows(
+    start: date,
+    end: date,
+    date_counts: list[tuple[date, int]],
+    target_rows: int = SEED_TARGET_ROWS,
+) -> list[tuple[date, date]]:
+    """Pure partition builder used by `_date_seed_windows` and its tests."""
+    if sum(count for _, count in date_counts) <= target_rows:
+        return []
+
+    windows: list[tuple[date, date]] = []
+    window_start = start
+    running = 0
+    one_day = timedelta(days=1)
+    for day, count in date_counts:
+        if count >= target_rows:
+            if window_start < day:
+                windows.append((window_start, day - one_day))
+            windows.append((day, day))
+            window_start = day + one_day
+            running = 0
+            continue
+        if running and running + count > target_rows:
+            windows.append((window_start, day - one_day))
+            window_start = day
+            running = count
+        else:
+            running += count
+    if window_start <= end:
+        windows.append((window_start, end))
+    return windows if len(windows) > 1 else []
+
+
+def _date_windows_cover(
+    start: date, end: date, windows: list[tuple[date, date]]
+) -> bool:
+    expected = start
+    for window_start, window_end in windows:
+        if window_start != expected or window_end < window_start:
+            return False
+        expected = window_end + timedelta(days=1)
+    return expected == end + timedelta(days=1)
+
+
+def _collect_tree(
+    page,
+    context,
+    filer_id: str,
+    window: Window,
+    deadline: float | None,
+    depth: int,
+    seed_windows: list[tuple[date, date]] | None,
+) -> dict | None:
+    """Collect one window and prove every descendant reconciles to its parent."""
+    _check_deadline(deadline)
+    tran_type, start, end, amt_from, amt_to, payee_prefix = window
+    result = _collect_window(
+        page, filer_id, start, end, tran_type, amt_from, amt_to, payee_prefix,
+        deadline, context,
+    )
+    if result is None or result["rows"] is not None:
+        return result
+
+    children: list[Window]
+    if depth == 0:
+        if seed_windows is None:
+            try:
+                _check_deadline(deadline)
+                seed_windows = _date_seed_windows(filer_id, start, end)
+                _check_deadline(deadline)
+            except CollectionDeadlineExceeded:
+                raise
+            except Exception as exc:                       # noqa: BLE001
+                log.warning("Filer %s: local date seeding failed (%s); using ladder",
+                            filer_id, exc)
+                seed_windows = []
+        if seed_windows:
+            if not _date_windows_cover(start, end, seed_windows):
+                raise PartitionMismatchError(
+                    f"date seeds do not cover {start}→{end}"
+                )
+            children = [("ALL", a, b, None, None, None) for a, b in seed_windows]
+        else:
+            children = F._narrow_filer(*window)
+    else:
+        children = F._narrow_filer(*window)
+
+    if not children:
+        raise PartitionMismatchError(
+            f"{_window_label(window)} has {result['reported']} rows after every "
+            "narrowing dimension is spent"
+        )
+
+    log.info("Filer %s %s: %d rows, over the %d cap — narrowing into %d",
+             filer_id, _window_label(window), result["reported"], UI_ROW_CAP,
+             len(children))
     merged: dict[str, dict] = {}
-    for a, b in halves:
-        part = orestar_ids(page, filer_id, a, b, depth + 1)
+    child_reported = 0
+    for child in children:
+        _check_deadline(deadline)
+        part = _collect_tree(
+            page, context, filer_id, child, deadline, depth + 1, seed_windows=[]
+        )
         if part is None:
-            return None                                   # one bad half poisons the whole
-        merged.update(part)
-    return merged
+            return None
+        child_reported += part["reported"]
+        merged.update(part["rows"])
+
+    parent_reported = result["reported"]
+    if child_reported != parent_reported or len(merged) != parent_reported:
+        raise PartitionMismatchError(
+            f"{_window_label(window)} children report {child_reported} rows / "
+            f"{len(merged)} unique IDs, parent reports {parent_reported}"
+        )
+    return {"reported": parent_reported, "rows": merged}
+
+
+def orestar_ids(
+    page,
+    filer_id: str,
+    start: date,
+    end: date,
+    depth: int = 0,
+    deadline: float | None = None,
+    seed_windows: list[tuple[date, date]] | None = None,
+    context=None,
+    raise_partition_error: bool = False,
+) -> dict | None:
+    """Every ORESTAR Tran ID, or None unless the complete tree reconciles."""
+    root: Window = ("ALL", start, end, None, None, None)
+    try:
+        result = _collect_tree(
+            page, context, filer_id, root, deadline, depth, seed_windows=seed_windows
+        )
+    except PartitionMismatchError as exc:
+        log.error("Filer %s: partition UNUSABLE (%s)", filer_id, exc)
+        if raise_partition_error:
+            raise
+        return None
+    return None if result is None else result["rows"]
 
 
 # ---------------------------------------------------------------------------
@@ -297,9 +641,9 @@ def orestar_ids(page, filer_id: str, start: date, end: date,
 def _costs(filer_ids: list[str]) -> dict[str, int]:
     """Rows we hold per committee — a good proxy for what measuring one costs.
 
-    ORESTAR is paged fifty rows at a time and every window over the cap costs
-    an extra search plus a full re-page of both halves, so cost is superlinear
-    in size. Our own row count is close enough to rank by and free to obtain.
+    Every window over the cap costs extra searches and exports across the
+    narrowing tree, so cost is superlinear in size. Our own row count is close
+    enough to rank by and free to obtain.
     """
     if not filer_ids:
         return {}
@@ -579,6 +923,7 @@ def main() -> int:
     unusable = 0
     consecutive_failures = 0
     blocked = False
+    budget_exhausted = False
 
     with sync_playwright() as p:
         browser, _ctx, page = F.setup_browser(p)
@@ -591,8 +936,24 @@ def main() -> int:
                 log.info("=== Diffing filer %s %s ===", fid, t.get("name", ""))
                 attempted += 1
                 failure_reason = "unusable_window"
+                deterministic_refusal = False
                 try:
-                    theirs = orestar_ids(page, fid, start, end)
+                    theirs = orestar_ids(
+                        page, fid, start, end, deadline=deadline, context=_ctx,
+                        raise_partition_error=True,
+                    )
+                except CollectionDeadlineExceeded:
+                    log.warning("Filer %s: time budget reached before a complete, "
+                                "reconciled result", fid)
+                    failure_reason = "time_budget"
+                    budget_exhausted = True
+                    theirs = None
+                except PartitionMismatchError as exc:
+                    log.warning("Filer %s: deterministic partition refusal (%s)",
+                                fid, exc)
+                    failure_reason = "partition_mismatch"
+                    deterministic_refusal = True
+                    theirs = None
                 except F.SessionExpiredError as exc:
                     # survey_coverage already treats this as a recoverable
                     # runner/session condition. Keep the same semantics here
@@ -608,6 +969,15 @@ def main() -> int:
                     _record_failure(entries, t, failure_reason)
                     _save(entries)
                     unusable += 1
+                    if budget_exhausted:
+                        log.info("Time budget reached inside filer %s — stopping cleanly.",
+                                 fid)
+                        break
+                    if deterministic_refusal:
+                        # A proved gap/overlap is local to this partition tree,
+                        # not evidence that the runner's browser or IP is blocked.
+                        consecutive_failures = 0
+                        continue
                     consecutive_failures += 1
                     if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                         blocked = True

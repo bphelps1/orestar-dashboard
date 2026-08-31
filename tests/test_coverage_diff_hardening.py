@@ -6,11 +6,14 @@ ORESTAR requests and do not require a database.
 
 from __future__ import annotations
 
+import io
 import json
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+import pytest
+from openpyxl import Workbook
 
 SCRAPER_DIR = Path(__file__).parent.parent / "scraper"
 sys.path.insert(0, str(SCRAPER_DIR))
@@ -35,6 +38,233 @@ def test_split_can_divide_a_two_day_window() -> None:
     assert DC._split(start, end) == [(start, start), (end, end)]
 
 
+def test_narrowing_ladder_reaches_type_date_amount_and_prefix() -> None:
+    start = date(2026, 8, 27)
+    end = start + timedelta(days=1)
+
+    typed = DC.F._narrow_filer("ALL", start, end, None, None, None)
+    assert [window[0] for window in typed] == DC.F.TRAN_TYPES
+
+    halves = DC.F._narrow_filer("C", start, end, None, None, None)
+    assert [(window[1], window[2]) for window in halves] == [
+        (start, start),
+        (end, end),
+    ]
+
+    amount_bands = DC.F._narrow_filer("C", start, start, None, None, None)
+    assert [(window[3], window[4]) for window in amount_bands] == DC.F.AMOUNT_BANDS
+
+    prefixes = DC.F._narrow_filer("C", start, start, "25", "49.99", None)
+    assert [window[5] for window in prefixes] == DC.F.PAYEE_PREFIXES
+    assert DC.F._narrow_filer("C", start, start, "25", "49.99", "A") == []
+
+
+def test_local_date_seeds_cover_the_entire_requested_range() -> None:
+    start = date(2026, 1, 1)
+    end = date(2026, 1, 10)
+
+    windows = DC._build_date_seed_windows(
+        start,
+        end,
+        [
+            (date(2026, 1, 2), 3_000),
+            (date(2026, 1, 4), 1_500),
+            (date(2026, 1, 7), 5_000),
+        ],
+        target_rows=4_000,
+    )
+
+    assert windows == [
+        (date(2026, 1, 1), date(2026, 1, 3)),
+        (date(2026, 1, 4), date(2026, 1, 6)),
+        (date(2026, 1, 7), date(2026, 1, 7)),
+        (date(2026, 1, 8), date(2026, 1, 10)),
+    ]
+    assert DC._date_windows_cover(start, end, windows)
+
+
+def test_parse_export_rows_extracts_exact_transaction_ids() -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["Tran ID", "Amount"])
+    sheet.append([123, 10.0])
+    sheet.append([456, 20.0])
+    payload = io.BytesIO()
+    workbook.save(payload)
+
+    assert DC._parse_export_rows(payload.getvalue()) == {"123": {}, "456": {}}
+
+
+class _CountPage:
+    def __init__(self) -> None:
+        self.url = DC.F.SEARCH_URL
+        self.filled: dict[str, str] = {}
+        self.selected: dict[str, str] = {}
+        self.wait_for_url_timeout: int | None = None
+
+    def wait_for_selector(self, *_args, **_kwargs) -> None:
+        return None
+
+    def fill(self, selector: str, value: str, **_kwargs) -> None:
+        self.filled[selector] = value
+
+    def select_option(self, selector: str, value: str, **_kwargs) -> None:
+        self.selected[selector] = value
+
+    def wait_for_timeout(self, _milliseconds: int) -> None:
+        return None
+
+    def click(self, _selector: str, **_kwargs) -> None:
+        self.url = f"{DC.F.BASE_URL}/gotoPublicTransactionSearchResults.do"
+
+    def wait_for_url(self, *_args, **kwargs) -> None:
+        self.wait_for_url_timeout = kwargs.get("timeout")
+        return None
+
+    def inner_text(self, _selector: str, **_kwargs) -> str:
+        return "2 records found"
+
+
+def test_shared_count_search_applies_every_narrowing_filter() -> None:
+    page = _CountPage()
+    day = date(2026, 8, 28)
+
+    count = DC.SC.orestar_count(
+        page, "23285", day, day, "C", "15", "15.99", "J"
+    )
+
+    assert count == 2
+    assert page.selected['select[name="cneSearchTranType"]'] == "C"
+    assert page.filled['input[name="cneSearchTranAmountFrom"]'] == "15"
+    assert page.filled['input[name="cneSearchTranAmountTo"]'] == "15.99"
+    assert page.filled['input[name="cneSearchContributorTxt"]'] == "J"
+    assert page.selected[
+        'select[name="cneSearchContributorTxtSearchType"]'
+    ] == "S"
+
+
+def test_count_search_bounds_its_wait_to_the_absolute_deadline(monkeypatch) -> None:
+    page = _CountPage()
+    monkeypatch.setattr(DC.SC.time, "monotonic", lambda: 10.0)
+
+    assert DC.SC.orestar_count(
+        page,
+        "23285",
+        date(2026, 8, 28),
+        date(2026, 8, 28),
+        deadline=12.0,
+    ) == 2
+    assert 0 < page.wait_for_url_timeout <= 2_000
+
+
+def test_count_search_refuses_to_start_after_its_deadline(monkeypatch) -> None:
+    page = _CountPage()
+    monkeypatch.setattr(DC.SC.time, "monotonic", lambda: 10.0)
+
+    with pytest.raises(DC.SC.SearchDeadlineExceeded):
+        DC.SC.orestar_count(
+            page,
+            "23285",
+            date(2026, 8, 28),
+            date(2026, 8, 28),
+            deadline=5.0,
+        )
+
+
+def test_playwright_timeout_at_deadline_becomes_search_deadline(monkeypatch) -> None:
+    clock = {"now": 0.0}
+
+    class TimeoutPage(_CountPage):
+        def fill(self, *_args, **_kwargs):
+            clock["now"] = 5.0
+            raise DC.SC.PlaywrightTimeout("deadline-clipped fill")
+
+    monkeypatch.setattr(DC.SC.time, "monotonic", lambda: clock["now"])
+
+    with pytest.raises(DC.SC.SearchDeadlineExceeded):
+        DC.SC.orestar_count(
+            TimeoutPage(),
+            "23285",
+            date(2026, 8, 28),
+            date(2026, 8, 28),
+            deadline=5.0,
+        )
+
+
+def test_collect_window_requires_export_ids_to_match_reported_count(monkeypatch) -> None:
+    page = _DelayedNextPage(_page_text(1, 2), None)
+    context = object()
+    monkeypatch.setattr(DC.SC, "orestar_count", lambda *_args, **_kwargs: 2)
+    monkeypatch.setattr(DC, "_export_rows", lambda *_args: {"1": {}, "2": {}})
+
+    complete = DC._collect_window(
+        page, "123", date(2026, 8, 28), date(2026, 8, 28), context=context
+    )
+    assert complete == {"reported": 2, "rows": {"1": {}, "2": {}}}
+
+    monkeypatch.setattr(DC, "_export_rows", lambda *_args: {"1": {}})
+    assert DC._collect_window(
+        page, "123", date(2026, 8, 28), date(2026, 8, 28), context=context
+    ) is None
+
+
+def test_browser_export_fallback_preserves_path_session(monkeypatch, tmp_path) -> None:
+    payload = tmp_path / "export.xlsx"
+    payload.write_bytes(b"valid-export")
+
+    class Download:
+        def path(self):
+            return payload
+
+    class DownloadInfo:
+        value = Download()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class Page:
+        url = (
+            f"{DC.F.BASE_URL}/gotoPublicTransactionSearchResults.do"
+            ";JSESSIONID_ORESTAR=session-123?search=1"
+        )
+        goto_url = None
+
+        def evaluate(self, _script):
+            return "csrf-456"
+
+        def expect_download(self, **_kwargs):
+            return DownloadInfo()
+
+        def goto(self, url, **_kwargs):
+            self.goto_url = url
+            raise DC.PlaywrightError("Page.goto: Download is starting")
+
+    class Context:
+        def cookies(self):
+            return []
+
+    class HtmlResponse:
+        headers = {"Content-Type": "text/html"}
+        content = b"<html>not an export</html>"
+
+    page = Page()
+    monkeypatch.setattr(DC.F.requests, "get", lambda *_args, **_kwargs: HtmlResponse())
+    monkeypatch.setattr(
+        DC,
+        "_parse_export_rows",
+        lambda content: {"1": {}} if content == b"valid-export" else None,
+    )
+
+    assert DC._export_rows(page, Context(), "23285", "test") == {"1": {}}
+    assert page.goto_url == (
+        f"{DC.F.EXPORT_URL};JSESSIONID_ORESTAR=session-123"
+        "?OWASP_CSRFTOKEN=csrf-456"
+    )
+
+
 def test_parse_rows_accepts_accounting_parentheses_for_negative_amounts() -> None:
     text = (
         "3865001\t08/27/2026\tOriginal\tTest Committee\tState Bank\t"
@@ -52,7 +282,8 @@ def test_parse_rows_accepts_accounting_parentheses_for_negative_amounts() -> Non
     }
 
 
-def test_prioritise_skips_a_usable_surplus_checked_today() -> None:
+def test_prioritise_skips_a_usable_surplus_checked_today(monkeypatch) -> None:
+    monkeypatch.setattr(DC, "_costs", lambda _filer_ids: {})
     targets = [
         {"filer_id": "recent", "name": "Recent surplus"},
         {"filer_id": "fresh", "name": "Never measured"},
@@ -73,7 +304,8 @@ def test_prioritise_skips_a_usable_surplus_checked_today() -> None:
     assert ordered == ["fresh"]
 
 
-def test_prioritise_interleaves_null_failures_with_fresh_targets() -> None:
+def test_prioritise_interleaves_null_failures_with_fresh_targets(monkeypatch) -> None:
+    monkeypatch.setattr(DC, "_costs", lambda _filer_ids: {})
     targets = [
         {"filer_id": "failed-1", "name": "Failed one"},
         {"filer_id": "failed-2", "name": "Failed two"},
@@ -115,7 +347,8 @@ def test_prioritise_interleaves_null_failures_with_fresh_targets() -> None:
     assert ordered[-1] == "usable"
 
 
-def test_prioritise_defers_a_failure_already_attempted_today() -> None:
+def test_prioritise_defers_a_failure_already_attempted_today(monkeypatch) -> None:
+    monkeypatch.setattr(DC, "_costs", lambda _filer_ids: {})
     targets = [
         {"filer_id": "failed-today", "name": "Failed today"},
         {"filer_id": "fresh", "name": "Never measured"},
@@ -130,6 +363,29 @@ def test_prioritise_defers_a_failure_already_attempted_today() -> None:
     }
 
     assert _ids(DC._prioritise(targets, entries)) == ["fresh"]
+
+
+def test_prioritise_keeps_cost_order_and_one_giant_per_slice(monkeypatch) -> None:
+    targets = [
+        {"filer_id": "big-slow"},
+        {"filer_id": "small-slow"},
+        {"filer_id": "big-fast"},
+        {"filer_id": "small-fast"},
+    ]
+    costs = {
+        "big-slow": 9_000,
+        "small-slow": 100,
+        "big-fast": 6_000,
+        "small-fast": 10,
+    }
+    monkeypatch.setattr(DC, "_costs", lambda _filer_ids: costs)
+
+    assert _ids(DC._prioritise(targets, {})) == [
+        "big-fast",
+        "small-fast",
+        "small-slow",
+        "big-slow",
+    ]
 
 
 def test_record_failure_preserves_existing_usable_evidence() -> None:
@@ -267,9 +523,150 @@ class _DelayedNextPage:
         return [] if self.second is None else [_NextButton(self)]
 
 
+def _ladder_result(
+    _page,
+    _filer_id,
+    start,
+    end,
+    tran_type="ALL",
+    amt_from=None,
+    amt_to=None,
+    payee_prefix=None,
+    _deadline=None,
+    _context=None,
+):
+    """Two-row one-day fixture that requires the real four-rung ladder."""
+    assert start == end
+    if tran_type == "ALL":
+        return {"reported": 2, "rows": None}
+    if tran_type != "C":
+        return {"reported": 0, "rows": {}}
+    if amt_from is None and amt_to is None:
+        return {"reported": 2, "rows": None}
+    if (amt_from, amt_to) != ("25", "49.99"):
+        return {"reported": 0, "rows": {}}
+    if payee_prefix is None:
+        return {"reported": 2, "rows": None}
+    if payee_prefix == "A":
+        return {"reported": 1, "rows": {"1": {}}}
+    if payee_prefix == "Z":
+        return {"reported": 1, "rows": {"2": {}}}
+    return {"reported": 0, "rows": {}}
+
+
+def test_cascade_collects_and_reconciles_every_ladder_rung(monkeypatch) -> None:
+    day = date(2026, 8, 28)
+    monkeypatch.setattr(DC, "_collect_window", _ladder_result)
+
+    rows = DC.orestar_ids(object(), "123", day, day, seed_windows=[])
+
+    assert rows == {"1": {}, "2": {}}
+
+
+def test_unknown_prefix_gap_is_refused(monkeypatch) -> None:
+    day = date(2026, 8, 28)
+
+    def missing_unknown_prefix(*args, **kwargs):
+        result = _ladder_result(*args, **kwargs)
+        payee_prefix = args[7] if len(args) > 7 else kwargs.get("payee_prefix")
+        if payee_prefix == "Z":
+            return {"reported": 0, "rows": {}}
+        return result
+
+    assert "#" not in DC.F.PAYEE_PREFIXES
+    monkeypatch.setattr(DC, "_collect_window", missing_unknown_prefix)
+
+    assert DC.orestar_ids(object(), "123", day, day, seed_windows=[]) is None
+
+
+def test_duplicate_ids_across_children_are_refused(monkeypatch) -> None:
+    day = date(2026, 8, 28)
+    root = ("ALL", day, day, None, None, None)
+    left = ("C", day, day, None, None, None)
+    right = ("E", day, day, None, None, None)
+
+    def narrow(*window):
+        return [left, right] if tuple(window) == root else []
+
+    def collect(
+        _page, _filer_id, _start, _end, tran_type="ALL", *_args, **_kwargs
+    ):
+        if tran_type == "ALL":
+            return {"reported": 2, "rows": None}
+        return {"reported": 1, "rows": {"same-id": {}}}
+
+    monkeypatch.setattr(DC.F, "_narrow_filer", narrow)
+    monkeypatch.setattr(DC, "_collect_window", collect)
+
+    assert DC.orestar_ids(object(), "123", day, day, seed_windows=[]) is None
+
+
+def test_each_internal_parent_must_reconcile(monkeypatch) -> None:
+    day = date(2026, 8, 28)
+    root = ("ALL", day, day, None, None, None)
+    parent = ("C", day, day, None, None, None)
+    leaf = ("C", day, day, "25", "49.99", None)
+
+    def narrow(*window):
+        if tuple(window) == root:
+            return [parent]
+        if tuple(window) == parent:
+            return [leaf]
+        return []
+
+    def collect(
+        _page, _filer_id, _start, _end, tran_type="ALL", amt_from=None,
+        *_args, **_kwargs,
+    ):
+        if tran_type == "ALL":
+            return {"reported": 2, "rows": None}
+        if amt_from is None:
+            return {"reported": 2, "rows": None}
+        return {"reported": 1, "rows": {"1": {}}}
+
+    monkeypatch.setattr(DC.F, "_narrow_filer", narrow)
+    monkeypatch.setattr(DC, "_collect_window", collect)
+
+    assert DC.orestar_ids(object(), "123", day, day, seed_windows=[]) is None
+
+
+def test_expired_deadline_prevents_the_root_search(monkeypatch) -> None:
+    day = date(2026, 8, 28)
+    monkeypatch.setattr(DC.time, "monotonic", lambda: 10.0)
+    monkeypatch.setattr(
+        DC,
+        "_collect_window",
+        lambda *_args, **_kwargs: pytest.fail("expired crawl started a search"),
+    )
+
+    with pytest.raises(DC.CollectionDeadlineExceeded):
+        DC.orestar_ids(object(), "123", day, day, deadline=5.0, seed_windows=[])
+
+
+def test_deadline_during_paging_prevents_another_next_click(monkeypatch) -> None:
+    clock = {"now": 0.0}
+    page = _DelayedNextPage(_page_text(1, 50), _page_text(51, 1))
+    original_inner_text = page.inner_text
+
+    def inner_text(selector):
+        text = original_inner_text(selector)
+        clock["now"] = 10.0
+        return text
+
+    page.inner_text = inner_text
+    monkeypatch.setattr(DC.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(DC.SC, "orestar_count", lambda *_args, **_kwargs: 51)
+
+    with pytest.raises(DC.CollectionDeadlineExceeded):
+        DC._collect_window(
+            page, "123", date(2006, 1, 1), date(2026, 8, 28), deadline=5.0
+        )
+    assert page.clicked is False
+
+
 def test_collect_window_waits_for_new_ids_after_next(monkeypatch) -> None:
     page = _DelayedNextPage(_page_text(1, 50), _page_text(51, 1))
-    monkeypatch.setattr(DC.SC, "orestar_count", lambda *_args: 51)
+    monkeypatch.setattr(DC.SC, "orestar_count", lambda *_args, **_kwargs: 51)
 
     result = DC._collect_window(page, "123", date(2006, 1, 1), date(2026, 8, 28))
 
@@ -281,7 +678,7 @@ def test_collect_window_waits_for_new_ids_after_next(monkeypatch) -> None:
 
 def test_collect_window_refuses_a_short_result_without_next(monkeypatch) -> None:
     page = _DelayedNextPage(_page_text(1, 50), None)
-    monkeypatch.setattr(DC.SC, "orestar_count", lambda *_args: 51)
+    monkeypatch.setattr(DC.SC, "orestar_count", lambda *_args, **_kwargs: 51)
 
     assert DC._collect_window(
         page, "123", date(2006, 1, 1), date(2026, 8, 28)
@@ -290,7 +687,7 @@ def test_collect_window_refuses_a_short_result_without_next(monkeypatch) -> None
 
 def test_collect_window_requires_exact_reported_count(monkeypatch) -> None:
     page = _DelayedNextPage(_page_text(1, 2), None)
-    monkeypatch.setattr(DC.SC, "orestar_count", lambda *_args: 1)
+    monkeypatch.setattr(DC.SC, "orestar_count", lambda *_args, **_kwargs: 1)
 
     assert DC._collect_window(
         page, "123", date(2006, 1, 1), date(2026, 8, 28)
