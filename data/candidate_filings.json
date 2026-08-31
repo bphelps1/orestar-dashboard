@@ -2,10 +2,10 @@
   "election": "2026 General Election",
   "election_id": "1453",
   "year": "2026",
-  "scraped": "2026-08-24T14:13:11Z",
+  "scraped": "2026-08-31T19:36:18Z",
   "counts": {
     "SR": 114,
-    "SS": 31,
+    "SS": 32,
     "GOV": 3
   },
   "candidates": [
@@ -29,7 +29,8 @@
       "party": "Democrat",
       "parties": [
         "Democrat",
-        "Independent"
+        "Independent",
+        "Working Families"
       ],
       "chamber": "house",
       "district": 19,
@@ -89,7 +90,8 @@
       "ballot_name": "Ben Bowman",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Working Families"
       ],
       "chamber": "house",
       "district": 25,
@@ -179,7 +181,8 @@
       "ballot_name": "Stephanie Carkin",
       "party": "Republican",
       "parties": [
-        "Republican"
+        "Republican",
+        "Libertarian"
       ],
       "chamber": "house",
       "district": 26,
@@ -194,7 +197,9 @@
       "ballot_name": "Tammy Carpenter",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Working Families",
+        "Progressive"
       ],
       "chamber": "house",
       "district": 27,
@@ -224,7 +229,8 @@
       "ballot_name": "Farrah Chaichi",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Working Families"
       ],
       "chamber": "house",
       "district": 35,
@@ -239,7 +245,8 @@
       "ballot_name": "Willy Chotzen",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Working Families"
       ],
       "chamber": "house",
       "district": 46,
@@ -296,21 +303,6 @@
       "qualified": "Y"
     },
     {
-      "ballot_name": "Timothy L Dehne",
-      "party": "Pacific Green",
-      "parties": [
-        "Pacific Green"
-      ],
-      "chamber": "house",
-      "district": 11,
-      "office": "house",
-      "office_district": "State Representative, 11th District",
-      "election": "2026 General Election",
-      "filing_method": "Minor Party",
-      "filing_date": "08/20/2026",
-      "qualified": ""
-    },
-    {
       "ballot_name": "April Dobson",
       "party": "Democrat",
       "parties": [
@@ -360,7 +352,8 @@
       "ballot_name": "Paul Evans",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Working Families"
       ],
       "chamber": "house",
       "district": 20,
@@ -481,7 +474,8 @@
       "ballot_name": "Mark Gamba",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Working Families"
       ],
       "chamber": "house",
       "district": 41,
@@ -513,7 +507,8 @@
       "party": "Democrat",
       "parties": [
         "Democrat",
-        "Independent"
+        "Independent",
+        "Working Families"
       ],
       "chamber": "house",
       "district": 28,
@@ -603,7 +598,8 @@
       "ballot_name": "Zach Hudson",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Working Families"
       ],
       "chamber": "house",
       "district": 49,
@@ -679,7 +675,9 @@
       "ballot_name": "Roy Kaufmann",
       "party": "Independent",
       "parties": [
-        "Independent"
+        "Independent",
+        "Working Families",
+        "Progressive"
       ],
       "chamber": "house",
       "district": 18,
@@ -724,7 +722,8 @@
       "ballot_name": "Noemi Legaspi",
       "party": "Republican",
       "parties": [
-        "Republican"
+        "Republican",
+        "Libertarian"
       ],
       "chamber": "house",
       "district": 22,
@@ -816,7 +815,8 @@
       "party": "Democrat",
       "parties": [
         "Democrat",
-        "Independent"
+        "Independent",
+        "Working Families"
       ],
       "chamber": "house",
       "district": 11,
@@ -937,7 +937,8 @@
       "ballot_name": "Darla Mead",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Working Families"
       ],
       "chamber": "house",
       "district": 51,
@@ -983,7 +984,8 @@
       "party": "Democrat",
       "parties": [
         "Democrat",
-        "Independent"
+        "Independent",
+        "Working Families"
       ],
       "chamber": "house",
       "district": 22,
@@ -1044,7 +1046,8 @@
       "ballot_name": "Travis Nelson",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Working Families"
       ],
       "chamber": "house",
       "district": 44,
@@ -1206,10 +1209,26 @@
       "qualified": "Y"
     },
     {
+      "ballot_name": "Taylor A Rickey",
+      "party": "Libertarian",
+      "parties": [
+        "Libertarian"
+      ],
+      "chamber": "house",
+      "district": 20,
+      "office": "house",
+      "office_district": "State Representative, 20th District",
+      "election": "2026 General Election",
+      "filing_method": "Minor Party",
+      "filing_date": "08/21/2026",
+      "qualified": "Y"
+    },
+    {
       "ballot_name": "Sue R Rieke Smith",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Independent"
       ],
       "chamber": "house",
       "district": 26,
@@ -1221,26 +1240,12 @@
       "qualified": "Y"
     },
     {
-      "ballot_name": "Sue Rieke Smith",
-      "party": "Independent",
-      "parties": [
-        "Independent"
-      ],
-      "chamber": "house",
-      "district": 26,
-      "office": "house",
-      "office_district": "State Representative, 26th District",
-      "election": "2026 General Election",
-      "filing_method": "Minor Party",
-      "filing_date": "08/07/2026",
-      "qualified": "Y"
-    },
-    {
       "ballot_name": "Joanna Robinson",
       "party": "Democrat",
       "parties": [
         "Democrat",
-        "Independent"
+        "Independent",
+        "Working Families"
       ],
       "chamber": "house",
       "district": 15,
@@ -1255,7 +1260,8 @@
       "ballot_name": "Kori Rodley",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Working Families"
       ],
       "chamber": "house",
       "district": 7,
@@ -1494,10 +1500,26 @@
       "qualified": "Y"
     },
     {
+      "ballot_name": "Morey Straus",
+      "party": "Libertarian",
+      "parties": [
+        "Libertarian"
+      ],
+      "chamber": "house",
+      "district": 42,
+      "office": "house",
+      "office_district": "State Representative, 42nd District",
+      "election": "2026 General Election",
+      "filing_method": "Minor Party",
+      "filing_date": "08/21/2026",
+      "qualified": "Y"
+    },
+    {
       "ballot_name": "Michael W Sugar",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Working Families"
       ],
       "chamber": "house",
       "district": 40,
@@ -1512,7 +1534,8 @@
       "ballot_name": "Michael Summers",
       "party": "Republican",
       "parties": [
-        "Republican"
+        "Republican",
+        "Libertarian"
       ],
       "chamber": "house",
       "district": 53,
@@ -1558,7 +1581,9 @@
       "ballot_name": "Thuy Tran",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Working Families",
+        "Independent"
       ],
       "chamber": "house",
       "district": 45,
@@ -1634,7 +1659,8 @@
       "party": "Democrat",
       "parties": [
         "Democrat",
-        "Independent"
+        "Independent",
+        "Working Families"
       ],
       "chamber": "house",
       "district": 37,
@@ -1664,7 +1690,8 @@
       "ballot_name": "Michael Welsh",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Working Families"
       ],
       "chamber": "house",
       "district": 21,
@@ -1679,7 +1706,8 @@
       "ballot_name": "Adam Wilson",
       "party": "Republican",
       "parties": [
-        "Republican"
+        "Republican",
+        "Libertarian"
       ],
       "chamber": "house",
       "district": 7,
@@ -1695,7 +1723,8 @@
       "party": "Democrat",
       "parties": [
         "Democrat",
-        "Independent"
+        "Independent",
+        "Working Families"
       ],
       "chamber": "house",
       "district": 48,
@@ -1771,7 +1800,8 @@
       "party": "Democrat",
       "parties": [
         "Democrat",
-        "Independent"
+        "Independent",
+        "Working Families"
       ],
       "chamber": "senate",
       "district": 26,
@@ -1786,7 +1816,8 @@
       "ballot_name": "Clay Bearnson",
       "party": "Independent",
       "parties": [
-        "Independent"
+        "Independent",
+        "Pacific Green"
       ],
       "chamber": "senate",
       "district": 3,
@@ -1952,7 +1983,8 @@
       "ballot_name": "Kayse Jama",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Working Families"
       ],
       "chamber": "senate",
       "district": 24,
@@ -1998,7 +2030,8 @@
       "party": "Democrat",
       "parties": [
         "Democrat",
-        "Independent"
+        "Independent",
+        "Working Families"
       ],
       "chamber": "senate",
       "district": 7,
@@ -2028,7 +2061,8 @@
       "ballot_name": "Myrna A Munoz",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Working Families"
       ],
       "chamber": "senate",
       "district": 15,
@@ -2040,10 +2074,26 @@
       "qualified": "Y"
     },
     {
+      "ballot_name": "Tim E Nelson",
+      "party": "Libertarian",
+      "parties": [
+        "Libertarian"
+      ],
+      "chamber": "senate",
+      "district": 13,
+      "office": "senate",
+      "office_district": "State Senator, 13th District",
+      "election": "2026 General Election",
+      "filing_method": "Minor Party",
+      "filing_date": "08/24/2026",
+      "qualified": "Y"
+    },
+    {
       "ballot_name": "Courtney Neron Misslin",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Working Families"
       ],
       "chamber": "senate",
       "district": 13,
@@ -2058,7 +2108,8 @@
       "ballot_name": "Deb Patterson",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Working Families"
       ],
       "chamber": "senate",
       "district": 10,
@@ -2073,7 +2124,8 @@
       "ballot_name": "Angela Plowhead",
       "party": "Republican",
       "parties": [
-        "Republican"
+        "Republican",
+        "Libertarian"
       ],
       "chamber": "senate",
       "district": 10,
@@ -2118,7 +2170,8 @@
       "ballot_name": "Virginia Stapleton",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Working Families"
       ],
       "chamber": "senate",
       "district": 11,
@@ -2193,7 +2246,8 @@
       "ballot_name": "Sierrah Williams",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Working Families"
       ],
       "chamber": "senate",
       "district": 6,
@@ -2224,7 +2278,8 @@
       "ballot_name": "Tina Kotek",
       "party": "Democrat",
       "parties": [
-        "Democrat"
+        "Democrat",
+        "Working Families"
       ],
       "chamber": "statewide",
       "district": null,
