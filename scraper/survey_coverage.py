@@ -147,7 +147,21 @@ def _save_survey(surveyed: dict) -> None:
 # The one query
 # ---------------------------------------------------------------------------
 
-def _return_to_form(page) -> None:
+class SearchDeadlineExceeded(RuntimeError):
+    """The caller's absolute search deadline elapsed."""
+
+
+def _timeout_ms(deadline: float | None, ceiling_ms: int) -> int:
+    """A Playwright timeout that cannot extend past ``deadline``."""
+    if deadline is None:
+        return ceiling_ms
+    remaining = int((deadline - time.monotonic()) * 1000)
+    if remaining <= 0:
+        raise SearchDeadlineExceeded("ORESTAR search deadline reached")
+    return min(ceiling_ms, remaining)
+
+
+def _return_to_form(page, deadline: float | None = None) -> None:
     """Back to the search form, without the flat seven-second sleep.
 
     fetch.py's _return_to_search clicks Reset when it is already on the form,
@@ -162,7 +176,11 @@ def _return_to_form(page) -> None:
     page is ready early we proceed immediately.
     """
     if "gotoPublicTransactionSearch.do" not in page.url:
-        page.goto(F.SEARCH_URL, wait_until="domcontentloaded", timeout=60_000)
+        page.goto(
+            F.SEARCH_URL,
+            wait_until="domcontentloaded",
+            timeout=_timeout_ms(deadline, 60_000),
+        )
     if "secure.sos.state.or.us/orestar" not in page.url:
         raise F.SessionExpiredError(f"Session expired — redirected to {page.url}")
     # state="attached", NOT the default "visible".
@@ -175,30 +193,135 @@ def _return_to_form(page) -> None:
     # slow path had managed 96. _load_search_form gets this right by using
     # .count(), which ignores visibility.
     try:
-        page.wait_for_selector('input[name="OWASP_CSRFTOKEN"]',
-                               state="attached", timeout=30_000)
+        page.wait_for_selector(
+            'input[name="OWASP_CSRFTOKEN"]',
+            state="attached",
+            timeout=_timeout_ms(deadline, 30_000),
+        )
     except PlaywrightTimeout:
+        if deadline is not None and time.monotonic() >= deadline - 0.05:
+            raise SearchDeadlineExceeded("ORESTAR search deadline reached")
         raise F.SessionExpiredError(
             "Search form never rendered — F5 challenge or session expiry"
         )
 
 
-def orestar_count(page, filer_id: str, start: date, end: date) -> int | None:
-    """How many records ORESTAR holds for this filer over this range.
+def orestar_count(
+    page,
+    filer_id: str,
+    start: date,
+    end: date,
+    tran_type: str = "ALL",
+    amt_from: str | None = None,
+    amt_to: str | None = None,
+    payee_prefix: str | None = None,
+    deadline: float | None = None,
+) -> int | None:
+    """How many records ORESTAR holds for one precisely filtered window.
+
+    When an absolute deadline is supplied, any Playwright operation whose
+    clipped timeout reaches that boundary is translated into the explicit
+    deadline signal expected by the identity-diff runner.
+    """
+    try:
+        return _orestar_count(
+            page,
+            filer_id,
+            start,
+            end,
+            tran_type,
+            amt_from,
+            amt_to,
+            payee_prefix,
+            deadline,
+        )
+    except PlaywrightTimeout as exc:
+        # Integer millisecond timeouts can fire just before monotonic reaches
+        # the exact float deadline.  A small tolerance prevents that rounding
+        # edge from escaping as an unhandled Playwright exception.
+        if deadline is not None and time.monotonic() >= deadline - 0.05:
+            raise SearchDeadlineExceeded("ORESTAR search deadline reached") from exc
+        raise
+
+
+def _orestar_count(
+    page,
+    filer_id: str,
+    start: date,
+    end: date,
+    tran_type: str = "ALL",
+    amt_from: str | None = None,
+    amt_to: str | None = None,
+    payee_prefix: str | None = None,
+    deadline: float | None = None,
+) -> int | None:
+    """How many records ORESTAR holds for one precisely filtered window.
 
     Returns None if the count could not be read, which the caller must treat as
     "unknown" — recording it as 0 would mark a committee complete on the
     strength of a parse failure.
+
+    The survey uses only filer and date.  The identity diff also uses type,
+    amount and contributor prefix when a single day exceeds ORESTAR's display
+    cap.  Keeping the form submission here gives both callers one definition of
+    a search window instead of two copies that can drift.
     """
-    _return_to_form(page)
-    page.fill('input[name="cneSearchFilerCommitteeId"]', str(filer_id))
+    _return_to_form(page, deadline)
+    page.fill(
+        'input[name="cneSearchFilerCommitteeId"]',
+        str(filer_id),
+        timeout=_timeout_ms(deadline, 30_000),
+    )
     page.wait_for_timeout(250)
-    page.fill('input[name="cneSearchTranStartDate"]', start.strftime("%m/%d/%Y"))
-    page.fill('input[name="cneSearchTranEndDate"]', end.strftime("%m/%d/%Y"))
-    page.click('input[name="search"]')
+    if tran_type != "ALL":
+        page.select_option(
+            'select[name="cneSearchTranType"]',
+            tran_type,
+            timeout=_timeout_ms(deadline, 30_000),
+        )
+        page.wait_for_timeout(400)
+    page.fill(
+        'input[name="cneSearchTranStartDate"]',
+        start.strftime("%m/%d/%Y"),
+        timeout=_timeout_ms(deadline, 30_000),
+    )
+    page.fill(
+        'input[name="cneSearchTranEndDate"]',
+        end.strftime("%m/%d/%Y"),
+        timeout=_timeout_ms(deadline, 30_000),
+    )
+    if amt_from is not None:
+        page.fill(
+            'input[name="cneSearchTranAmountFrom"]',
+            str(amt_from),
+            timeout=_timeout_ms(deadline, 30_000),
+        )
+    if amt_to is not None:
+        page.fill(
+            'input[name="cneSearchTranAmountTo"]',
+            str(amt_to),
+            timeout=_timeout_ms(deadline, 30_000),
+        )
+    if payee_prefix:
+        page.fill(
+            'input[name="cneSearchContributorTxt"]',
+            payee_prefix,
+            timeout=_timeout_ms(deadline, 30_000),
+        )
+        page.select_option(
+            'select[name="cneSearchContributorTxtSearchType"]',
+            "S",
+            timeout=_timeout_ms(deadline, 30_000),
+        )
+    page.click('input[name="search"]', timeout=_timeout_ms(deadline, 30_000))
     try:
-        page.wait_for_url(F.RESULTS_URL_PATTERN, timeout=30_000)
+        page.wait_for_url(
+            F.RESULTS_URL_PATTERN,
+            timeout=_timeout_ms(deadline, 30_000),
+        )
     except PlaywrightTimeout:
+        if deadline is not None and time.monotonic() >= deadline - 0.05:
+            raise SearchDeadlineExceeded("ORESTAR search deadline reached")
         log.warning("Timed out reading count for filer %s", filer_id)
         return None
 
@@ -216,10 +339,14 @@ def orestar_count(page, filer_id: str, start: date, end: date) -> int | None:
     # The flat PAGE_RENDER_WAIT this replaced was hiding the race by sleeping
     # through it. Waiting for the content itself is the fix; it also returns as
     # soon as the page is ready rather than always paying the full delay.
-    deadline = time.monotonic() + 20
+    poll_deadline = time.monotonic() + 20
+    if deadline is not None:
+        poll_deadline = min(poll_deadline, deadline)
     text = ""
-    while time.monotonic() < deadline:
-        text = page.inner_text("body")
+    while time.monotonic() < poll_deadline:
+        text = page.inner_text(
+            "body", timeout=_timeout_ms(deadline, 30_000)
+        )
         m = re.search(r"([\d,]+)\s+records found", text)
         if m:
             return int(m.group(1).replace(",", ""))
@@ -227,6 +354,8 @@ def orestar_count(page, filer_id: str, start: date, end: date) -> int | None:
         if "no records found" in text.lower():
             return 0
         page.wait_for_timeout(500)
+    if deadline is not None and time.monotonic() >= deadline:
+        raise SearchDeadlineExceeded("ORESTAR search deadline reached")
     return None
 
 
