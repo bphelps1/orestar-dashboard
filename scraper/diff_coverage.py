@@ -1069,6 +1069,12 @@ def _save(entries: dict) -> None:
     DIFF_PATH.write_text(json.dumps(rows, indent=1))
 
 
+def _target_name(entries: dict, target: dict) -> str:
+    """Keep a known committee name when a targeted run supplies only its ID."""
+    fid = str(target["filer_id"])
+    return target.get("name") or (entries.get(fid) or {}).get("name", "")
+
+
 def _record_failure(entries: dict, target: dict, reason: str) -> dict:
     """Record an unusable attempt without destroying earlier usable evidence."""
     fid = str(target["filer_id"])
@@ -1082,7 +1088,7 @@ def _record_failure(entries: dict, target: dict, reason: str) -> dict:
         entry.update({"filer_id": fid, "complete": None})
     else:
         entry.setdefault("filer_id", fid)
-    entry["name"] = target.get("name") or entry.get("name", "")
+    entry["name"] = _target_name(entries, target)
     entry["last_attempt"] = date.today().isoformat()
     entry["last_failure"] = reason
     entry["failure_count"] = int(entry.get("failure_count") or 0) + 1
@@ -1283,7 +1289,7 @@ def main() -> int:
                 missing = sorted(absent - superseded_by_us)
                 entries[fid] = {
                     "filer_id": fid,
-                    "name": t.get("name", ""),
+                    "name": _target_name(entries, t),
                     "orestar": len(theirs),
                     "held": len(ours),
                     # True only when the identities agree exactly. Unlike a

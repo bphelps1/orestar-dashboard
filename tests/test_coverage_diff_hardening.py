@@ -423,6 +423,22 @@ def test_record_failure_preserves_existing_usable_evidence() -> None:
     _assert_attempt_is_today(saved["last_attempt"])
 
 
+def test_target_name_preserves_known_name_for_id_only_runs() -> None:
+    entries = {
+        "23285": {
+            "filer_id": "23285",
+            "name": "Building a Stronger Oregon",
+        }
+    }
+
+    assert DC._target_name(entries, {"filer_id": "23285", "name": ""}) == (
+        "Building a Stronger Oregon"
+    )
+    assert DC._target_name(
+        entries, {"filer_id": "23285", "name": "Updated committee name"}
+    ) == "Updated committee name"
+
+
 def test_record_failure_creates_an_unchecked_null_for_first_failure() -> None:
     entries: dict[str, dict] = {}
     reason = "results count could not be read"
