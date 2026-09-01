@@ -1400,7 +1400,10 @@
    "5066926"
   ],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-08-30",
+  "last_attempt": "2026-09-01",
+  "last_failure": "unusable_window",
+  "failure_count": 1
  },
  {
   "filer_id": "51",
@@ -2604,9 +2607,9 @@
   "filer_id": "23285",
   "name": "Building a Stronger Oregon",
   "complete": null,
-  "last_attempt": "2026-08-31",
+  "last_attempt": "2026-09-01",
   "last_failure": "unusable_window",
-  "failure_count": 4
+  "failure_count": 5
  },
  {
   "filer_id": "22682",
