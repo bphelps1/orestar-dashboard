@@ -2314,6 +2314,21 @@
   "checked": "2026-08-30"
  },
  {
+  "filer_id": "23285",
+  "name": "",
+  "orestar": 37868,
+  "held": 37868,
+  "complete": false,
+  "surplus": [
+   "5631437"
+  ],
+  "missing": [
+   "5780310"
+  ],
+  "superseded": [],
+  "checked": "2026-09-01"
+ },
+ {
   "filer_id": "15343",
   "name": "Elect Dave Hoppe For DA",
   "orestar": 93,
@@ -2602,14 +2617,6 @@
   "missing": [],
   "superseded": [],
   "checked": "2026-08-29"
- },
- {
-  "filer_id": "23285",
-  "name": "Building a Stronger Oregon",
-  "complete": null,
-  "last_attempt": "2026-09-01",
-  "last_failure": "unusable_window",
-  "failure_count": 7
  },
  {
   "filer_id": "22682",
