@@ -63,6 +63,7 @@ import sys
 import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from urllib.parse import urljoin
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -352,6 +353,142 @@ def _export_rows(
     return rows
 
 
+def _read_current_results_count(
+    page,
+    deadline: float | None,
+    timeout_seconds: int = 20,
+) -> int | None:
+    """Read the already-rendering results count without issuing a new search."""
+    _check_deadline(deadline)
+    poll_deadline = time.monotonic() + timeout_seconds
+    if deadline is not None:
+        poll_deadline = min(poll_deadline, deadline)
+    while time.monotonic() < poll_deadline:
+        text = page.inner_text(
+            "body", timeout=_remaining_timeout_ms(deadline, 30_000)
+        )
+        match = re.search(r"([\d,]+)\s+records found", text)
+        if match:
+            return int(match.group(1).replace(",", ""))
+        if "no records found" in text.lower():
+            return 0
+        page.wait_for_timeout(250)
+    _check_deadline(deadline)
+    return None
+
+
+def _goto_tran_id_sort(
+    page,
+    filer_id: str,
+    label: str,
+    direction: str,
+    expected_count: int,
+    deadline: float | None,
+) -> bool:
+    """Sort the current exact result set by its unique transaction ID."""
+    selector = (
+        f'a[href*="by=RSN"][href*="srtOrder={direction}"]'
+    )
+    try:
+        _check_deadline(deadline)
+        links = page.locator(selector)
+        if links.count() == 0:
+            log.warning(
+                "Filer %s %s: no Tran ID %s sort link on results page",
+                filer_id, label, direction,
+            )
+            return False
+        href = links.first.get_attribute("href")
+        if not href:
+            log.warning(
+                "Filer %s %s: empty Tran ID %s sort link",
+                filer_id, label, direction,
+            )
+            return False
+        # Sorting is another ORESTAR results request.  Pace it like a search;
+        # the point of this fast path is to avoid the prefix burst, not replace
+        # it with a smaller unpaced burst.
+        page.wait_for_timeout(int(ORESTAR_REQUEST_DELAY * 1000))
+        _check_deadline(deadline)
+        page.goto(
+            urljoin(page.url, href),
+            wait_until="domcontentloaded",
+            timeout=_remaining_timeout_ms(deadline, 60_000),
+        )
+        _check_deadline(deadline)
+    except CollectionDeadlineExceeded:
+        raise
+    except Exception as exc:                               # noqa: BLE001
+        log.warning(
+            "Filer %s %s: Tran ID %s sort failed (%s)",
+            filer_id, label, direction, exc,
+        )
+        return False
+
+    if "secure.sos.state.or.us/orestar" not in page.url:
+        log.warning(
+            "Filer %s %s: Tran ID %s sort left ORESTAR (%s)",
+            filer_id, label, direction, page.url,
+        )
+        return False
+    rendered_count = _read_current_results_count(page, deadline)
+    if rendered_count != expected_count:
+        log.warning(
+            "Filer %s %s: Tran ID %s sort rendered %s rows, expected %d",
+            filer_id,
+            label,
+            direction,
+            "unknown" if rendered_count is None else rendered_count,
+            expected_count,
+        )
+        return False
+    log.info(
+        "Filer %s %s: Tran ID %s sort preserved the %d-row parent",
+        filer_id, label, direction, expected_count,
+    )
+    return True
+
+
+def _export_tran_id_extremes(
+    page,
+    context,
+    filer_id: str,
+    label: str,
+    expected_count: int,
+    row_cap: int,
+    deadline: float | None,
+) -> dict[str, dict] | None:
+    """Verified subset from the low and high ends of a capped parent.
+
+    Tran ID is unique.  Therefore, when ``expected_count <= 2 * row_cap``,
+    the first ``row_cap`` IDs in ascending order plus the first ``row_cap`` in
+    descending order must cover the whole result set.  Each export is still
+    validated independently, and the caller still accepts only an exact union.
+    """
+    if expected_count > 2 * row_cap:
+        return None
+
+    merged: dict[str, dict] = {}
+    for direction in ("asc", "desc"):
+        if not _goto_tran_id_sort(
+            page, filer_id, label, direction, expected_count, deadline
+        ):
+            return merged or None
+        rows = _export_rows(page, context, filer_id, label, deadline)
+        if rows is None or len(rows) != row_cap:
+            log.warning(
+                "Filer %s %s: Tran ID %s export contained %s IDs, expected %d",
+                filer_id,
+                label,
+                direction,
+                "unknown" if rows is None else len(rows),
+                row_cap,
+            )
+            return merged or None
+        merged.update(rows)
+    return merged
+
+
 def _collect_window(
     page,
     filer_id: str,
@@ -631,36 +768,77 @@ def _collect_tree(
     if context is not None and prefix_partition:
         # Prefixes are the only available split for a single-day/single-amount
         # batch, but dozens of count+export pairs can trip F5 near the end of
-        # the alphabet.  The capped parent export is not a complete answer, but
-        # its 4,999 IDs are still genuine members of this exact parent set.
-        # Unioning that verified subset with exact prefix leaves lets us stop
-        # as soon as the unique union equals the parent's uncapped count.
+        # the alphabet.  Before walking them, sort the exact parent by its
+        # unique Tran ID in both directions.  Two capped exports cover any
+        # parent up to twice the export cap; otherwise each is still genuine
+        # overlap evidence for the prefix fallback.
         #
         # This is a proof, not an estimate: every member of the union came from
-        # the parent or one of its stricter filters, and a subset of an N-item
-        # set with N unique members is the full set.  Anything short, oversized,
-        # duplicated across processed children, or otherwise inconsistent is
-        # still refused.
+        # this exact parent or one of its stricter filters, and a subset of an
+        # N-item set with N unique members is the full set.  Anything short,
+        # oversized, duplicated across processed children, or otherwise
+        # inconsistent is still refused.
         _check_deadline(deadline)
-        sample = _export_rows(
-            page, context, filer_id, _window_label(window), deadline
-        )
-        _check_deadline(deadline)
-        if sample is not None and len(sample) == row_cap:
-            parent_sample = sample
-            log.info(
-                "Filer %s %s: retained %d capped parent IDs as overlap evidence",
-                filer_id, _window_label(window), len(parent_sample),
-            )
-        else:
-            log.warning(
-                "Filer %s %s: capped parent export contained %s IDs, expected %d; "
-                "ignoring the sample and requiring every child",
+        parent_sample = (
+            _export_tran_id_extremes(
+                page,
+                context,
                 filer_id,
                 _window_label(window),
-                "unknown" if sample is None else len(sample),
+                parent_reported,
                 row_cap,
+                deadline,
             )
+            or {}
+        )
+        _check_deadline(deadline)
+        if parent_sample:
+            if len(parent_sample) > parent_reported:
+                raise PartitionMismatchError(
+                    f"{_window_label(window)} opposite Tran ID exports have "
+                    f"{len(parent_sample)} unique IDs, parent reports "
+                    f"{parent_reported}"
+                )
+            log.info(
+                "Filer %s %s: retained %d IDs from opposite Tran ID exports",
+                filer_id, _window_label(window), len(parent_sample),
+            )
+            if len(parent_sample) == parent_reported:
+                log.info(
+                    "Filer %s %s: reconciled %d IDs from opposite Tran ID "
+                    "exports; prefix leaves not needed",
+                    filer_id, _window_label(window), parent_reported,
+                )
+                return {"reported": parent_reported, "rows": parent_sample}
+
+        if not parent_sample:
+            sample = _export_rows(
+                page, context, filer_id, _window_label(window), deadline
+            )
+            _check_deadline(deadline)
+            if sample is not None and len(sample) == row_cap:
+                parent_sample = sample
+                log.info(
+                    "Filer %s %s: retained %d capped parent IDs as overlap evidence",
+                    filer_id, _window_label(window), len(parent_sample),
+                )
+            else:
+                log.warning(
+                    "Filer %s %s: capped parent export contained %s IDs, expected "
+                    "%d; ignoring the sample and requiring every child",
+                    filer_id,
+                    _window_label(window),
+                    "unknown" if sample is None else len(sample),
+                    row_cap,
+                )
+
+        if parent_sample and len(parent_sample) < row_cap:
+            log.warning(
+                "Filer %s %s: overlap evidence has only %d IDs, expected at "
+                "least %d; ignoring it and requiring every child",
+                filer_id, _window_label(window), len(parent_sample), row_cap,
+            )
+            parent_sample = {}
 
     child_rows: dict[str, dict] = {}
     child_reported = 0

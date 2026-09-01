@@ -617,6 +617,9 @@ def _install_overlap_sample_tree(
     monkeypatch.setattr(DC.F, "_narrow_filer", narrow)
     monkeypatch.setattr(DC, "_collect_window", collect)
     monkeypatch.setattr(
+        DC, "_export_tran_id_extremes", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
         DC,
         "_export_rows",
         lambda *_args, **_kwargs: (
@@ -624,6 +627,159 @@ def _install_overlap_sample_tree(
         ),
     )
     return parent, calls
+
+
+def test_opposite_tran_id_exports_can_prove_parent_without_prefixes(
+    monkeypatch,
+) -> None:
+    parent, calls = _install_overlap_sample_tree(
+        monkeypatch,
+        parent_reported=5,
+        sample_cap=3,
+        sample_ids=None,
+        leaves=[("A", 1, {"unreachable"})],
+    )
+    monkeypatch.setattr(
+        DC,
+        "_export_tran_id_extremes",
+        lambda *_args, **_kwargs: {
+            "1": {}, "2": {}, "3": {}, "4": {}, "5": {},
+        },
+    )
+
+    result = DC._collect_tree(
+        object(), object(), "123", parent, None, 1, seed_windows=[]
+    )
+
+    assert result == {
+        "reported": 5,
+        "rows": {"1": {}, "2": {}, "3": {}, "4": {}, "5": {}},
+    }
+    assert calls == []
+
+
+def test_opposite_tran_id_export_union_larger_than_parent_is_refused(
+    monkeypatch,
+) -> None:
+    parent, _calls = _install_overlap_sample_tree(
+        monkeypatch,
+        parent_reported=4,
+        sample_cap=3,
+        sample_ids=None,
+        leaves=[("A", 1, {"unreachable"})],
+    )
+    monkeypatch.setattr(
+        DC,
+        "_export_tran_id_extremes",
+        lambda *_args, **_kwargs: {
+            "1": {}, "2": {}, "3": {}, "4": {}, "5": {},
+        },
+    )
+
+    with pytest.raises(DC.PartitionMismatchError, match="opposite Tran ID"):
+        DC._collect_tree(
+            object(), object(), "123", parent, None, 1, seed_windows=[]
+        )
+
+
+def test_tran_id_extreme_exports_union_ascending_and_descending(
+    monkeypatch,
+) -> None:
+    directions: list[str] = []
+    samples = iter(
+        [
+            {"1": {}, "2": {}, "3": {}},
+            {"3": {}, "4": {}, "5": {}},
+        ]
+    )
+
+    def sort(_page, _filer_id, _label, direction, *_args):
+        directions.append(direction)
+        return True
+
+    monkeypatch.setattr(DC, "_goto_tran_id_sort", sort)
+    monkeypatch.setattr(
+        DC, "_export_rows", lambda *_args, **_kwargs: next(samples)
+    )
+
+    result = DC._export_tran_id_extremes(
+        object(), object(), "123", "C 2026-08-28→2026-08-28", 5, 3, None
+    )
+
+    assert directions == ["asc", "desc"]
+    assert set(result or {}) == {"1", "2", "3", "4", "5"}
+
+
+def test_tran_id_sort_follows_exact_link_and_rechecks_parent_count(
+    monkeypatch,
+) -> None:
+    href = (
+        "/orestar/gotoPublicTransactionSearchResults.do?"
+        "cneSearchButtonName=srtOrder&srtOrder=asc&by=RSN"
+    )
+
+    class Link:
+        def get_attribute(self, name):
+            assert name == "href"
+            return href
+
+    class Links:
+        first = Link()
+
+        @staticmethod
+        def count():
+            return 1
+
+    class Page:
+        url = "https://secure.sos.state.or.us/orestar/results"
+        visited: list[tuple[str, str, int]] = []
+        waits: list[int] = []
+
+        @staticmethod
+        def locator(selector):
+            assert 'by=RSN' in selector
+            assert 'srtOrder=asc' in selector
+            return Links()
+
+        @classmethod
+        def wait_for_timeout(cls, milliseconds):
+            cls.waits.append(milliseconds)
+
+        @classmethod
+        def goto(cls, url, *, wait_until, timeout):
+            cls.url = url
+            cls.visited.append((url, wait_until, timeout))
+
+    monkeypatch.setattr(DC, "ORESTAR_REQUEST_DELAY", 0.25)
+    monkeypatch.setattr(DC, "_read_current_results_count", lambda *_args: 5)
+
+    assert DC._goto_tran_id_sort(
+        Page, "123", "parent", "asc", 5, None
+    ) is True
+    assert Page.waits == [250]
+    assert Page.visited == [
+        (
+            "https://secure.sos.state.or.us/orestar/"
+            "gotoPublicTransactionSearchResults.do?"
+            "cneSearchButtonName=srtOrder&srtOrder=asc&by=RSN",
+            "domcontentloaded",
+            60_000,
+        )
+    ]
+
+
+def test_tran_id_extremes_are_skipped_when_two_exports_cannot_cover(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        DC,
+        "_goto_tran_id_sort",
+        lambda *_args, **_kwargs: pytest.fail("sort should not be attempted"),
+    )
+
+    assert DC._export_tran_id_extremes(
+        object(), object(), "123", "parent", 7, 3, None
+    ) is None
 
 
 def test_capped_parent_sample_stops_after_union_proves_parent(monkeypatch) -> None:
