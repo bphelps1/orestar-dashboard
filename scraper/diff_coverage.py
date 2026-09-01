@@ -63,6 +63,7 @@ import sys
 import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from urllib.parse import urljoin
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -352,6 +353,142 @@ def _export_rows(
     return rows
 
 
+def _read_current_results_count(
+    page,
+    deadline: float | None,
+    timeout_seconds: int = 20,
+) -> int | None:
+    """Read the already-rendering results count without issuing a new search."""
+    _check_deadline(deadline)
+    poll_deadline = time.monotonic() + timeout_seconds
+    if deadline is not None:
+        poll_deadline = min(poll_deadline, deadline)
+    while time.monotonic() < poll_deadline:
+        text = page.inner_text(
+            "body", timeout=_remaining_timeout_ms(deadline, 30_000)
+        )
+        match = re.search(r"([\d,]+)\s+records found", text)
+        if match:
+            return int(match.group(1).replace(",", ""))
+        if "no records found" in text.lower():
+            return 0
+        page.wait_for_timeout(250)
+    _check_deadline(deadline)
+    return None
+
+
+def _goto_tran_id_sort(
+    page,
+    filer_id: str,
+    label: str,
+    direction: str,
+    expected_count: int,
+    deadline: float | None,
+) -> bool:
+    """Sort the current exact result set by its unique transaction ID."""
+    selector = (
+        f'a[href*="by=RSN"][href*="srtOrder={direction}"]'
+    )
+    try:
+        _check_deadline(deadline)
+        links = page.locator(selector)
+        if links.count() == 0:
+            log.warning(
+                "Filer %s %s: no Tran ID %s sort link on results page",
+                filer_id, label, direction,
+            )
+            return False
+        href = links.first.get_attribute("href")
+        if not href:
+            log.warning(
+                "Filer %s %s: empty Tran ID %s sort link",
+                filer_id, label, direction,
+            )
+            return False
+        # Sorting is another ORESTAR results request.  Pace it like a search;
+        # the point of this fast path is to avoid the prefix burst, not replace
+        # it with a smaller unpaced burst.
+        page.wait_for_timeout(int(ORESTAR_REQUEST_DELAY * 1000))
+        _check_deadline(deadline)
+        page.goto(
+            urljoin(page.url, href),
+            wait_until="domcontentloaded",
+            timeout=_remaining_timeout_ms(deadline, 60_000),
+        )
+        _check_deadline(deadline)
+    except CollectionDeadlineExceeded:
+        raise
+    except Exception as exc:                               # noqa: BLE001
+        log.warning(
+            "Filer %s %s: Tran ID %s sort failed (%s)",
+            filer_id, label, direction, exc,
+        )
+        return False
+
+    if "secure.sos.state.or.us/orestar" not in page.url:
+        log.warning(
+            "Filer %s %s: Tran ID %s sort left ORESTAR (%s)",
+            filer_id, label, direction, page.url,
+        )
+        return False
+    rendered_count = _read_current_results_count(page, deadline)
+    if rendered_count != expected_count:
+        log.warning(
+            "Filer %s %s: Tran ID %s sort rendered %s rows, expected %d",
+            filer_id,
+            label,
+            direction,
+            "unknown" if rendered_count is None else rendered_count,
+            expected_count,
+        )
+        return False
+    log.info(
+        "Filer %s %s: Tran ID %s sort preserved the %d-row parent",
+        filer_id, label, direction, expected_count,
+    )
+    return True
+
+
+def _export_tran_id_extremes(
+    page,
+    context,
+    filer_id: str,
+    label: str,
+    expected_count: int,
+    row_cap: int,
+    deadline: float | None,
+) -> dict[str, dict] | None:
+    """Verified subset from the low and high ends of a capped parent.
+
+    Tran ID is unique.  Therefore, when ``expected_count <= 2 * row_cap``,
+    the first ``row_cap`` IDs in ascending order plus the first ``row_cap`` in
+    descending order must cover the whole result set.  Each export is still
+    validated independently, and the caller still accepts only an exact union.
+    """
+    if expected_count > 2 * row_cap:
+        return None
+
+    merged: dict[str, dict] = {}
+    for direction in ("asc", "desc"):
+        if not _goto_tran_id_sort(
+            page, filer_id, label, direction, expected_count, deadline
+        ):
+            return merged or None
+        rows = _export_rows(page, context, filer_id, label, deadline)
+        if rows is None or len(rows) != row_cap:
+            log.warning(
+                "Filer %s %s: Tran ID %s export contained %s IDs, expected %d",
+                filer_id,
+                label,
+                direction,
+                "unknown" if rows is None else len(rows),
+                row_cap,
+            )
+            return merged or None
+        merged.update(rows)
+    return merged
+
+
 def _collect_window(
     page,
     filer_id: str,
@@ -536,6 +673,38 @@ def _date_windows_cover(
     return expected == end + timedelta(days=1)
 
 
+def _is_prefix_partition(parent: Window, children: list[Window]) -> bool:
+    """Whether ``children`` only add contributor-prefix filters to ``parent``."""
+    return bool(children) and parent[5] is None and all(
+        child[:5] == parent[:5] and child[5] is not None for child in children
+    )
+
+
+def _order_children_by_local_cost(
+    filer_id: str, children: list[Window]
+) -> list[Window]:
+    """Run cheap disjoint siblings first and leave the request-heavy one last.
+
+    Local counts are only a scheduling hint.  They never remove a child or
+    participate in reconciliation, and an unavailable count preserves the
+    narrowing ladder's original order.
+    """
+    costs: list[tuple[int, int, Window]] = []
+    for index, child in enumerate(children):
+        cost = F._held_rows(filer_id, *child)
+        if cost is None:
+            return children
+        costs.append((int(cost), index, child))
+    ordered = [child for _cost, _index, child in sorted(costs)]
+    if ordered != children:
+        log.info(
+            "Filer %s: ordered %d child windows cheapest-first; "
+            "largest local window (%d rows) runs last",
+            filer_id, len(children), max(cost for cost, _index, _child in costs),
+        )
+    return ordered
+
+
 def _collect_tree(
     page,
     context,
@@ -585,12 +754,95 @@ def _collect_tree(
             "narrowing dimension is spent"
         )
 
+    prefix_partition = _is_prefix_partition(window, children)
+    if context is not None and not prefix_partition:
+        children = _order_children_by_local_cost(filer_id, children)
+
     log.info("Filer %s %s: %d rows, over the %d cap — narrowing into %d",
              filer_id, _window_label(window), result["reported"], UI_ROW_CAP,
              len(children))
-    merged: dict[str, dict] = {}
+
+    parent_reported = result["reported"]
+    parent_sample: dict[str, dict] = {}
+    row_cap = min(UI_ROW_CAP, F.ORESTAR_ROW_CAP)
+    if context is not None and prefix_partition:
+        # Prefixes are the only available split for a single-day/single-amount
+        # batch, but dozens of count+export pairs can trip F5 near the end of
+        # the alphabet.  Before walking them, sort the exact parent by its
+        # unique Tran ID in both directions.  Two capped exports cover any
+        # parent up to twice the export cap; otherwise each is still genuine
+        # overlap evidence for the prefix fallback.
+        #
+        # This is a proof, not an estimate: every member of the union came from
+        # this exact parent or one of its stricter filters, and a subset of an
+        # N-item set with N unique members is the full set.  Anything short,
+        # oversized, duplicated across processed children, or otherwise
+        # inconsistent is still refused.
+        _check_deadline(deadline)
+        parent_sample = (
+            _export_tran_id_extremes(
+                page,
+                context,
+                filer_id,
+                _window_label(window),
+                parent_reported,
+                row_cap,
+                deadline,
+            )
+            or {}
+        )
+        _check_deadline(deadline)
+        if parent_sample:
+            if len(parent_sample) > parent_reported:
+                raise PartitionMismatchError(
+                    f"{_window_label(window)} opposite Tran ID exports have "
+                    f"{len(parent_sample)} unique IDs, parent reports "
+                    f"{parent_reported}"
+                )
+            log.info(
+                "Filer %s %s: retained %d IDs from opposite Tran ID exports",
+                filer_id, _window_label(window), len(parent_sample),
+            )
+            if len(parent_sample) == parent_reported:
+                log.info(
+                    "Filer %s %s: reconciled %d IDs from opposite Tran ID "
+                    "exports; prefix leaves not needed",
+                    filer_id, _window_label(window), parent_reported,
+                )
+                return {"reported": parent_reported, "rows": parent_sample}
+
+        if not parent_sample:
+            sample = _export_rows(
+                page, context, filer_id, _window_label(window), deadline
+            )
+            _check_deadline(deadline)
+            if sample is not None and len(sample) == row_cap:
+                parent_sample = sample
+                log.info(
+                    "Filer %s %s: retained %d capped parent IDs as overlap evidence",
+                    filer_id, _window_label(window), len(parent_sample),
+                )
+            else:
+                log.warning(
+                    "Filer %s %s: capped parent export contained %s IDs, expected "
+                    "%d; ignoring the sample and requiring every child",
+                    filer_id,
+                    _window_label(window),
+                    "unknown" if sample is None else len(sample),
+                    row_cap,
+                )
+
+        if parent_sample and len(parent_sample) < row_cap:
+            log.warning(
+                "Filer %s %s: overlap evidence has only %d IDs, expected at "
+                "least %d; ignoring it and requiring every child",
+                filer_id, _window_label(window), len(parent_sample), row_cap,
+            )
+            parent_sample = {}
+
+    child_rows: dict[str, dict] = {}
     child_reported = 0
-    for child in children:
+    for child_index, child in enumerate(children, start=1):
         _check_deadline(deadline)
         part = _collect_tree(
             page, context, filer_id, child, deadline, depth + 1, seed_windows=[]
@@ -598,13 +850,38 @@ def _collect_tree(
         if part is None:
             return None
         child_reported += part["reported"]
-        merged.update(part["rows"])
+        child_rows.update(part["rows"])
+        if len(child_rows) != child_reported:
+            raise PartitionMismatchError(
+                f"{_window_label(window)} processed children report "
+                f"{child_reported} rows / {len(child_rows)} unique IDs"
+            )
 
-    parent_reported = result["reported"]
-    if child_reported != parent_reported or len(merged) != parent_reported:
+        if parent_sample:
+            merged = dict(parent_sample)
+            merged.update(child_rows)
+            if len(merged) > parent_reported:
+                raise PartitionMismatchError(
+                    f"{_window_label(window)} overlap evidence has "
+                    f"{len(merged)} unique IDs, parent reports {parent_reported}"
+                )
+            if len(merged) == parent_reported:
+                log.info(
+                    "Filer %s %s: reconciled %d IDs after %d/%d prefix leaves",
+                    filer_id, _window_label(window), parent_reported,
+                    child_index, len(children),
+                )
+                return {"reported": parent_reported, "rows": merged}
+
+    merged = dict(parent_sample)
+    merged.update(child_rows)
+    if len(merged) != parent_reported or (
+        not parent_sample and child_reported != parent_reported
+    ):
         raise PartitionMismatchError(
             f"{_window_label(window)} children report {child_reported} rows / "
-            f"{len(merged)} unique IDs, parent reports {parent_reported}"
+            f"{len(child_rows)} unique child IDs / {len(merged)} with overlap "
+            f"evidence, parent reports {parent_reported}"
         )
     return {"reported": parent_reported, "rows": merged}
 
@@ -792,6 +1069,12 @@ def _save(entries: dict) -> None:
     DIFF_PATH.write_text(json.dumps(rows, indent=1))
 
 
+def _target_name(entries: dict, target: dict) -> str:
+    """Keep a known committee name when a targeted run supplies only its ID."""
+    fid = str(target["filer_id"])
+    return target.get("name") or (entries.get(fid) or {}).get("name", "")
+
+
 def _record_failure(entries: dict, target: dict, reason: str) -> dict:
     """Record an unusable attempt without destroying earlier usable evidence."""
     fid = str(target["filer_id"])
@@ -805,7 +1088,7 @@ def _record_failure(entries: dict, target: dict, reason: str) -> dict:
         entry.update({"filer_id": fid, "complete": None})
     else:
         entry.setdefault("filer_id", fid)
-    entry["name"] = target.get("name") or entry.get("name", "")
+    entry["name"] = _target_name(entries, target)
     entry["last_attempt"] = date.today().isoformat()
     entry["last_failure"] = reason
     entry["failure_count"] = int(entry.get("failure_count") or 0) + 1
@@ -1006,7 +1289,7 @@ def main() -> int:
                 missing = sorted(absent - superseded_by_us)
                 entries[fid] = {
                     "filer_id": fid,
-                    "name": t.get("name", ""),
+                    "name": _target_name(entries, t),
                     "orestar": len(theirs),
                     "held": len(ours),
                     # True only when the identities agree exactly. Unlike a

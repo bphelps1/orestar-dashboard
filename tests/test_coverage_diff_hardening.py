@@ -423,6 +423,22 @@ def test_record_failure_preserves_existing_usable_evidence() -> None:
     _assert_attempt_is_today(saved["last_attempt"])
 
 
+def test_target_name_preserves_known_name_for_id_only_runs() -> None:
+    entries = {
+        "23285": {
+            "filer_id": "23285",
+            "name": "Building a Stronger Oregon",
+        }
+    }
+
+    assert DC._target_name(entries, {"filer_id": "23285", "name": ""}) == (
+        "Building a Stronger Oregon"
+    )
+    assert DC._target_name(
+        entries, {"filer_id": "23285", "name": "Updated committee name"}
+    ) == "Updated committee name"
+
+
 def test_record_failure_creates_an_unchecked_null_for_first_failure() -> None:
     entries: dict[str, dict] = {}
     reason = "results count could not be read"
@@ -577,6 +593,343 @@ def test_unknown_prefix_gap_is_refused(monkeypatch) -> None:
     monkeypatch.setattr(DC, "_collect_window", missing_unknown_prefix)
 
     assert DC.orestar_ids(object(), "123", day, day, seed_windows=[]) is None
+
+
+def _install_overlap_sample_tree(
+    monkeypatch,
+    *,
+    parent_reported: int,
+    sample_cap: int,
+    sample_ids: set[str] | None,
+    leaves: list[tuple[str, int, set[str]]],
+):
+    """Install a one-day amount parent whose only children are prefixes."""
+    day = date(2026, 8, 28)
+    parent = ("C", day, day, "15", "15.99", None)
+    children = [
+        ("C", day, day, "15", "15.99", prefix)
+        for prefix, _reported, _ids in leaves
+    ]
+    responses = {
+        prefix: {"reported": reported, "rows": {tran_id: {} for tran_id in ids}}
+        for prefix, reported, ids in leaves
+    }
+    calls: list[str] = []
+
+    def narrow(*window):
+        return children if tuple(window) == parent else []
+
+    def collect(
+        _page, _filer_id, _start, _end, _tran_type="ALL", _amt_from=None,
+        _amt_to=None, payee_prefix=None, *_args, **_kwargs,
+    ):
+        if payee_prefix is None:
+            return {"reported": parent_reported, "rows": None}
+        calls.append(payee_prefix)
+        return responses[payee_prefix]
+
+    monkeypatch.setattr(DC, "UI_ROW_CAP", sample_cap)
+    monkeypatch.setattr(DC.F, "ORESTAR_ROW_CAP", sample_cap)
+    monkeypatch.setattr(DC.F, "_narrow_filer", narrow)
+    monkeypatch.setattr(DC, "_collect_window", collect)
+    monkeypatch.setattr(
+        DC, "_export_tran_id_extremes", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        DC,
+        "_export_rows",
+        lambda *_args, **_kwargs: (
+            None if sample_ids is None else {tran_id: {} for tran_id in sample_ids}
+        ),
+    )
+    return parent, calls
+
+
+def test_opposite_tran_id_exports_can_prove_parent_without_prefixes(
+    monkeypatch,
+) -> None:
+    parent, calls = _install_overlap_sample_tree(
+        monkeypatch,
+        parent_reported=5,
+        sample_cap=3,
+        sample_ids=None,
+        leaves=[("A", 1, {"unreachable"})],
+    )
+    monkeypatch.setattr(
+        DC,
+        "_export_tran_id_extremes",
+        lambda *_args, **_kwargs: {
+            "1": {}, "2": {}, "3": {}, "4": {}, "5": {},
+        },
+    )
+
+    result = DC._collect_tree(
+        object(), object(), "123", parent, None, 1, seed_windows=[]
+    )
+
+    assert result == {
+        "reported": 5,
+        "rows": {"1": {}, "2": {}, "3": {}, "4": {}, "5": {}},
+    }
+    assert calls == []
+
+
+def test_opposite_tran_id_export_union_larger_than_parent_is_refused(
+    monkeypatch,
+) -> None:
+    parent, _calls = _install_overlap_sample_tree(
+        monkeypatch,
+        parent_reported=4,
+        sample_cap=3,
+        sample_ids=None,
+        leaves=[("A", 1, {"unreachable"})],
+    )
+    monkeypatch.setattr(
+        DC,
+        "_export_tran_id_extremes",
+        lambda *_args, **_kwargs: {
+            "1": {}, "2": {}, "3": {}, "4": {}, "5": {},
+        },
+    )
+
+    with pytest.raises(DC.PartitionMismatchError, match="opposite Tran ID"):
+        DC._collect_tree(
+            object(), object(), "123", parent, None, 1, seed_windows=[]
+        )
+
+
+def test_tran_id_extreme_exports_union_ascending_and_descending(
+    monkeypatch,
+) -> None:
+    directions: list[str] = []
+    samples = iter(
+        [
+            {"1": {}, "2": {}, "3": {}},
+            {"3": {}, "4": {}, "5": {}},
+        ]
+    )
+
+    def sort(_page, _filer_id, _label, direction, *_args):
+        directions.append(direction)
+        return True
+
+    monkeypatch.setattr(DC, "_goto_tran_id_sort", sort)
+    monkeypatch.setattr(
+        DC, "_export_rows", lambda *_args, **_kwargs: next(samples)
+    )
+
+    result = DC._export_tran_id_extremes(
+        object(), object(), "123", "C 2026-08-28→2026-08-28", 5, 3, None
+    )
+
+    assert directions == ["asc", "desc"]
+    assert set(result or {}) == {"1", "2", "3", "4", "5"}
+
+
+def test_tran_id_sort_follows_exact_link_and_rechecks_parent_count(
+    monkeypatch,
+) -> None:
+    href = (
+        "/orestar/gotoPublicTransactionSearchResults.do?"
+        "cneSearchButtonName=srtOrder&srtOrder=asc&by=RSN"
+    )
+
+    class Link:
+        def get_attribute(self, name):
+            assert name == "href"
+            return href
+
+    class Links:
+        first = Link()
+
+        @staticmethod
+        def count():
+            return 1
+
+    class Page:
+        url = "https://secure.sos.state.or.us/orestar/results"
+        visited: list[tuple[str, str, int]] = []
+        waits: list[int] = []
+
+        @staticmethod
+        def locator(selector):
+            assert 'by=RSN' in selector
+            assert 'srtOrder=asc' in selector
+            return Links()
+
+        @classmethod
+        def wait_for_timeout(cls, milliseconds):
+            cls.waits.append(milliseconds)
+
+        @classmethod
+        def goto(cls, url, *, wait_until, timeout):
+            cls.url = url
+            cls.visited.append((url, wait_until, timeout))
+
+    monkeypatch.setattr(DC, "ORESTAR_REQUEST_DELAY", 0.25)
+    monkeypatch.setattr(DC, "_read_current_results_count", lambda *_args: 5)
+
+    assert DC._goto_tran_id_sort(
+        Page, "123", "parent", "asc", 5, None
+    ) is True
+    assert Page.waits == [250]
+    assert Page.visited == [
+        (
+            "https://secure.sos.state.or.us/orestar/"
+            "gotoPublicTransactionSearchResults.do?"
+            "cneSearchButtonName=srtOrder&srtOrder=asc&by=RSN",
+            "domcontentloaded",
+            60_000,
+        )
+    ]
+
+
+def test_tran_id_extremes_are_skipped_when_two_exports_cannot_cover(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        DC,
+        "_goto_tran_id_sort",
+        lambda *_args, **_kwargs: pytest.fail("sort should not be attempted"),
+    )
+
+    assert DC._export_tran_id_extremes(
+        object(), object(), "123", "parent", 7, 3, None
+    ) is None
+
+
+def test_capped_parent_sample_stops_after_union_proves_parent(monkeypatch) -> None:
+    parent, calls = _install_overlap_sample_tree(
+        monkeypatch,
+        parent_reported=4,
+        sample_cap=3,
+        sample_ids={"1", "2", "3"},
+        leaves=[
+            ("A", 2, {"1", "4"}),
+            ("B", 1, {"unreachable"}),
+        ],
+    )
+
+    result = DC._collect_tree(
+        object(), object(), "123", parent, None, 1, seed_windows=[]
+    )
+
+    assert result == {
+        "reported": 4,
+        "rows": {"1": {}, "2": {}, "3": {}, "4": {}},
+    }
+    assert calls == ["A"]
+
+
+def test_capped_sample_cannot_hide_overlap_between_prefix_leaves(monkeypatch) -> None:
+    parent, _calls = _install_overlap_sample_tree(
+        monkeypatch,
+        parent_reported=4,
+        sample_cap=2,
+        sample_ids={"1", "2"},
+        leaves=[
+            ("A", 2, {"1", "3"}),
+            ("B", 2, {"3", "4"}),
+        ],
+    )
+
+    with pytest.raises(DC.PartitionMismatchError, match="processed children"):
+        DC._collect_tree(
+            object(), object(), "123", parent, None, 1, seed_windows=[]
+        )
+
+
+def test_capped_sample_refuses_an_incomplete_union(monkeypatch) -> None:
+    parent, _calls = _install_overlap_sample_tree(
+        monkeypatch,
+        parent_reported=5,
+        sample_cap=3,
+        sample_ids={"1", "2", "3"},
+        leaves=[
+            ("A", 2, {"1", "4"}),
+            ("B", 1, {"2"}),
+        ],
+    )
+
+    with pytest.raises(DC.PartitionMismatchError, match="parent reports 5"):
+        DC._collect_tree(
+            object(), object(), "123", parent, None, 1, seed_windows=[]
+        )
+
+
+def test_capped_sample_refuses_a_union_larger_than_parent(monkeypatch) -> None:
+    parent, _calls = _install_overlap_sample_tree(
+        monkeypatch,
+        parent_reported=3,
+        sample_cap=2,
+        sample_ids={"1", "2"},
+        leaves=[("A", 2, {"3", "4"})],
+    )
+
+    with pytest.raises(DC.PartitionMismatchError, match="overlap evidence"):
+        DC._collect_tree(
+            object(), object(), "123", parent, None, 1, seed_windows=[]
+        )
+
+
+def test_short_capped_sample_is_ignored_and_children_must_reconcile(monkeypatch) -> None:
+    parent, calls = _install_overlap_sample_tree(
+        monkeypatch,
+        parent_reported=4,
+        sample_cap=3,
+        sample_ids={"1", "2"},
+        leaves=[
+            ("A", 2, {"1", "2"}),
+            ("B", 2, {"3", "4"}),
+        ],
+    )
+
+    result = DC._collect_tree(
+        object(), object(), "123", parent, None, 1, seed_windows=[]
+    )
+
+    assert result["reported"] == 4
+    assert set(result["rows"]) == {"1", "2", "3", "4"}
+    assert calls == ["A", "B"]
+
+
+def test_non_prefix_children_run_cheapest_first_and_hot_branch_last(
+    monkeypatch,
+) -> None:
+    day = date(2026, 8, 28)
+    parent = ("ALL", day, day, None, None, None)
+    hot = ("C", day, day, None, None, None)
+    cold = ("E", day, day, None, None, None)
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        DC.F,
+        "_narrow_filer",
+        lambda *window: [hot, cold] if tuple(window) == parent else [],
+    )
+    monkeypatch.setattr(
+        DC.F,
+        "_held_rows",
+        lambda _filer_id, tran_type, *_args: 5_662 if tran_type == "C" else 1,
+    )
+
+    def collect(
+        _page, _filer_id, _start, _end, tran_type="ALL", *_args, **_kwargs,
+    ):
+        if tran_type == "ALL":
+            return {"reported": 2, "rows": None}
+        calls.append(tran_type)
+        tran_id = "hot" if tran_type == "C" else "cold"
+        return {"reported": 1, "rows": {tran_id: {}}}
+
+    monkeypatch.setattr(DC, "_collect_window", collect)
+
+    result = DC._collect_tree(
+        object(), object(), "23285", parent, None, 1, seed_windows=[]
+    )
+
+    assert calls == ["E", "C"]
+    assert set(result["rows"]) == {"cold", "hot"}
 
 
 def test_duplicate_ids_across_children_are_refused(monkeypatch) -> None:
