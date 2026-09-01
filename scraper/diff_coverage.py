@@ -536,6 +536,13 @@ def _date_windows_cover(
     return expected == end + timedelta(days=1)
 
 
+def _is_prefix_partition(parent: Window, children: list[Window]) -> bool:
+    """Whether ``children`` only add contributor-prefix filters to ``parent``."""
+    return bool(children) and parent[5] is None and all(
+        child[:5] == parent[:5] and child[5] is not None for child in children
+    )
+
+
 def _collect_tree(
     page,
     context,
@@ -588,9 +595,47 @@ def _collect_tree(
     log.info("Filer %s %s: %d rows, over the %d cap — narrowing into %d",
              filer_id, _window_label(window), result["reported"], UI_ROW_CAP,
              len(children))
-    merged: dict[str, dict] = {}
+
+    parent_reported = result["reported"]
+    parent_sample: dict[str, dict] = {}
+    row_cap = min(UI_ROW_CAP, F.ORESTAR_ROW_CAP)
+    if context is not None and _is_prefix_partition(window, children):
+        # Prefixes are the only available split for a single-day/single-amount
+        # batch, but dozens of count+export pairs can trip F5 near the end of
+        # the alphabet.  The capped parent export is not a complete answer, but
+        # its 4,999 IDs are still genuine members of this exact parent set.
+        # Unioning that verified subset with exact prefix leaves lets us stop
+        # as soon as the unique union equals the parent's uncapped count.
+        #
+        # This is a proof, not an estimate: every member of the union came from
+        # the parent or one of its stricter filters, and a subset of an N-item
+        # set with N unique members is the full set.  Anything short, oversized,
+        # duplicated across processed children, or otherwise inconsistent is
+        # still refused.
+        _check_deadline(deadline)
+        sample = _export_rows(
+            page, context, filer_id, _window_label(window), deadline
+        )
+        _check_deadline(deadline)
+        if sample is not None and len(sample) == row_cap:
+            parent_sample = sample
+            log.info(
+                "Filer %s %s: retained %d capped parent IDs as overlap evidence",
+                filer_id, _window_label(window), len(parent_sample),
+            )
+        else:
+            log.warning(
+                "Filer %s %s: capped parent export contained %s IDs, expected %d; "
+                "ignoring the sample and requiring every child",
+                filer_id,
+                _window_label(window),
+                "unknown" if sample is None else len(sample),
+                row_cap,
+            )
+
+    child_rows: dict[str, dict] = {}
     child_reported = 0
-    for child in children:
+    for child_index, child in enumerate(children, start=1):
         _check_deadline(deadline)
         part = _collect_tree(
             page, context, filer_id, child, deadline, depth + 1, seed_windows=[]
@@ -598,13 +643,38 @@ def _collect_tree(
         if part is None:
             return None
         child_reported += part["reported"]
-        merged.update(part["rows"])
+        child_rows.update(part["rows"])
+        if len(child_rows) != child_reported:
+            raise PartitionMismatchError(
+                f"{_window_label(window)} processed children report "
+                f"{child_reported} rows / {len(child_rows)} unique IDs"
+            )
 
-    parent_reported = result["reported"]
-    if child_reported != parent_reported or len(merged) != parent_reported:
+        if parent_sample:
+            merged = dict(parent_sample)
+            merged.update(child_rows)
+            if len(merged) > parent_reported:
+                raise PartitionMismatchError(
+                    f"{_window_label(window)} overlap evidence has "
+                    f"{len(merged)} unique IDs, parent reports {parent_reported}"
+                )
+            if len(merged) == parent_reported:
+                log.info(
+                    "Filer %s %s: reconciled %d IDs after %d/%d prefix leaves",
+                    filer_id, _window_label(window), parent_reported,
+                    child_index, len(children),
+                )
+                return {"reported": parent_reported, "rows": merged}
+
+    merged = dict(parent_sample)
+    merged.update(child_rows)
+    if len(merged) != parent_reported or (
+        not parent_sample and child_reported != parent_reported
+    ):
         raise PartitionMismatchError(
             f"{_window_label(window)} children report {child_reported} rows / "
-            f"{len(merged)} unique IDs, parent reports {parent_reported}"
+            f"{len(child_rows)} unique child IDs / {len(merged)} with overlap "
+            f"evidence, parent reports {parent_reported}"
         )
     return {"reported": parent_reported, "rows": merged}
 

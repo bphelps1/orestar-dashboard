@@ -579,6 +579,148 @@ def test_unknown_prefix_gap_is_refused(monkeypatch) -> None:
     assert DC.orestar_ids(object(), "123", day, day, seed_windows=[]) is None
 
 
+def _install_overlap_sample_tree(
+    monkeypatch,
+    *,
+    parent_reported: int,
+    sample_cap: int,
+    sample_ids: set[str] | None,
+    leaves: list[tuple[str, int, set[str]]],
+):
+    """Install a one-day amount parent whose only children are prefixes."""
+    day = date(2026, 8, 28)
+    parent = ("C", day, day, "15", "15.99", None)
+    children = [
+        ("C", day, day, "15", "15.99", prefix)
+        for prefix, _reported, _ids in leaves
+    ]
+    responses = {
+        prefix: {"reported": reported, "rows": {tran_id: {} for tran_id in ids}}
+        for prefix, reported, ids in leaves
+    }
+    calls: list[str] = []
+
+    def narrow(*window):
+        return children if tuple(window) == parent else []
+
+    def collect(
+        _page, _filer_id, _start, _end, _tran_type="ALL", _amt_from=None,
+        _amt_to=None, payee_prefix=None, *_args, **_kwargs,
+    ):
+        if payee_prefix is None:
+            return {"reported": parent_reported, "rows": None}
+        calls.append(payee_prefix)
+        return responses[payee_prefix]
+
+    monkeypatch.setattr(DC, "UI_ROW_CAP", sample_cap)
+    monkeypatch.setattr(DC.F, "ORESTAR_ROW_CAP", sample_cap)
+    monkeypatch.setattr(DC.F, "_narrow_filer", narrow)
+    monkeypatch.setattr(DC, "_collect_window", collect)
+    monkeypatch.setattr(
+        DC,
+        "_export_rows",
+        lambda *_args, **_kwargs: (
+            None if sample_ids is None else {tran_id: {} for tran_id in sample_ids}
+        ),
+    )
+    return parent, calls
+
+
+def test_capped_parent_sample_stops_after_union_proves_parent(monkeypatch) -> None:
+    parent, calls = _install_overlap_sample_tree(
+        monkeypatch,
+        parent_reported=4,
+        sample_cap=3,
+        sample_ids={"1", "2", "3"},
+        leaves=[
+            ("A", 2, {"1", "4"}),
+            ("B", 1, {"unreachable"}),
+        ],
+    )
+
+    result = DC._collect_tree(
+        object(), object(), "123", parent, None, 1, seed_windows=[]
+    )
+
+    assert result == {
+        "reported": 4,
+        "rows": {"1": {}, "2": {}, "3": {}, "4": {}},
+    }
+    assert calls == ["A"]
+
+
+def test_capped_sample_cannot_hide_overlap_between_prefix_leaves(monkeypatch) -> None:
+    parent, _calls = _install_overlap_sample_tree(
+        monkeypatch,
+        parent_reported=4,
+        sample_cap=2,
+        sample_ids={"1", "2"},
+        leaves=[
+            ("A", 2, {"1", "3"}),
+            ("B", 2, {"3", "4"}),
+        ],
+    )
+
+    with pytest.raises(DC.PartitionMismatchError, match="processed children"):
+        DC._collect_tree(
+            object(), object(), "123", parent, None, 1, seed_windows=[]
+        )
+
+
+def test_capped_sample_refuses_an_incomplete_union(monkeypatch) -> None:
+    parent, _calls = _install_overlap_sample_tree(
+        monkeypatch,
+        parent_reported=5,
+        sample_cap=3,
+        sample_ids={"1", "2", "3"},
+        leaves=[
+            ("A", 2, {"1", "4"}),
+            ("B", 1, {"2"}),
+        ],
+    )
+
+    with pytest.raises(DC.PartitionMismatchError, match="parent reports 5"):
+        DC._collect_tree(
+            object(), object(), "123", parent, None, 1, seed_windows=[]
+        )
+
+
+def test_capped_sample_refuses_a_union_larger_than_parent(monkeypatch) -> None:
+    parent, _calls = _install_overlap_sample_tree(
+        monkeypatch,
+        parent_reported=3,
+        sample_cap=2,
+        sample_ids={"1", "2"},
+        leaves=[("A", 2, {"3", "4"})],
+    )
+
+    with pytest.raises(DC.PartitionMismatchError, match="overlap evidence"):
+        DC._collect_tree(
+            object(), object(), "123", parent, None, 1, seed_windows=[]
+        )
+
+
+def test_short_capped_sample_is_ignored_and_children_must_reconcile(monkeypatch) -> None:
+    parent, calls = _install_overlap_sample_tree(
+        monkeypatch,
+        parent_reported=4,
+        sample_cap=3,
+        sample_ids={"1", "2"},
+        leaves=[
+            ("A", 2, {"1", "2"}),
+            ("B", 2, {"3", "4"}),
+        ],
+    )
+
+    result = DC._collect_tree(
+        object(), object(), "123", parent, None, 1, seed_windows=[]
+    )
+
+    assert result["reported"] == 4
+    assert set(result["rows"]) == {"1", "2", "3", "4"}
+    assert calls == ["A", "B"]
+
+
 def test_duplicate_ids_across_children_are_refused(monkeypatch) -> None:
     day = date(2026, 8, 28)
     root = ("ALL", day, day, None, None, None)
