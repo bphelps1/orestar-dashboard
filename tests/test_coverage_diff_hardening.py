@@ -721,6 +721,45 @@ def test_short_capped_sample_is_ignored_and_children_must_reconcile(monkeypatch)
     assert calls == ["A", "B"]
 
 
+def test_non_prefix_children_run_cheapest_first_and_hot_branch_last(
+    monkeypatch,
+) -> None:
+    day = date(2026, 8, 28)
+    parent = ("ALL", day, day, None, None, None)
+    hot = ("C", day, day, None, None, None)
+    cold = ("E", day, day, None, None, None)
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        DC.F,
+        "_narrow_filer",
+        lambda *window: [hot, cold] if tuple(window) == parent else [],
+    )
+    monkeypatch.setattr(
+        DC.F,
+        "_held_rows",
+        lambda _filer_id, tran_type, *_args: 5_662 if tran_type == "C" else 1,
+    )
+
+    def collect(
+        _page, _filer_id, _start, _end, tran_type="ALL", *_args, **_kwargs,
+    ):
+        if tran_type == "ALL":
+            return {"reported": 2, "rows": None}
+        calls.append(tran_type)
+        tran_id = "hot" if tran_type == "C" else "cold"
+        return {"reported": 1, "rows": {tran_id: {}}}
+
+    monkeypatch.setattr(DC, "_collect_window", collect)
+
+    result = DC._collect_tree(
+        object(), object(), "23285", parent, None, 1, seed_windows=[]
+    )
+
+    assert calls == ["E", "C"]
+    assert set(result["rows"]) == {"cold", "hot"}
+
+
 def test_duplicate_ids_across_children_are_refused(monkeypatch) -> None:
     day = date(2026, 8, 28)
     root = ("ALL", day, day, None, None, None)

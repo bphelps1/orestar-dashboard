@@ -543,6 +543,31 @@ def _is_prefix_partition(parent: Window, children: list[Window]) -> bool:
     )
 
 
+def _order_children_by_local_cost(
+    filer_id: str, children: list[Window]
+) -> list[Window]:
+    """Run cheap disjoint siblings first and leave the request-heavy one last.
+
+    Local counts are only a scheduling hint.  They never remove a child or
+    participate in reconciliation, and an unavailable count preserves the
+    narrowing ladder's original order.
+    """
+    costs: list[tuple[int, int, Window]] = []
+    for index, child in enumerate(children):
+        cost = F._held_rows(filer_id, *child)
+        if cost is None:
+            return children
+        costs.append((int(cost), index, child))
+    ordered = [child for _cost, _index, child in sorted(costs)]
+    if ordered != children:
+        log.info(
+            "Filer %s: ordered %d child windows cheapest-first; "
+            "largest local window (%d rows) runs last",
+            filer_id, len(children), max(cost for cost, _index, _child in costs),
+        )
+    return ordered
+
+
 def _collect_tree(
     page,
     context,
@@ -592,6 +617,10 @@ def _collect_tree(
             "narrowing dimension is spent"
         )
 
+    prefix_partition = _is_prefix_partition(window, children)
+    if context is not None and not prefix_partition:
+        children = _order_children_by_local_cost(filer_id, children)
+
     log.info("Filer %s %s: %d rows, over the %d cap — narrowing into %d",
              filer_id, _window_label(window), result["reported"], UI_ROW_CAP,
              len(children))
@@ -599,7 +628,7 @@ def _collect_tree(
     parent_reported = result["reported"]
     parent_sample: dict[str, dict] = {}
     row_cap = min(UI_ROW_CAP, F.ORESTAR_ROW_CAP)
-    if context is not None and _is_prefix_partition(window, children):
+    if context is not None and prefix_partition:
         # Prefixes are the only available split for a single-day/single-amount
         # batch, but dozens of count+export pairs can trip F5 near the end of
         # the alphabet.  The capped parent export is not a complete answer, but
