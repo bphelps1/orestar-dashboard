@@ -2,8 +2,8 @@
  {
   "filer_id": "5528",
   "name": "Oregon Working Families Party",
-  "orestar": 3348,
-  "held": 3379,
+  "orestar": 3364,
+  "held": 3395,
   "complete": false,
   "surplus": [
    "5758726",
@@ -40,13 +40,13 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "319",
   "name": "Josephine County Republican Central Committee",
-  "orestar": 4818,
-  "held": 4836,
+  "orestar": 4833,
+  "held": 4847,
   "complete": false,
   "surplus": [
    "5513778",
@@ -70,10 +70,14 @@
    "5641095"
   ],
   "missing": [
-   "5513821"
+   "5513821",
+   "5787743",
+   "5787745",
+   "5787747",
+   "5787748"
   ],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "324",
@@ -258,7 +262,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "20136",
@@ -280,7 +284,7 @@
    "5671844"
   ],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "21770",
@@ -345,7 +349,10 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-01",
+  "last_attempt": "2026-09-02",
+  "last_failure": "unusable_window",
+  "failure_count": 1
  },
  {
   "filer_id": "20709",
@@ -364,6 +371,26 @@
   "missing": [],
   "superseded": [],
   "checked": "2026-08-29"
+ },
+ {
+  "filer_id": "15132",
+  "name": "Friends of Sharon Meieran",
+  "orestar": 2651,
+  "held": 2656,
+  "complete": false,
+  "surplus": [
+   "5712562",
+   "5716351",
+   "5716380",
+   "5725282",
+   "5725285",
+   "5743646"
+  ],
+  "missing": [
+   "5787125"
+  ],
+  "superseded": [],
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "24681",
@@ -399,7 +426,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "24362",
@@ -417,23 +444,6 @@
   "missing": [],
   "superseded": [],
   "checked": "2026-08-29"
- },
- {
-  "filer_id": "15132",
-  "name": "Friends of Sharon Meieran",
-  "orestar": 2650,
-  "held": 2655,
-  "complete": false,
-  "surplus": [
-   "5712562",
-   "5716380",
-   "5725282",
-   "5725285",
-   "5743646"
-  ],
-  "missing": [],
-  "superseded": [],
-  "checked": "2026-08-30"
  },
  {
   "filer_id": "291",
@@ -502,7 +512,7 @@
    "5555738"
   ],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "351",
@@ -518,7 +528,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "24826",
@@ -656,7 +666,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "313",
@@ -673,13 +683,13 @@
    "1764317"
   ],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "23208",
   "name": "Teacher Tiffany for the People",
-  "orestar": 2154,
-  "held": 2153,
+  "orestar": 2190,
+  "held": 2189,
   "complete": false,
   "surplus": [
    "5585599",
@@ -693,7 +703,7 @@
    "5780322"
   ],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "24571",
@@ -708,7 +718,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "618",
@@ -871,7 +881,7 @@
    "5766594"
   ],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "125",
@@ -899,7 +909,10 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-01",
+  "last_attempt": "2026-09-02",
+  "last_failure": "unusable_window",
+  "failure_count": 1
  },
  {
   "filer_id": "24427",
@@ -1062,8 +1075,8 @@
  {
   "filer_id": "23028",
   "name": "Angelita for Portland",
-  "orestar": 1284,
-  "held": 1283,
+  "orestar": 1308,
+  "held": 1307,
   "complete": false,
   "surplus": [
    "5702887",
@@ -1075,26 +1088,21 @@
    "5780323"
   ],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "18726",
   "name": "Heather Buch for Oregon",
-  "orestar": 2822,
-  "held": 2820,
+  "orestar": 2827,
+  "held": 2829,
   "complete": false,
   "surplus": [
    "5541797",
    "5643574"
   ],
-  "missing": [
-   "5784487",
-   "5784492",
-   "5784494",
-   "5784640"
-  ],
+  "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "6165",
@@ -1110,7 +1118,7 @@
    "5591663"
   ],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "266",
@@ -1124,7 +1132,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "1471",
@@ -1400,10 +1408,7 @@
    "5066926"
   ],
   "superseded": [],
-  "checked": "2026-08-30",
-  "last_attempt": "2026-09-01",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "51",
@@ -1429,7 +1434,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "24948",
@@ -1481,7 +1486,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "24241",
@@ -1572,7 +1577,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "24692",
@@ -1598,7 +1603,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "24509",
@@ -1616,15 +1621,15 @@
  {
   "filer_id": "24952",
   "name": "Friends of Bobbi Cummiskey",
-  "orestar": 78,
-  "held": 79,
+  "orestar": 79,
+  "held": 80,
   "complete": false,
   "surplus": [
    "5747022"
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "24621",
@@ -1637,27 +1642,22 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "24973",
   "name": "Esther for Portland",
   "orestar": 114,
-  "held": 109,
+  "held": 114,
   "complete": false,
   "surplus": [
    "5686841"
   ],
   "missing": [
-   "5686840",
-   "5786810",
-   "5786819",
-   "5786825",
-   "5786830",
-   "5786836"
+   "5686840"
   ],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "24854",
@@ -2017,10 +2017,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30",
-  "last_attempt": "2026-09-01",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "21678",
@@ -2033,10 +2030,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30",
-  "last_attempt": "2026-09-01",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "20217",
@@ -2054,28 +2048,30 @@
  {
   "filer_id": "21575",
   "name": "Friends of Anna Scharf",
-  "orestar": 1414,
-  "held": 1415,
+  "orestar": 1420,
+  "held": 1421,
   "complete": false,
   "surplus": [
    "5687982"
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "21729",
   "name": "Committee to Elect Lucetta Elmer",
-  "orestar": 1415,
+  "orestar": 1416,
   "held": 1416,
   "complete": false,
   "surplus": [
    "5658291"
   ],
-  "missing": [],
+  "missing": [
+   "5787186"
+  ],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "19280",
@@ -2101,7 +2097,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "20290",
@@ -2127,7 +2123,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "350",
@@ -2153,7 +2149,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "15377",
@@ -2179,7 +2175,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "16623",
@@ -2205,13 +2201,13 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "326",
   "name": "Lincoln County Democratic Central Committee",
-  "orestar": 2579,
-  "held": 2579,
+  "orestar": 2588,
+  "held": 2588,
   "complete": false,
   "surplus": [
    "5708101"
@@ -2220,20 +2216,20 @@
    "1657097"
   ],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "17892",
   "name": "Werner for Oregon",
-  "orestar": 2959,
-  "held": 2960,
+  "orestar": 2979,
+  "held": 2980,
   "complete": false,
   "surplus": [
    "5635154"
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "16719",
@@ -2246,20 +2242,20 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "15984",
   "name": "Friends of Jeff Helfrich",
-  "orestar": 3374,
-  "held": 3375,
+  "orestar": 3408,
+  "held": 3409,
   "complete": false,
   "surplus": [
    "5539307"
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "5785",
@@ -2327,6 +2323,22 @@
   ],
   "superseded": [],
   "checked": "2026-09-01"
+ },
+ {
+  "filer_id": "21827",
+  "name": "Friends for Sue Piazza",
+  "orestar": 367,
+  "held": 366,
+  "complete": false,
+  "surplus": [
+   "5785957"
+  ],
+  "missing": [
+   "5787192",
+   "5787194"
+  ],
+  "superseded": [],
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "15343",
@@ -8626,5 +8638,106 @@
   "missing": [],
   "superseded": [],
   "checked": "2026-09-01"
+ },
+ {
+  "filer_id": "299",
+  "name": "Democratic Party of Coos County",
+  "orestar": 7218,
+  "held": 7218,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-09-02"
+ },
+ {
+  "filer_id": "25175",
+  "name": "Friends of Mitch Pace for Sheriff",
+  "orestar": 11,
+  "held": 11,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-09-02"
+ },
+ {
+  "filer_id": "21615",
+  "name": "Friends of Steve Loosley",
+  "orestar": 24,
+  "held": 23,
+  "complete": false,
+  "surplus": [],
+  "missing": [
+   "5787189"
+  ],
+  "superseded": [],
+  "checked": "2026-09-02"
+ },
+ {
+  "filer_id": "21848",
+  "name": "Elect John West",
+  "orestar": 71,
+  "held": 71,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-09-02"
+ },
+ {
+  "filer_id": "23266",
+  "name": "Republican Unity Caucus",
+  "orestar": 107,
+  "held": 107,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-09-02"
+ },
+ {
+  "filer_id": "24594",
+  "name": "Mary Dirksen for Oregon",
+  "orestar": 110,
+  "held": 110,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-09-02"
+ },
+ {
+  "filer_id": "19196",
+  "name": "Friends of Stephanie Newton",
+  "orestar": 290,
+  "held": 290,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-09-02"
+ },
+ {
+  "filer_id": "23249",
+  "name": "Alek for Oregon",
+  "orestar": 1076,
+  "held": 1076,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-09-02"
+ },
+ {
+  "filer_id": "147",
+  "name": "Oregon Farm Bureau Political Action Committee",
+  "orestar": 2300,
+  "held": 2300,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-09-02"
  }
 ]
