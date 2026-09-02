@@ -633,7 +633,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "17090",
@@ -2356,6 +2356,21 @@
   "checked": "2026-09-02"
  },
  {
+  "filer_id": "20272",
+  "name": "Friends of Bobby Levy",
+  "orestar": 883,
+  "held": 883,
+  "complete": false,
+  "surplus": [
+   "5752411"
+  ],
+  "missing": [
+   "5787188"
+  ],
+  "superseded": [],
+  "checked": "2026-09-02"
+ },
+ {
   "filer_id": "15343",
   "name": "Elect Dave Hoppe For DA",
   "orestar": 93,
@@ -2423,7 +2438,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "19990",
@@ -2500,7 +2515,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "22530",
@@ -2599,7 +2614,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "5587",
@@ -2643,7 +2658,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "22682",
@@ -3204,7 +3219,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "20236",
@@ -3259,7 +3274,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "13185",
@@ -3413,7 +3428,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "6568",
@@ -3545,7 +3560,10 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-29",
+  "last_attempt": "2026-09-02",
+  "last_failure": "unusable_window",
+  "failure_count": 1
  },
  {
   "filer_id": "21841",
@@ -3561,13 +3579,17 @@
  {
   "filer_id": "297",
   "name": "Columbia County Democratic Central Committee",
-  "orestar": 461,
+  "orestar": 464,
   "held": 461,
-  "complete": true,
+  "complete": false,
   "surplus": [],
-  "missing": [],
+  "missing": [
+   "5787866",
+   "5787868",
+   "5787869"
+  ],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "24365",
@@ -3578,7 +3600,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "16023",
@@ -3633,7 +3655,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "14265",
@@ -3644,7 +3666,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "12585",
@@ -7907,13 +7929,13 @@
  {
   "filer_id": "22127",
   "name": "Candidate Identification and Support Committee (CISC PAC)",
-  "orestar": 407,
-  "held": 407,
+  "orestar": 414,
+  "held": 414,
   "complete": true,
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "12723",
@@ -7924,7 +7946,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "12527",
@@ -7935,7 +7957,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "18220",
@@ -7946,7 +7968,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "6324",
@@ -7957,7 +7979,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "21159",
@@ -7968,18 +7990,18 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "6032",
   "name": "Friends of Mike Clark",
-  "orestar": 479,
-  "held": 479,
+  "orestar": 480,
+  "held": 480,
   "complete": true,
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "11247",
@@ -7990,7 +8012,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "327",
@@ -8001,18 +8023,18 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "23142",
   "name": "Linthicum for Oregon",
-  "orestar": 518,
-  "held": 518,
+  "orestar": 520,
+  "held": 520,
   "complete": true,
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "21640",
@@ -8023,7 +8045,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "23304",
@@ -8034,7 +8056,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "24613",
@@ -8045,7 +8067,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "21395",
@@ -8056,7 +8078,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "14594",
@@ -8067,7 +8089,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "15432",
@@ -8078,7 +8100,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "20446",
@@ -8089,7 +8111,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "13428",
@@ -8100,7 +8122,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "340",
@@ -8111,7 +8133,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "16588",
@@ -8122,7 +8144,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "17065",
@@ -8133,7 +8155,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "20199",
@@ -8144,7 +8166,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "7606",
@@ -8166,7 +8188,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "6446",
@@ -8177,7 +8199,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "20477",
@@ -8188,18 +8210,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
- },
- {
-  "filer_id": "20272",
-  "name": "Friends of Bobby Levy",
-  "orestar": 883,
-  "held": 883,
-  "complete": true,
-  "surplus": [],
-  "missing": [],
-  "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "20522",
@@ -8210,7 +8221,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "12512",
@@ -8221,7 +8232,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "19135",
@@ -8232,7 +8243,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "17862",
@@ -8243,7 +8254,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "21903",
@@ -8254,7 +8265,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "338",
@@ -8265,18 +8276,18 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "21775",
   "name": "Chaichi for Oregon",
-  "orestar": 1088,
-  "held": 1088,
+  "orestar": 1091,
+  "held": 1091,
   "complete": true,
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "21632",
@@ -8287,7 +8298,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "16321",
@@ -8298,7 +8309,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "14544",
@@ -8309,7 +8320,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "19463",
@@ -8320,7 +8331,10 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-08-29",
+  "last_attempt": "2026-09-02",
+  "last_failure": "unusable_window",
+  "failure_count": 1
  },
  {
   "filer_id": "19144",
