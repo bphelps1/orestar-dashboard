@@ -311,7 +311,7 @@
    "5658813"
   ],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "317",
@@ -331,7 +331,7 @@
    "149900"
   ],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "24622",
@@ -395,7 +395,7 @@
  {
   "filer_id": "24681",
   "name": "Friends for Neyssa-sary Change",
-  "orestar": 370,
+  "orestar": 371,
   "held": 374,
   "complete": false,
   "surplus": [
@@ -406,10 +406,11 @@
    "5626526"
   ],
   "missing": [
-   "5673102"
+   "5673102",
+   "5718023"
   ],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "22134",
@@ -475,7 +476,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "19768",
@@ -494,7 +495,7 @@
    "5528948"
   ],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "24775",
@@ -527,6 +528,32 @@
    "5648947"
   ],
   "missing": [],
+  "superseded": [],
+  "checked": "2026-09-02"
+ },
+ {
+  "filer_id": "24710",
+  "name": "Joanna Robinson for Oregon",
+  "orestar": 299,
+  "held": 294,
+  "complete": false,
+  "surplus": [
+   "5564577",
+   "5564579",
+   "5564580",
+   "5784945"
+  ],
+  "missing": [
+   "5787758",
+   "5787759",
+   "5787760",
+   "5787761",
+   "5787762",
+   "5787765",
+   "5787768",
+   "5787772",
+   "5787773"
+  ],
   "superseded": [],
   "checked": "2026-09-02"
  },
@@ -591,7 +618,7 @@
    "5716344"
   ],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "349",
@@ -622,21 +649,6 @@
   "missing": [],
   "superseded": [],
   "checked": "2026-08-29"
- },
- {
-  "filer_id": "24710",
-  "name": "Joanna Robinson for Oregon",
-  "orestar": 291,
-  "held": 294,
-  "complete": false,
-  "surplus": [
-   "5564577",
-   "5564579",
-   "5564580"
-  ],
-  "missing": [],
-  "superseded": [],
-  "checked": "2026-09-01"
  },
  {
   "filer_id": "18888",
@@ -721,6 +733,21 @@
   "checked": "2026-09-02"
  },
  {
+  "filer_id": "306",
+  "name": "Douglas County Democratic Central Committee",
+  "orestar": 5009,
+  "held": 5012,
+  "complete": false,
+  "surplus": [
+   "5708303",
+   "5784802",
+   "5784803"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-09-02"
+ },
+ {
   "filer_id": "618",
   "name": "Deschutes County Republican Central Committee",
   "orestar": 6252,
@@ -780,7 +807,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "16986",
@@ -926,7 +953,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "21358",
@@ -954,7 +981,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "16291",
@@ -968,7 +995,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "20790",
@@ -996,7 +1023,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "24457",
@@ -1038,25 +1065,21 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "22066",
   "name": "Friends for Denise Krause",
   "orestar": 1019,
-  "held": 1018,
+  "held": 1021,
   "complete": false,
   "surplus": [
    "5539691",
    "5600771"
   ],
-  "missing": [
-   "5745279",
-   "5786219",
-   "5786232"
-  ],
+  "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "21883",
@@ -1070,7 +1093,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "23028",
@@ -1208,17 +1231,21 @@
  {
   "filer_id": "24572",
   "name": "Friends of Rachel Philip",
-  "orestar": 174,
-  "held": 174,
+  "orestar": 179,
+  "held": 175,
   "complete": false,
   "surplus": [
    "5648743"
   ],
   "missing": [
-   "5773986"
+   "5784792",
+   "5784794",
+   "5784798",
+   "5784799",
+   "5787813"
   ],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "16508",
@@ -1283,7 +1310,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "5067",
@@ -1327,21 +1354,17 @@
  {
   "filer_id": "23238",
   "name": "Evergreen PAC",
-  "orestar": 1003,
-  "held": 999,
+  "orestar": 1004,
+  "held": 1004,
   "complete": false,
   "surplus": [
    "5610563"
   ],
   "missing": [
-   "5785921",
-   "5785922",
-   "5786920",
-   "5786921",
-   "5786922"
+   "5787697"
   ],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "23277",
@@ -1413,15 +1436,18 @@
  {
   "filer_id": "51",
   "name": "Credit Union Legislative Action Fund",
-  "orestar": 3069,
+  "orestar": 3071,
   "held": 3070,
   "complete": false,
   "surplus": [
    "5661401"
   ],
-  "missing": [],
+  "missing": [
+   "5787339",
+   "5787340"
+  ],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "300",
@@ -1444,19 +1470,6 @@
   "complete": false,
   "surplus": [
    "5716690"
-  ],
-  "missing": [],
-  "superseded": [],
-  "checked": "2026-08-30"
- },
- {
-  "filer_id": "306",
-  "name": "Douglas County Democratic Central Committee",
-  "orestar": 5007,
-  "held": 5008,
-  "complete": false,
-  "surplus": [
-   "5708303"
   ],
   "missing": [],
   "superseded": [],
@@ -1683,7 +1696,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "18748",
@@ -1722,7 +1735,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "18844",
@@ -1750,7 +1763,7 @@
    "5699127"
   ],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "24563",
@@ -1802,7 +1815,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "24679",
@@ -1817,7 +1830,7 @@
    "5596044"
   ],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "24446",
@@ -1835,15 +1848,17 @@
  {
   "filer_id": "24761",
   "name": "Myrna for Oregon",
-  "orestar": 411,
+  "orestar": 412,
   "held": 412,
   "complete": false,
   "surplus": [
    "5663327"
   ],
-  "missing": [],
+  "missing": [
+   "5787351"
+  ],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "5115",
@@ -1913,7 +1928,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "22133",
@@ -1991,7 +2006,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "18462",
@@ -2815,10 +2830,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-28",
-  "last_attempt": "2026-08-30",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "17427",
@@ -3126,10 +3138,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-28",
-  "last_attempt": "2026-08-30",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "346",
@@ -4229,10 +4238,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29",
-  "last_attempt": "2026-08-30",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "612",
@@ -4243,10 +4249,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29",
-  "last_attempt": "2026-08-30",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "22977",
@@ -4730,10 +4733,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29",
-  "last_attempt": "2026-08-30",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "18417",
@@ -4744,10 +4744,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29",
-  "last_attempt": "2026-08-30",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "18668",
@@ -5264,10 +5261,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29",
-  "last_attempt": "2026-08-30",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "15604",
@@ -5278,10 +5272,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29",
-  "last_attempt": "2026-08-30",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "19748",
@@ -5699,10 +5690,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29",
-  "last_attempt": "2026-08-30",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "14616",
@@ -5713,10 +5701,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29",
-  "last_attempt": "2026-08-30",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "17982",
@@ -6134,24 +6119,18 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29",
-  "last_attempt": "2026-08-30",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "23774",
   "name": "Friends of Britta Mansfield",
-  "orestar": 55,
-  "held": 55,
+  "orestar": 56,
+  "held": 56,
   "complete": true,
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29",
-  "last_attempt": "2026-08-30",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "13307",
@@ -6464,16 +6443,13 @@
  {
   "filer_id": "24727",
   "name": "Friends of Tillamook County United",
-  "orestar": 67,
-  "held": 67,
+  "orestar": 72,
+  "held": 72,
   "complete": true,
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29",
-  "last_attempt": "2026-08-30",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "17330",
@@ -6484,10 +6460,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29",
-  "last_attempt": "2026-08-30",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "17510",
@@ -6709,10 +6682,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29",
-  "last_attempt": "2026-08-30",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "14287",
@@ -6723,10 +6693,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29",
-  "last_attempt": "2026-08-30",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "21488",
@@ -7014,10 +6981,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29",
-  "last_attempt": "2026-08-30",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "17618",
@@ -7028,10 +6992,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29",
-  "last_attempt": "2026-08-30",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "24173",
@@ -7471,10 +7432,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29",
-  "last_attempt": "2026-08-30",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "14206",
@@ -7485,10 +7443,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29",
-  "last_attempt": "2026-08-30",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-02"
  },
  {
   "filer_id": "24304",
@@ -7931,9 +7886,9 @@
   "missing": [],
   "superseded": [],
   "checked": "2026-08-29",
-  "last_attempt": "2026-08-30",
+  "last_attempt": "2026-09-02",
   "last_failure": "unusable_window",
-  "failure_count": 1
+  "failure_count": 2
  },
  {
   "filer_id": "20784",
@@ -7945,9 +7900,9 @@
   "missing": [],
   "superseded": [],
   "checked": "2026-08-29",
-  "last_attempt": "2026-08-30",
+  "last_attempt": "2026-09-02",
   "last_failure": "unusable_window",
-  "failure_count": 1
+  "failure_count": 2
  },
  {
   "filer_id": "22127",
