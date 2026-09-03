@@ -13,6 +13,11 @@ on:
         required: false
         default: ""
         type: string
+      end_date:
+        description: "Internal: frozen end date for a chained filer remediation (YYYY-MM-DD)"
+        required: false
+        default: ""
+        type: string
       date_field:
         description: "Date field to search by: 'filed' (default) or 'tran' (transaction date, needed for pre-2017 data)"
         required: false
@@ -32,6 +37,21 @@ on:
         required: false
         default: "false"
         type: boolean
+      identity_remediation:
+        description: "Force fresh exact exports for filer IDs (bypasses count/held shortcuts)"
+        required: false
+        default: "false"
+        type: boolean
+      resume_auto:
+        description: "Internal: explicit filer IDs belong to the automatic identity-remediation chain"
+        required: false
+        default: "false"
+        type: boolean
+      verification_filer_ids:
+        description: "Internal: immutable original filer set for final identity verification"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: write
@@ -67,7 +87,16 @@ jobs:
       - name: Wait for other ORESTAR jobs
         uses: ./.github/actions/await-orestar
         with:
-          fetch-depth: 1
+          fail-on-timeout: "true"
+
+      - name: Refresh branch after coordination wait
+        # Checkout happens before the wait because the wait action is local.
+        # Another scraper may push ledger/data changes while this job waits;
+        # starting from the pre-wait snapshot would resurrect those old files
+        # when push_data.sh replays our whole-file changes.
+        run: |
+          git fetch --depth=1 origin "$GITHUB_REF_NAME"
+          git reset --hard FETCH_HEAD
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -93,6 +122,17 @@ jobs:
         id: resolve
         run: |
           FILER_IDS="${{ inputs.filer_ids }}"
+          IDENTITY_MODE="${{ inputs.identity_remediation }}"
+          IS_AUTO="${{ inputs.resume_auto }}"
+          IDENTITY_RESUME=false
+          IDENTITY_END_DATE="${{ inputs.end_date }}"
+          VERIFICATION_IDS="${{ inputs.verification_filer_ids }}"
+          CHAIN="${{ inputs.chain_index || '1' }}"
+          if [ "$CHAIN" = "1" ]; then
+            # The first run defines the immutable verification scope. Ignore
+            # any stale/internal value supplied by a manual dispatch.
+            VERIFICATION_IDS=""
+          fi
           if [ "${{ inputs.reset_auto }}" = "true" ]; then
             echo "Resetting auto-backfill tracking file..."
             rm -f data/backfilled_filers.txt
@@ -100,6 +140,18 @@ jobs:
           if [ "$FILER_IDS" = "auto" ]; then
             echo "Auto mode: finding filers with discrepancies..."
             python3 scraper/auto_backfill_ids.py
+            AUTO_MODE=$(cat /tmp/auto_backfill_mode.txt 2>/dev/null || echo count)
+            if [ "$AUTO_MODE" = "identity" ]; then
+              IDENTITY_MODE=true
+              IDENTITY_RESUME=$(cat /tmp/auto_backfill_resume.txt 2>/dev/null || echo false)
+              AUTO_END_DATE=$(cat /tmp/auto_backfill_end_date.txt 2>/dev/null || true)
+              if [ -n "$AUTO_END_DATE" ]; then
+                IDENTITY_END_DATE="$AUTO_END_DATE"
+              fi
+            else
+              IDENTITY_MODE=false
+            fi
+            IS_AUTO=true
             if [ -f /tmp/auto_backfill_ids.txt ]; then
               FILER_IDS=$(cat /tmp/auto_backfill_ids.txt)
             else
@@ -109,6 +161,10 @@ jobs:
               echo "All discrepancies backfilled."
               echo "resolved=" >> "$GITHUB_OUTPUT"
               echo "is_auto=true" >> "$GITHUB_OUTPUT"
+              echo "identity_mode=$IDENTITY_MODE" >> "$GITHUB_OUTPUT"
+              echo "identity_resume=$IDENTITY_RESUME" >> "$GITHUB_OUTPUT"
+              echo "identity_end_date=$IDENTITY_END_DATE" >> "$GITHUB_OUTPUT"
+              echo "verification_ids=$VERIFICATION_IDS" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             echo "Auto-resolved filer IDs: $FILER_IDS"
@@ -116,8 +172,26 @@ jobs:
             echo "is_auto=true" >> "$GITHUB_OUTPUT"
           else
             echo "resolved=$FILER_IDS" >> "$GITHUB_OUTPUT"
-            echo "is_auto=false" >> "$GITHUB_OUTPUT"
+            echo "is_auto=$IS_AUTO" >> "$GITHUB_OUTPUT"
+            if [ "$IDENTITY_MODE" = "true" ] && [ "$CHAIN" -gt 1 ] 2>/dev/null; then
+              IDENTITY_RESUME=true
+            fi
           fi
+          if [ -z "$VERIFICATION_IDS" ] && [ "$IDENTITY_MODE" = "true" ]; then
+            VERIFICATION_IDS="$FILER_IDS"
+          fi
+          if [ "$IDENTITY_MODE" = "true" ]; then
+            for fid in $FILER_IDS; do
+              case " $VERIFICATION_IDS " in
+                *" $fid "*) ;;
+                *) echo "Current filer $fid is absent from verification scope"; exit 1 ;;
+              esac
+            done
+          fi
+          echo "identity_mode=$IDENTITY_MODE" >> "$GITHUB_OUTPUT"
+          echo "identity_resume=$IDENTITY_RESUME" >> "$GITHUB_OUTPUT"
+          echo "identity_end_date=$IDENTITY_END_DATE" >> "$GITHUB_OUTPUT"
+          echo "verification_ids=$VERIFICATION_IDS" >> "$GITHUB_OUTPUT"
 
       # Gated on "auto mode found nothing", NOT on "no filer ids given".
       #
@@ -128,6 +202,7 @@ jobs:
       # skipped all real work and still went green — 2016 was requested, the
       # run reported success, and not a single row was fetched.
       - name: Backfill ORESTAR data
+        id: fetch
         if: (steps.resolve.outputs.resolved != '' || steps.resolve.outputs.is_auto != 'true')
         env:
           # Read-only use: the fetcher asks how many rows we already hold for a
@@ -141,13 +216,40 @@ jobs:
           FILER_IDS="${{ steps.resolve.outputs.resolved }}"
           if [ -n "$FILER_IDS" ]; then
             echo "Filer-targeted backfill: $FILER_IDS"
-            xvfb-run --auto-servernum python scraper/fetch.py --filer-ids $FILER_IDS --start-year=${{ inputs.start_year }}
+            ARGS="--filer-ids $FILER_IDS --start-year=${{ inputs.start_year }}"
+            if [ "${{ steps.resolve.outputs.identity_mode }}" = "true" ]; then
+              END_DATE="${{ steps.resolve.outputs.identity_end_date }}"
+              if [ -z "$END_DATE" ]; then
+                END_DATE=$(date -u +%F)
+              fi
+              ARGS="$ARGS --identity-remediation --end-date=$END_DATE"
+              echo "end_date=$END_DATE" >> "$GITHUB_OUTPUT"
+              if [ "${{ steps.resolve.outputs.identity_resume }}" != "true" ]; then
+                ARGS="$ARGS --reset-identity-progress"
+              fi
+            fi
+            set -o pipefail
+            xvfb-run --auto-servernum python scraper/fetch.py $ARGS 2>&1 | tee /tmp/backfill.log
+            RESULT=$(grep '^REMEDIATION_RESULT ' /tmp/backfill.log | tail -1 || true)
+            PROGRESS=0
+            RETRY=0
+            for KV in $RESULT; do
+              case "$KV" in
+                progress=*) PROGRESS=${KV#progress=} ;;
+                retry=*)    RETRY=${KV#retry=} ;;
+              esac
+            done
+            echo "progress=$PROGRESS" >> "$GITHUB_OUTPUT"
+            echo "retry=$RETRY" >> "$GITHUB_OUTPUT"
           else
             ARGS="--mode=backfill --start-year=${{ inputs.start_year }} --date-field=${{ inputs.date_field }}"
             if [ -n "${{ inputs.end_year }}" ]; then
               ARGS="$ARGS --end-year=${{ inputs.end_year }}"
             fi
             xvfb-run --auto-servernum python scraper/fetch.py $ARGS
+            echo "progress=0" >> "$GITHUB_OUTPUT"
+            echo "retry=0" >> "$GITHUB_OUTPUT"
+            echo "end_date=" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Track successfully backfilled filers (auto mode)
@@ -202,6 +304,7 @@ jobs:
           fi
 
       - name: Process data
+        id: process
         if: (steps.resolve.outputs.resolved != '' || steps.resolve.outputs.is_auto != 'true')
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
@@ -228,7 +331,10 @@ jobs:
           fi
 
       - name: Commit and push backfill data
-        if: "!cancelled() && (steps.resolve.outputs.resolved != '' || steps.resolve.outputs.is_auto != 'true')"
+        if: >-
+          !cancelled() &&
+          (steps.resolve.outputs.resolved != '' || steps.resolve.outputs.is_auto != 'true') &&
+          (steps.resolve.outputs.identity_mode != 'true' || steps.process.outcome == 'success')
         run: |
           # Dashboard reads aggregates from Supabase now — only version data/.
           FILER_IDS="${{ steps.resolve.outputs.resolved }}"
@@ -251,33 +357,17 @@ jobs:
         run: |
           IS_AUTO="${{ steps.resolve.outputs.is_auto }}"
           FILER_IDS="${{ steps.resolve.outputs.resolved }}"
+          IDENTITY_MODE="${{ steps.resolve.outputs.identity_mode }}"
 
-          # Auto mode: re-trigger if there are more filers to process
-          if [ "$IS_AUTO" = "true" ]; then
-            if [ -z "$FILER_IDS" ]; then
-              echo "Auto backfill complete — all discrepancies addressed."
-              exit 0
-            fi
-            echo "Re-triggering auto backfill for next batch..."
-            bash scripts/dispatch_retry.sh backfill.yml --ref main -f filer_ids=auto
+          if [ "$IS_AUTO" = "true" ] && [ -z "$FILER_IDS" ]; then
+            echo "Auto backfill complete — all discrepancies addressed."
             exit 0
           fi
 
-          # Manual filer-targeted: chain on whatever is left.
-          #
-          # This used to declare success unconditionally, on the assumption
-          # that one run finishes the whole list. It does not. fetch.py breaks
-          # out of the filer loop after two consecutive rate-limit failures,
-          # and F5 throttles a runner after roughly 25 searches — so a
-          # 21-filer request processed TWO committees, recovered zero rows,
-          # and reported "Filer-targeted backfill complete." Nineteen
-          # committees were never attempted and nothing said so.
-          #
-          # Auto and date-range modes both chain; only this branch did not.
-          # completed_backfills.txt already records what the scraper actually
-          # finished — the same evidence auto mode uses, and deliberately not
-          # the requested list, because filers the run never reached appear in
-          # neither the completed nor the incomplete file.
+          # Every targeted mode first proves which requested filers actually
+          # drained their fetch queues. Identity remediation additionally uses
+          # freshly-validated window progress, so a large filer can advance
+          # across runners even when no whole filer finishes in one run.
           if [ -n "$FILER_IDS" ]; then
             COMPLETED_FILE="data/completed_backfills.txt"
             REMAIN=""
@@ -288,19 +378,63 @@ jobs:
               REMAIN="$REMAIN $fid"
             done
             REMAIN=$(echo "$REMAIN" | xargs || true)
+
+            if [ "$IDENTITY_MODE" = "true" ]; then
+              if [ -z "$REMAIN" ]; then
+                echo "Fresh exports complete; dispatching an exact identity verification."
+                bash scripts/dispatch_retry.sh coverage-diff.yml --ref "${{ github.ref_name }}" \
+                  -f filer_ids="${{ steps.resolve.outputs.verification_ids }}" \
+                  -f start_year="${{ inputs.start_year }}" \
+                  -f recheck=true \
+                  -f require_no_missing=true \
+                  -f resume_auto_backfill="$IS_AUTO"
+                exit 0
+              fi
+              CHAIN="${{ github.event.inputs.chain_index || '1' }}"
+              if [ "$CHAIN" -ge 40 ] 2>/dev/null; then
+                echo "Identity-remediation chain limit reached ($CHAIN): $REMAIN"
+                exit 0
+              fi
+              if [ "${{ steps.fetch.outputs.progress }}" = "0" ] && \
+                 [ "${{ steps.fetch.outputs.retry }}" != "1" ]; then
+                echo "This forced run validated no new windows — stopping the chain."
+                echo "Still unfinished: $REMAIN"
+                exit 0
+              fi
+              NEXT=$((CHAIN + 1))
+              echo "Chaining forced run $NEXT for: $REMAIN"
+              bash scripts/dispatch_retry.sh backfill.yml --ref "${{ github.ref_name }}" \
+                -f filer_ids="$REMAIN" \
+                -f start_year="${{ inputs.start_year }}" \
+                -f date_field="${{ inputs.date_field }}" \
+                -f identity_remediation=true \
+                -f resume_auto="$IS_AUTO" \
+                -f end_date="${{ steps.fetch.outputs.end_date }}" \
+                -f verification_filer_ids="${{ steps.resolve.outputs.verification_ids }}" \
+                -f chain_index="$NEXT"
+              exit 0
+            fi
+
+            # Count-based auto mode keeps its historical batch chain. Exact
+            # auto mode never reaches this branch; it alternates fresh fetches
+            # with targeted identity diffs instead.
+            if [ "$IS_AUTO" = "true" ]; then
+              echo "Re-triggering count-based auto backfill for next batch..."
+              bash scripts/dispatch_retry.sh backfill.yml --ref "${{ github.ref_name }}" \
+                -f filer_ids=auto
+              exit 0
+            fi
+
             if [ -z "$REMAIN" ]; then
               echo "Filer-targeted backfill complete — every requested filer finished."
               exit 0
             fi
+
             CHAIN="${{ github.event.inputs.chain_index || '1' }}"
             if [ "$CHAIN" -ge 40 ] 2>/dev/null; then
               echo "Chain limit reached ($CHAIN) with these still unfinished: $REMAIN"
               exit 0
             fi
-            # A run that finished NOTHING would otherwise queue an identical
-            # run forever. Rate limiting is the expected reason, and it clears
-            # with time rather than with retries, so stop and let the operator
-            # (or the next scheduled run) resume.
             FINISHED=$(echo "$FILER_IDS" | wc -w)
             LEFT=$(echo "$REMAIN" | wc -w)
             if [ "$FINISHED" = "$LEFT" ]; then
@@ -310,11 +444,19 @@ jobs:
             fi
             NEXT=$((CHAIN + 1))
             echo "Chaining run $NEXT for $LEFT unfinished filer(s): $REMAIN"
-            bash scripts/dispatch_retry.sh backfill.yml --ref main \
+            bash scripts/dispatch_retry.sh backfill.yml --ref "${{ github.ref_name }}" \
               -f filer_ids="$REMAIN" \
               -f start_year="${{ inputs.start_year }}" \
               -f date_field="${{ inputs.date_field }}" \
               -f chain_index="$NEXT"
+            exit 0
+          fi
+
+          # Defensive fallback for auto mode if it ever resolves no list above.
+          if [ "$IS_AUTO" = "true" ]; then
+            echo "Re-triggering auto backfill for next batch..."
+            bash scripts/dispatch_retry.sh backfill.yml --ref "${{ github.ref_name }}" \
+              -f filer_ids=auto
             exit 0
           fi
 
@@ -344,7 +486,7 @@ jobs:
               exit 0
             fi
             RETRIGGER_ARGS="$RETRIGGER_ARGS -f chain_index=$((BATCH + 1))"
-            bash scripts/dispatch_retry.sh backfill.yml --ref main $RETRIGGER_ARGS
+            bash scripts/dispatch_retry.sh backfill.yml --ref "${{ github.ref_name }}" $RETRIGGER_ARGS
           else
             echo "Backfill complete — all windows fetched."
           fi

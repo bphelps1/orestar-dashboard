@@ -1152,6 +1152,25 @@ def report() -> int:
 
 # ---------------------------------------------------------------------------
 
+def _remediation_verification_failures(
+    entries: dict,
+    requested_ids,
+    successful_ids: set[str],
+) -> list[str]:
+    """Explain why a targeted missing-ID remediation cannot be certified."""
+    failures = []
+    for fid in map(str, requested_ids):
+        row = entries.get(fid) or {}
+        missing = row.get("missing") or []
+        if fid not in successful_ids:
+            failures.append(f"{fid}: no fresh usable diff")
+        elif missing:
+            failures.append(f"{fid}: {len(missing)} missing IDs remain")
+    return failures
+
+
+# ---------------------------------------------------------------------------
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -1164,6 +1183,12 @@ def main() -> int:
                     help="stop on our own terms, before the job timeout does it for us")
     ap.add_argument("--recheck", action="store_true",
                     help="re-diff committees already recorded")
+    ap.add_argument(
+        "--require-no-missing",
+        action="store_true",
+        help=("fail unless every explicitly targeted filer is freshly diffed "
+              "and has no genuinely missing transaction IDs"),
+    )
     ap.add_argument("--report", action="store_true")
     args = ap.parse_args()
 
@@ -1172,6 +1197,16 @@ def main() -> int:
                         datefmt="%H:%M:%S")
     if args.report:
         return report()
+    if args.require_no_missing and not args.filer_ids:
+        ap.error("--require-no-missing requires explicit --filer-ids")
+    if args.require_no_missing and not args.recheck:
+        ap.error("--require-no-missing requires --recheck for fresh evidence")
+    if args.require_no_missing and args.start_year != 2006:
+        ap.error("--require-no-missing requires --start-year=2006")
+    if args.limit < 0:
+        ap.error("--limit must be zero or positive")
+    if args.require_no_missing and args.limit:
+        ap.error("--require-no-missing cannot be combined with --limit")
 
     if args.filer_ids:
         targets = [{"filer_id": f, "name": ""} for f in args.filer_ids]
@@ -1207,9 +1242,10 @@ def main() -> int:
     consecutive_failures = 0
     blocked = False
     budget_exhausted = False
+    successful_ids: set[str] = set()
 
     with sync_playwright() as p:
-        browser, _ctx, page = F.setup_browser(p)
+        browser, _ctx, page = F.setup_browser_retrying(p)
         try:
             for t in targets:
                 if deadline and time.monotonic() > deadline:
@@ -1277,7 +1313,7 @@ def main() -> int:
                         browser.close()
                     except Exception:                    # noqa: BLE001
                         pass
-                    browser, _ctx, page = F.setup_browser(p)
+                    browser, _ctx, page = F.setup_browser_retrying(p)
                     continue
                 consecutive_failures = 0
                 ours, superseded_by_us = _held_ids(fid, start, end)
@@ -1311,6 +1347,7 @@ def main() -> int:
                          len(surplus), len(missing), len(superseded))
                 _save(entries)
                 done += 1
+                successful_ids.add(fid)
         finally:
             browser.close()
 
@@ -1320,6 +1357,23 @@ def main() -> int:
     # Stable machine-readable line for the workflow's chain guard.
     print(f"RUN_RESULT attempted={attempted} usable={done} "
           f"unusable={unusable} blocked={1 if blocked else 0}")
+    if args.require_no_missing:
+        failures = _remediation_verification_failures(
+            entries, args.filer_ids, successful_ids,
+        )
+        if failures:
+            # A fresh usable diff settles the fate of that fetch tree even
+            # when the overall multi-filer gate fails. Clean filers are done;
+            # filers still missing IDs must be fetched from scratch next time.
+            # Preserve progress only for targets whose verification itself was
+            # unusable, so a later run can retry the check without re-fetching.
+            if successful_ids:
+                F.clear_identity_progress(sorted(successful_ids))
+            for failure in failures:
+                log.error("Identity remediation verification failed — %s", failure)
+            print(f"REMEDIATION_VERIFY passed=0 failed={len(failures)}")
+            return 1
+        print(f"REMEDIATION_VERIFY passed={len(successful_ids)} failed=0")
     return 0
 
 

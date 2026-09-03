@@ -44,6 +44,11 @@ on:
         required: false
         default: ""
         type: string
+      start_year:
+        description: "Start year used by a targeted remediation verification"
+        required: false
+        default: "2006"
+        type: string
       limit:
         description: "Stop after this many committees (0 = until the time budget)"
         required: false
@@ -53,6 +58,16 @@ on:
         description: "Re-diff committees already recorded, worst-staleness first"
         required: false
         default: "true"
+        type: boolean
+      require_no_missing:
+        description: "Fail unless every targeted filer is freshly usable with zero missing IDs"
+        required: false
+        default: "false"
+        type: boolean
+      resume_auto_backfill:
+        description: "Internal: resume automatic identity remediation after verification"
+        required: false
+        default: "false"
         type: boolean
       chain_index:
         description: "Internal: which run of the retrigger chain this is"
@@ -67,7 +82,10 @@ permissions:
 # by await-orestar below; sharing a concurrency group with another self-chaining
 # workflow lets GitHub evict the older pending run when a third one is queued.
 concurrency:
-  group: coverage-diff
+  # A pending rolling sweep may be replaced by a newer sweep, but a targeted
+  # remediation gate is the only proof that a forced fetch worked. Give every
+  # gate its own group; await-orestar still serializes actual site access.
+  group: ${{ inputs.require_no_missing == true && format('coverage-diff-gate-{0}', github.run_id) || 'coverage-diff' }}
   cancel-in-progress: false
 
 jobs:
@@ -87,6 +105,15 @@ jobs:
           # Waiting consumes the job timeout. Keep this bounded so the
           # collector's own 70-minute deadline can always stop and commit.
           max-wait-minutes: "30"
+          fail-on-timeout: "true"
+
+      - name: Refresh branch after coordination wait
+        # Unique remediation-gate concurrency groups prevent pending gates
+        # from evicting one another. They also make this refresh essential:
+        # an older gate may have pushed a diff/ledger while this run waited.
+        run: |
+          git fetch --depth=1 origin "$GITHUB_REF_NAME"
+          git reset --hard FETCH_HEAD
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -127,6 +154,12 @@ jobs:
           if [ "${{ inputs.recheck }}" != "false" ]; then
             ARGS="$ARGS --recheck"
           fi
+          if [ -n "${{ inputs.start_year }}" ]; then
+            ARGS="$ARGS --start-year ${{ inputs.start_year }}"
+          fi
+          if [ "${{ inputs.require_no_missing }}" = "true" ]; then
+            ARGS="$ARGS --require-no-missing"
+          fi
           # Comfortably inside the time left after the bounded coordination and
           # setup steps, so the script stops on its own terms rather than being
           # killed mid-committee.
@@ -156,6 +189,13 @@ jobs:
           # Backward-compatible name used by the chain guard below.
           echo "diffed=$USABLE" >> "$GITHUB_OUTPUT"
           echo "Attempted $ATTEMPTED committees: $USABLE usable, $UNUSABLE unusable, blocked=$BLOCKED."
+
+      - name: Clear verified remediation progress
+        id: cleanup
+        if: always() && steps.diff.outcome == 'success' && inputs.require_no_missing == true
+        run: |
+          python scraper/fetch.py --clear-identity-progress \
+            --filer-ids ${{ inputs.filer_ids }}
 
       # always(), NOT !cancelled().
       #
@@ -187,7 +227,9 @@ jobs:
           # shallow re-sync if the push is rejected rather than 500s. It exists
           # because the same class of failure hit the data pipeline before.
           bash scripts/push_data.sh "data: coverage diff progress [skip ci]" \
-            data/coverage_diff.json
+            data/coverage_diff.json \
+            data/identity_remediation_windows.json \
+            data/identity_remediation_failures.json
 
       - name: Re-trigger if committees remain
         # A cancellation is an instruction to STOP. `always()` by itself made
@@ -217,7 +259,23 @@ jobs:
             echo "Diff results were not committed successfully — stopping the chain."
             exit 0
           fi
+          if [ "${{ inputs.require_no_missing }}" = "true" ] && \
+             [ "${{ steps.cleanup.outcome }}" != "success" ]; then
+            echo "Verified progress was not cleared successfully — stopping the chain."
+            exit 0
+          fi
           if [ -n "${{ inputs.filer_ids }}" ]; then
+            if [ "${{ inputs.resume_auto_backfill }}" = "true" ]; then
+              if [ "${{ inputs.require_no_missing }}" != "true" ]; then
+                echo "resume_auto_backfill requires the no-missing verification gate."
+                exit 1
+              fi
+              echo "Identity verification passed — resuming the automatic remediation queue."
+              bash scripts/dispatch_retry.sh backfill.yml --ref "${{ github.ref_name }}" \
+                -f filer_ids=auto \
+                -f start_year="${{ inputs.start_year }}" \
+                -f chain_index=1
+            fi
             echo "Targeted filer run complete — targeted runs never chain."
             exit 0
           fi
@@ -262,4 +320,5 @@ jobs:
             -f chain_index="$NEXT" \
             -f limit="${{ inputs.limit }}" \
             -f filer_ids="${{ inputs.filer_ids }}" \
+            -f start_year="${{ inputs.start_year }}" \
             -f recheck="$RECHECK"

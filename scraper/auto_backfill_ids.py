@@ -1,25 +1,37 @@
 #!/usr/bin/env python3
 """
-Find filers with ORESTAR discrepancies that haven't been backfilled yet.
-Writes the top 10 filer IDs (by discrepancy size) to /tmp/auto_backfill_ids.txt.
+Find filers with ORESTAR discrepancies that still need work.
+
+An exact identity diff is authoritative and selects one missing-ID filer at a
+time. Committees without a usable diff fall back to batches of ten ranked by
+the count survey (or, as a last resort, dollar discrepancy). Selected IDs are
+written to /tmp/auto_backfill_ids.txt.
 
 Incomplete filers (from previous failed runs) are removed from the "done"
-list so they get retried, but are NOT priority-boosted — they come up
-naturally by discrepancy size. This prevents the same large filers from
-blocking every batch.
+list so they get retried. Ordinary retries come up naturally by discrepancy
+size; only a partially validated identity tree is priority-boosted so its
+frozen snapshot can finish before another tree starts.
 
 Used by the backfill workflow in auto mode.
 """
 
 import json
+import os
 from pathlib import Path
 
 FILERS_DIR = Path("data/aggregated/filers")
 INDEX_FILE = Path("data/aggregated/filer_index.json")
 TRACKING_FILE = Path("data/backfilled_filers.txt")
 INCOMPLETE_FILE = Path("data/incomplete_backfills.txt")
-OUTPUT_FILE = Path("/tmp/auto_backfill_ids.txt")
+OUTPUT_FILE = Path(os.environ.get("AUTO_BACKFILL_OUTPUT", "/tmp/auto_backfill_ids.txt"))
+MODE_FILE = Path(os.environ.get("AUTO_BACKFILL_MODE_OUTPUT",
+                                "/tmp/auto_backfill_mode.txt"))
+END_DATE_FILE = Path(os.environ.get("AUTO_BACKFILL_END_DATE_OUTPUT",
+                                    "/tmp/auto_backfill_end_date.txt"))
+RESUME_FILE = Path(os.environ.get("AUTO_BACKFILL_RESUME_OUTPUT",
+                                  "/tmp/auto_backfill_resume.txt"))
 BATCH_SIZE = 10
+IDENTITY_BATCH_SIZE = 1
 
 print(f"Working directory: {Path.cwd()}")
 print(f"Filers dir exists: {FILERS_DIR.exists()}")
@@ -58,7 +70,7 @@ if INCOMPLETE_FILE.exists():
     if retryable:
         print(f"Incomplete filers to retry: {len(retryable)}")
     if deferred:
-        print(f"Deferred filers (>{MAX_RETRIES} retries, skipping for now): {len(deferred)} — {sorted(deferred)}")
+        print(f"Deferred filers (>={MAX_RETRIES} retries, skipping for now): {len(deferred)} — {sorted(deferred)}")
 
 # ---------------------------------------------------------------------------
 # Priority
@@ -79,21 +91,109 @@ if INCOMPLETE_FILE.exists():
 # the discrepancy a backfill can address; the rest is balance reconciliation
 # for dormant and pre-ORESTAR committees, which is a different job.
 SURVEY_FILE = Path("data/coverage_survey.json")
+DIFF_FILE = Path("data/coverage_diff.json")
+IDENTITY_PROGRESS_FILE = Path("data/identity_remediation_windows.json")
 
-filers = []
+
+def _evidence_day(row):
+    """Comparable YYYY-MM-DD horizon for a survey or exact diff row."""
+    return str(row.get("range_end") or row.get("checked") or "")[:10]
+
+
+def _active_identity_roots():
+    """Return filer -> frozen end date for resumable top-level windows."""
+    try:
+        rows = json.loads(IDENTITY_PROGRESS_FILE.read_text()) \
+            if IDENTITY_PROGRESS_FILE.exists() else []
+    except Exception:
+        rows = []
+    roots = {}
+    for row in rows:
+        key = row.get("key") if isinstance(row, dict) else None
+        if (not isinstance(key, list) or len(key) != 7 or key[0] != "ALL"
+                or key[3:6] != ["None", "None", "None"]):
+            continue
+        fid, end = str(key[-1]), str(key[2])
+        if end > roots.get(fid, ""):
+            roots[fid] = end
+    return roots
+
+
 survey_rows = []
 if SURVEY_FILE.exists():
     try:
         survey_rows = json.loads(SURVEY_FILE.read_text())
     except Exception as exc:
         print(f"Could not read {SURVEY_FILE}: {exc}")
+survey_days = {
+    str(row.get("filer_id") or ""): _evidence_day(row)
+    for row in survey_rows
+    if row.get("filer_id")
+}
+active_roots = _active_identity_roots()
 
-if survey_rows:
+filers = []
+deferred_exact = []
+exact_covered = set()
+diff_rows = []
+if DIFF_FILE.exists():
+    try:
+        diff_rows = json.loads(DIFF_FILE.read_text())
+    except Exception as exc:
+        print(f"Could not read {DIFF_FILE}: {exc}")
+
+if diff_rows:
+    for r in diff_rows:
+        fid = str(r.get("filer_id") or "")
+        if not fid or r.get("complete") is None:
+            continue
+        missing = len(r.get("missing") or [])
+        # Exact evidence suppresses count evidence when it is at least as
+        # current. A known missing-ID result remains authoritative even when
+        # deferred; falling back to a count fetch would recreate the mixed
+        # surplus/shortfall bug this path exists to avoid.
+        if missing or _evidence_day(r) >= survey_days.get(fid, ""):
+            exact_covered.add(fid)
+        if missing <= 0:
+            continue
+        # A partially completed forced tree is resumable even after the
+        # ordinary retry limit. Its validated leaves must not be thrown away
+        # merely because one runner made no progress.
+        if incomplete.get(fid, 0) >= MAX_RETRIES and fid not in active_roots:
+            deferred_exact.append((missing, fid, r.get("name", "")))
+            continue
+        # Exact identity evidence overrides the historical done list. A count
+        # can say "done" while a withdrawn row cancels the missing row.
+        filers.append((missing, fid, r.get("name", "")))
+
+# "Deferred" means after the other exact-missing committees, not abandoned.
+# Without this pass the workflow eventually emitted no IDs and reported all
+# discrepancies addressed while known missing transaction IDs remained.
+if not filers and deferred_exact:
+    filers = deferred_exact
+    print(f"Retrying {len(filers)} deferred exact-missing filer(s); "
+          "no non-deferred identity work remains")
+
+if filers:
+    # Finish an active frozen tree before starting another committee. This is
+    # what turns a later `filer_ids=auto` dispatch into a true resume.
+    filers.sort(key=lambda row: (row[1] in active_roots, row[0], row[1]),
+                 reverse=True)
+    batch = filers[:IDENTITY_BATCH_SIZE]
+    unit = "identity rows"
+    mode = "identity"
+    print(f"Exact diff covers {len(exact_covered)} committees; "
+          f"{len(filers)} still have genuinely missing transaction IDs")
+if not filers and survey_rows:
     surveyed_complete = 0
     for r in survey_rows:
         fid = str(r.get("filer_id") or "")
         missing = int(r.get("missing") or 0)
-        if not fid or fid in already_done:
+        # A usable identity diff is authoritative in both directions. Never
+        # let a stale count survey re-queue a filer whose exact missing set is
+        # empty, or replace a deferred exact remediation with count evidence.
+        if (not fid or fid in already_done or fid in exact_covered
+                or incomplete.get(fid, 0) >= MAX_RETRIES):
             continue
         if missing <= 0:
             # Measured and complete. Not "not yet done" — there is nothing to
@@ -106,7 +206,8 @@ if survey_rows:
     filers.sort(reverse=True)
     batch = filers[:BATCH_SIZE]
     unit = "rows"
-else:
+    mode = "count"
+elif not filers:
     # No survey yet — fall back to the dollar ranking so the workflow still
     # functions, but say so, because this is the ranking that misfires.
     print("No coverage survey found — falling back to dollar-discrepancy order. "
@@ -116,7 +217,8 @@ else:
             d = json.load(fh)
         slug = d.get("slug", f.stem)
         fid = slug_to_fid.get(slug)
-        if not fid or fid in already_done:
+        if (not fid or fid in already_done or fid in exact_covered
+                or incomplete.get(fid, 0) >= MAX_RETRIES):
             continue
         disc = abs(d.get("orestar_discrepancy", 0))
         yearly = d.get("yearly_discrepancies", {})
@@ -128,26 +230,28 @@ else:
     filers.sort(reverse=True)
     batch = filers[:BATCH_SIZE]
     unit = "dollars"
+    mode = "count"
 
 if batch:
     print(f"Found {len(filers)} filers to backfill, selecting top {len(batch)} by {unit}:")
     for score, fid, name in batch:
         retry = " (RETRY)" if fid in incomplete else ""
-        shown = f"{score:,} rows missing" if unit == "rows" else f"${score:,.2f}"
+        shown = (f"{score:,} exact IDs missing" if unit == "identity rows"
+                 else f"{score:,} rows missing" if unit == "rows"
+                 else f"${score:,.2f}")
         print(f"  {fid}: {shown} — {name}{retry}")
     OUTPUT_FILE.write_text(" ".join(fid for _, fid, _ in batch))
-    # Clear retryable incomplete filers that are being retried this batch.
-    # Deferred filers (>MAX_RETRIES) stay in the file with their counts.
-    batch_fids = {fid for _, fid, _ in batch}
-    retried = set(incomplete.keys()) & batch_fids
-    if retried and INCOMPLETE_FILE.exists():
-        remaining = {fid: cnt for fid, cnt in incomplete.items() if fid not in retried}
-        if remaining:
-            INCOMPLETE_FILE.write_text(
-                "\n".join(f"{fid}:{cnt}" for fid, cnt in sorted(remaining.items())) + "\n"
-            )
-        else:
-            INCOMPLETE_FILE.unlink()
-        print(f"Cleared {len(retried)} filers from incomplete list")
+    MODE_FILE.write_text(mode + "\n")
+    if mode == "identity" and batch[0][1] in active_roots:
+        END_DATE_FILE.write_text(active_roots[batch[0][1]] + "\n")
+        RESUME_FILE.write_text("true\n")
+        print(f"Resuming frozen identity tree through {active_roots[batch[0][1]]}")
+    else:
+        END_DATE_FILE.unlink(missing_ok=True)
+        RESUME_FILE.write_text("false\n")
 else:
+    OUTPUT_FILE.unlink(missing_ok=True)
+    END_DATE_FILE.unlink(missing_ok=True)
+    RESUME_FILE.write_text("false\n")
+    MODE_FILE.write_text(("identity" if diff_rows else "count") + "\n")
     print("No filers with unresolved discrepancies.")
