@@ -437,3 +437,36 @@ def test_remediation_gate_allows_surplus_but_requires_fresh_zero_missing() -> No
     assert DC._remediation_verification_failures(entries, ["2"], {"2"}) == [
         "2: 1 missing IDs remain"
     ]
+
+
+def test_gate_retry_targets_only_transient_inconclusive_filers() -> None:
+    entries = {"clean": {"missing": []}}
+    assert DC._retryable_gate_targets(
+        ["clean", "retry"], entries, {"clean"},
+        {"retry": "session_expired"},
+    ) == ["retry"]
+    assert DC._retryable_gate_targets(
+        ["retry"], entries, set(), {"retry": "unusable_window"},
+    ) == ["retry"]
+    assert DC._retryable_gate_targets(
+        ["first", "second", "not-attempted"], entries, set(),
+        {"first": "session_expired", "second": "unusable_window"},
+    ) == ["first", "second", "not-attempted"]
+
+
+@pytest.mark.parametrize("reason", ["partition_mismatch", "time_budget"])
+def test_gate_retry_rejects_structural_or_budget_refusals(reason) -> None:
+    assert DC._retryable_gate_targets(
+        ["stop"], {}, set(), {"stop": reason},
+    ) == []
+
+
+def test_gate_retry_rejects_any_fresh_missing_result() -> None:
+    entries = {
+        "missing": {"missing": ["123"]},
+        "retry": {"missing": []},
+    }
+    assert DC._retryable_gate_targets(
+        ["missing", "retry"], entries, {"missing"},
+        {"retry": "session_expired"},
+    ) == []

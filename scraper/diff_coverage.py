@@ -89,6 +89,11 @@ RECHECK_PER_NEW = 2
 # scheduled attempt.
 MAX_CONSECUTIVE_FAILURES = 2
 
+# These failures can plausibly clear after the shared ORESTAR/F5 cooldown.
+# Proved partition mismatches and exhausted time budgets are structural for the
+# current query/run and must not spend automatic verification retries.
+RETRYABLE_GATE_FAILURES = frozenset({"unusable_window", "session_expired"})
+
 # ORESTAR shows 50 rows per page and stops offering "Next" after 100 of them.
 # Not documented anywhere; measured by paging filer 221 and getting exactly
 # 5,000 of 5,266 rows with the button quietly disabled.
@@ -1169,6 +1174,36 @@ def _remediation_verification_failures(
     return failures
 
 
+def _retryable_gate_targets(
+    requested_ids,
+    entries: dict,
+    successful_ids: set[str],
+    failure_reasons: dict[str, str],
+) -> list[str]:
+    """Return only targets whose inconclusive gate can safely be retried.
+
+    A multi-filer gate may prove some filers clean before another hits a
+    transient refusal. Retry just the inconclusive filers. If any fresh usable
+    result still has missing IDs, or any inconclusive result is structural,
+    stop instead: a cooldown cannot fix either condition.
+    """
+    requested = list(map(str, requested_ids or []))
+    if any(
+        fid in successful_ids and (entries.get(fid) or {}).get("missing")
+        for fid in requested
+    ):
+        return []
+    inconclusive = [fid for fid in requested if fid not in successful_ids]
+    recorded_reasons = [
+        failure_reasons[fid] for fid in inconclusive if fid in failure_reasons
+    ]
+    if not inconclusive or not recorded_reasons or any(
+        reason not in RETRYABLE_GATE_FAILURES for reason in recorded_reasons
+    ):
+        return []
+    return inconclusive
+
+
 # ---------------------------------------------------------------------------
 
 def main() -> int:
@@ -1239,6 +1274,7 @@ def main() -> int:
     done = 0
     attempted = 0
     unusable = 0
+    unusable_reasons: dict[str, str] = {}
     consecutive_failures = 0
     blocked = False
     budget_exhausted = False
@@ -1288,6 +1324,10 @@ def main() -> int:
                     _record_failure(entries, t, failure_reason)
                     _save(entries)
                     unusable += 1
+                    # Session/refusal failures may clear after an F5 cooldown.
+                    # A proved partition mismatch or an exhausted time budget
+                    # will not, so do not ask the workflow to repeat those.
+                    unusable_reasons[fid] = failure_reason
                     if budget_exhausted:
                         log.info("Time budget reached inside filer %s — stopping cleanly.",
                                  fid)
@@ -1355,8 +1395,13 @@ def main() -> int:
     log.info("Attempted %d committees; usable %d; unusable %d; blocked %s",
              attempted, done, unusable, "yes" if blocked else "no")
     # Stable machine-readable line for the workflow's chain guard.
+    retry_ids = _retryable_gate_targets(
+        args.filer_ids, entries, successful_ids, unusable_reasons,
+    )
     print(f"RUN_RESULT attempted={attempted} usable={done} "
-          f"unusable={unusable} blocked={1 if blocked else 0}")
+          f"unusable={unusable} blocked={1 if blocked else 0} "
+          f"retryable={1 if retry_ids else 0} "
+          f"retry_ids={','.join(retry_ids)}")
     if args.require_no_missing:
         failures = _remediation_verification_failures(
             entries, args.filer_ids, successful_ids,
