@@ -46,6 +46,16 @@ RAW_DIR = Path(__file__).parent.parent / "data" / "_raw"
 FETCHED_LOG     = RAW_DIR.parent / "fetched_windows.json"       # filed-date mode
 FETCHED_LOG_TRN = RAW_DIR.parent / "fetched_windows_tran.json"  # tran-date mode
 
+# Identity remediation deliberately ignores the ordinary count/held-row skips:
+# a withdrawn row can cancel a genuinely missing row inside the same window.
+# Large filers still need to converge across rate-limited runners, though, so
+# forced runs keep a separate ledger containing ONLY windows queried during the
+# current remediation chain. A leaf enters the ledger only after its fresh
+# export row count exactly matches ORESTAR's reported count; capped parents enter
+# only as routing hints after they have been freshly measured.
+IDENTITY_PROGRESS_FILE = RAW_DIR.parent / "identity_remediation_windows.json"
+IDENTITY_FAILURE_FILE = RAW_DIR.parent / "identity_remediation_failures.json"
+
 TRAN_TYPES = ["C", "E", "O", "OA", "OD", "OR"]
 # C  = Contribution,          E  = Expenditure
 # O  = Other,                 OA = Other Account Receivable
@@ -59,9 +69,9 @@ PAGE_RENDER_WAIT = 7
 # Polite pause between downloads
 REQUEST_DELAY = 1.5
 
-# ORESTAR truncates Excel exports at this many data rows.  Any downloaded file
-# with exactly this many rows is treated as capped and the window is split into
-# two halves so both halves can be fetched independently.
+# ORESTAR truncates Excel exports at this many data rows. A file at the cap is
+# split unless the freshly rendered result count proves 4,999 is the complete
+# result rather than a truncated one.
 ORESTAR_ROW_CAP = 4999
 
 # {(type, start, end, amt_from, amt_to, payee_prefix): true_record_count}
@@ -107,14 +117,20 @@ def setup_browser(playwright):
         headless=False,
         args=["--no-sandbox", "--disable-dev-shm-usage", "--start-maximized"],
     )
-    context = browser.new_context(
-        user_agent=USER_AGENT,
-        accept_downloads=True,
-        no_viewport=True,
-    )
-    page = context.new_page()
-    _load_search_form(page)
-    return browser, context, page
+    try:
+        context = browser.new_context(
+            user_agent=USER_AGENT,
+            accept_downloads=True,
+            no_viewport=True,
+        )
+        page = context.new_page()
+        _load_search_form(page)
+        return browser, context, page
+    except Exception:
+        # _setup_browser_retrying may immediately try again. Do not leave a
+        # headed Chromium process behind for every failed setup attempt.
+        browser.close()
+        raise
 
 
 def _load_search_form(page) -> None:
@@ -191,6 +207,20 @@ def _return_to_search(page) -> None:
             return
     # Not on search form (e.g. after a results page or error) — full reload
     _load_search_form(page)
+
+
+def _read_results_count(page, timeout_seconds: int = 20) -> int | None:
+    """Poll the current results page until its record count has rendered."""
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        text = page.inner_text("body", timeout=30_000)
+        match = re.search(r"([\d,]+)\s+records found", text)
+        if match:
+            return int(match.group(1).replace(",", ""))
+        if "no records found" in text.lower():
+            return 0
+        page.wait_for_timeout(250)
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -409,11 +439,10 @@ PAYEE_PREFIXES = (
     # close.
     #
     # This list is drawn from characters actually observed in the data, so a
-    # first character nobody has seen yet would still be dropped. The real
-    # guarantee would be reconciling each sub-query's rows against the parent
-    # window's true record count, which ORESTAR prints on the results page and
-    # does NOT cap. That check is not built yet; until it is, this tier is
-    # thorough rather than provably complete.
+    # first character nobody has seen yet would still be dropped. Forced
+    # identity remediation catches that case by reconciling every set of child
+    # counts against the parent's uncapped count. Ordinary backfill remains
+    # thorough rather than provably complete at this tier.
     + ["(", '"', "[", "'", ".", "-", "@", "?"]
 )
 
@@ -513,13 +542,109 @@ def _flush_record_counts() -> None:
         existing = json.loads(path.read_text()) if path.exists() else []
     except Exception:
         existing = []
-    seen = {tuple(e["key"]) for e in existing}
-    for key, n in RECORD_COUNTS.items():
-        if key not in seen:
-            existing.append({"key": list(key), "reported": n})
+    # These are observations, not immutable facts. A force-refresh must be
+    # able to replace a stale count for the same window.
+    merged = {tuple(e["key"]): int(e["reported"]) for e in existing}
+    merged.update({tuple(key): int(n) for key, n in RECORD_COUNTS.items()})
+    existing = [
+        {"key": list(key), "reported": n}
+        for key, n in sorted(merged.items(), key=lambda item: tuple(map(str, item[0])))
+    ]
     path.write_text(json.dumps(existing, indent=1))
     log.info("Recorded ORESTAR's own counts for %d windows -> %s",
              len(RECORD_COUNTS), path.name)
+
+
+def _save_identity_progress(progress: dict[tuple, int]) -> None:
+    """Persist the resumable forced-remediation window ledger."""
+    rows = [
+        {"key": list(key), "reported": int(count)}
+        for key, count in sorted(
+            progress.items(), key=lambda item: tuple(map(str, item[0]))
+        )
+    ]
+    IDENTITY_PROGRESS_FILE.write_text(json.dumps(rows, indent=1) + "\n")
+
+
+def _save_identity_failures(failures: dict[tuple, int]) -> None:
+    """Persist forced partition failures so one bad split cannot loop forever."""
+    rows = [
+        {"key": list(key), "failures": int(count)}
+        for key, count in sorted(
+            failures.items(), key=lambda item: tuple(map(str, item[0]))
+        )
+    ]
+    IDENTITY_FAILURE_FILE.write_text(json.dumps(rows, indent=1) + "\n")
+
+
+def _identity_progress(*, reset_filers=()) -> dict[tuple, int]:
+    """Load forced-remediation progress, optionally resetting named filers."""
+    try:
+        rows = json.loads(IDENTITY_PROGRESS_FILE.read_text()) \
+            if IDENTITY_PROGRESS_FILE.exists() else []
+    except Exception:
+        rows = []
+    progress = {
+        tuple(row["key"]): int(row["reported"])
+        for row in rows
+        if isinstance(row, dict) and isinstance(row.get("key"), list)
+        and len(row["key"]) == 7
+    }
+    reset = {str(fid) for fid in reset_filers}
+    if reset:
+        progress = {
+            key: count for key, count in progress.items()
+            if str(key[-1]) not in reset
+        }
+        _save_identity_progress(progress)
+    return progress
+
+
+def _identity_failures(*, reset_filers=()) -> dict[tuple, int]:
+    """Load per-partition reconciliation failures, optionally resetting filers."""
+    try:
+        rows = json.loads(IDENTITY_FAILURE_FILE.read_text()) \
+            if IDENTITY_FAILURE_FILE.exists() else []
+    except Exception:
+        rows = []
+    failures = {
+        tuple(row["key"]): int(row["failures"])
+        for row in rows
+        if isinstance(row, dict) and isinstance(row.get("key"), list)
+        and len(row["key"]) == 7
+    }
+    reset = {str(fid) for fid in reset_filers}
+    if reset:
+        failures = {
+            key: count for key, count in failures.items()
+            if str(key[-1]) not in reset
+        }
+        _save_identity_failures(failures)
+    return failures
+
+
+def clear_identity_progress(filer_ids) -> None:
+    """Forget completed remediation chains for the named filer IDs."""
+    _identity_progress(reset_filers=filer_ids)
+    _identity_failures(reset_filers=filer_ids)
+    log.info("Cleared identity-remediation progress for %d filer(s)",
+             len({str(fid) for fid in filer_ids}))
+
+
+def _quarantine_identity_cache(filer_ids) -> None:
+    """Move every requested filer's old top-level Excel outside the merge glob."""
+    stale_dir = RAW_DIR / ".identity_stale"
+    stale_dir.mkdir(parents=True, exist_ok=True)
+    moved = 0
+    for fid in {str(value) for value in filer_ids}:
+        for pattern in (f"filer{fid}_*.xls*", f"verified_filer{fid}_*.xls*"):
+            for path in RAW_DIR.glob(pattern):
+                destination = stale_dir / path.name
+                destination.unlink(missing_ok=True)
+                path.replace(destination)
+                moved += 1
+    if moved:
+        log.info("Quarantined %d stale filer exports before forced refresh", moved)
 
 
 def _record_truncated(tran_type: str, day: date, rows: int) -> None:
@@ -759,6 +884,11 @@ CAPPED = Path("__capped__")
 # Also distinct from None: nothing was downloaded, but nothing needs to be.
 COMPLETE = Path("__complete__")
 
+# Returned when a fresh query explicitly says "No records found". Empty
+# narrowing children are part of a complete partition and must be recorded as
+# zero, not retried forever because there is no export link.
+EMPTY = Path("__empty__")
+
 
 # ---------------------------------------------------------------------------
 # What we already hold
@@ -861,6 +991,77 @@ def _filer_window_path(raw_dir: Path, filer_id: str, tran_type: str,
     return raw_dir / f"{stem}.xlsx"
 
 
+def _filer_progress_key(window, filer_id: str) -> tuple:
+    """Stable ledger key for one filer narrowing window."""
+    tran_type, start, end, amt_from, amt_to, payee_prefix = window
+    return (tran_type, str(start), str(end), str(amt_from), str(amt_to),
+            str(payee_prefix), str(filer_id))
+
+
+def _identity_tree_failures(progress: dict[tuple, int], branches: dict):
+    """Return (parent, kind, message) failures for capped partitions."""
+    failures = []
+    for parent, children in branches.items():
+        absent = [child for child in children if child not in progress]
+        if absent:
+            failures.append(
+                (parent, "missing",
+                 f"{parent}: {len(absent)} child windows lack fresh evidence")
+            )
+            continue
+        parent_count = progress.get(parent)
+        child_count = sum(progress[child] for child in children)
+        if parent_count != child_count:
+            failures.append(
+                (parent, "mismatch",
+                 f"{parent}: parent reported {parent_count}, children sum to {child_count}")
+            )
+    return failures
+
+
+def _identity_tree_errors(progress: dict[tuple, int], branches: dict) -> list[str]:
+    """Backward-compatible messages for partition reconciliation tests/reporting."""
+    return [
+        message for _parent, _kind, message
+        in _identity_tree_failures(progress, branches)
+    ]
+
+
+def _discard_identity_subtrees(progress: dict[tuple, int], branches: dict,
+                               parents) -> int:
+    """Remove invalid parents and every known descendant from the resume ledger."""
+    pending = list(parents)
+    discarded = set()
+    while pending:
+        key = pending.pop()
+        if key in discarded:
+            continue
+        discarded.add(key)
+        pending.extend(branches.get(key, ()))
+    removed = 0
+    for key in discarded:
+        if key in progress:
+            progress.pop(key)
+            removed += 1
+    return removed
+
+
+def _discard_identity_filer(progress: dict[tuple, int], filer_id: str) -> int:
+    """Remove every resumable window for a filer after a repeated tree failure."""
+    doomed = [key for key in progress if str(key[-1]) == str(filer_id)]
+    for key in doomed:
+        progress.pop(key)
+    return len(doomed)
+
+
+def _needs_filer_split(result: Path, rows: int, reported: int | None) -> bool:
+    """Whether a returned filer window still needs narrowing."""
+    return result is CAPPED or (
+        rows >= ORESTAR_ROW_CAP
+        and not (reported is not None and rows == reported)
+    )
+
+
 def download_filer_window(
     page,
     context,
@@ -872,6 +1073,8 @@ def download_filer_window(
     amt_from: str | None = None,
     amt_to: str | None = None,
     payee_prefix: str | None = None,
+    *,
+    force: bool = False,
 ) -> Path | None:
     """
     Download transactions for a specific filer in a date range.
@@ -885,7 +1088,23 @@ def download_filer_window(
     """
     filename = _filer_window_path(raw_dir, filer_id, tran_type, start, end,
                                   amt_from, amt_to, payee_prefix)
-    if filename.exists():
+    stale_path = None
+    download_path = filename
+    if force:
+        # Never let process.py merge an old cached export after a failed forced
+        # refresh. Move it outside RAW_DIR's non-recursive Excel glob first,
+        # and download to a second hidden directory so replacement is atomic.
+        stale_dir = raw_dir / ".identity_stale"
+        refresh_dir = raw_dir / ".identity_refresh"
+        stale_dir.mkdir(parents=True, exist_ok=True)
+        refresh_dir.mkdir(parents=True, exist_ok=True)
+        stale_path = stale_dir / filename.name
+        download_path = refresh_dir / filename.name
+        stale_path.unlink(missing_ok=True)
+        download_path.unlink(missing_ok=True)
+        if filename.exists():
+            filename.replace(stale_path)
+    elif filename.exists():
         rows = _validate_download(filename)
         if rows >= 0:
             # A cap file is returned too, not skipped: the driver reads its row
@@ -936,13 +1155,19 @@ def download_filer_window(
         # shortfalls here had to be measured by hand in a browser.
         reported = None
         try:
-            _m = re.search(r"([\d,]+)\s+records found", page.inner_text("body"))
-            if _m:
-                reported = int(_m.group(1).replace(",", ""))
+            reported = _read_results_count(page)
+            if reported is not None:
                 RECORD_COUNTS[(tran_type, str(start), str(end), str(amt_from),
                                str(amt_to), str(payee_prefix), str(filer_id))] = reported
         except Exception:
             pass                      # a missing count must never fail the fetch
+
+        if reported == 0:
+            log.info("Filer %s %s %s→%s%s: no records", filer_id, tran_type,
+                     start, end, _narrowing_label(amt_from, amt_to, payee_prefix))
+            _return_to_search(page)
+            time.sleep(REQUEST_DELAY)
+            return EMPTY
 
         # The count is on the page BEFORE we export, and it tells us the export
         # will be truncated. Downloading it anyway buys nothing: the first 4,999
@@ -975,7 +1200,7 @@ def download_filer_window(
         # "complete" could skip a window that really is short, so the
         # conservative direction is the only safe one.
         held = None
-        if reported is not None:
+        if reported is not None and not force:
             held = _held_rows(filer_id, tran_type, start, end,
                               amt_from, amt_to, payee_prefix)
             if held is not None and held >= reported:
@@ -986,7 +1211,7 @@ def download_filer_window(
                 time.sleep(REQUEST_DELAY)
                 return COMPLETE
 
-        if reported is not None and reported >= ORESTAR_ROW_CAP:
+        if reported is not None and reported > ORESTAR_ROW_CAP:
             log.info("Filer %s %s %s→%s%s: %d records, hold %s — over the cap, "
                      "narrowing without downloading", filer_id, tran_type, start, end,
                      _narrowing_label(amt_from, amt_to, payee_prefix), reported,
@@ -1025,17 +1250,46 @@ def download_filer_window(
             with page.expect_download(timeout=60_000) as dl_info:
                 page.goto(f"{EXPORT_URL}?OWASP_CSRFTOKEN={csrf}",
                           wait_until="commit", timeout=60_000)
-            dl_info.value.save_as(filename)
+            dl_info.value.save_as(download_path)
         else:
-            filename.write_bytes(resp.content)
+            download_path.write_bytes(resp.content)
 
         # Validate
-        row_count = _validate_download(filename)
+        row_count = _validate_download(download_path)
         if row_count < 0:
             log.warning("Invalid download for filer %s %s→%s — deleting", filer_id, start, end)
-            filename.unlink(missing_ok=True)
+            download_path.unlink(missing_ok=True)
             _return_to_search(page)
             return None
+
+        # Forced evidence is useful only if the export reconciles with the
+        # count on the page we just queried. A short export must not enter the
+        # merge or the resumable ledger as though the window were complete.
+        if force and (reported is None or row_count != reported):
+            log.warning(
+                "Forced filer %s %s %s→%s%s: export contained %d rows, "
+                "reported count was %s — refusing partial refresh",
+                filer_id, tran_type, start, end,
+                _narrowing_label(amt_from, amt_to, payee_prefix), row_count,
+                "unknown" if reported is None else str(reported),
+            )
+            download_path.unlink(missing_ok=True)
+            _return_to_search(page)
+            return None
+
+        if force:
+            download_path.replace(filename)
+            if stale_path is not None:
+                stale_path.unlink(missing_ok=True)
+        if row_count == ORESTAR_ROW_CAP and reported == row_count:
+            # process.py conservatively skips every filer*.xlsx at 4,999 rows
+            # because legacy files at the cap were usually truncated. This one
+            # is different: the fresh page count proved that 4,999 is the
+            # complete leaf. Mark the filename so the merger can distinguish it.
+            verified = filename.with_name(f"verified_{filename.name}")
+            verified.unlink(missing_ok=True)
+            filename.replace(verified)
+            filename = verified
 
         log.info("Filer %s %s %s→%s%s: %d rows (%d bytes)",
                  filer_id, tran_type, start, end,
@@ -1088,17 +1342,23 @@ def _setup_browser_retrying(playwright, attempts: int = 3):
             time.sleep(15 * attempt)
 
 
-def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
-    """Fetch all transactions for specific filers, one year at a time.
+def backfill_filers(
+    filer_ids: list[str],
+    start_year: int = 2006,
+    *,
+    end_date: date | None = None,
+    identity_remediation: bool = False,
+    reset_identity_progress: bool = False,
+) -> None:
+    """Fetch all transactions for specific filers through the narrowing queue.
 
-    Instead of downloading the full 2006-2026 range and recursively splitting,
-    breaks each filer into year-by-year requests. Each year is small enough to
-    usually succeed in one request. If a year fails, the next run retries just
-    that year — previously downloaded years are skipped (files exist on disk).
-
-    Writes data/incomplete_backfills.txt with filer IDs that had incomplete years.
+    Normal backfills use count and database shortcuts. Identity remediation
+    cannot: a surplus row can cancel a missing row in every count comparison.
+    Forced runs therefore query fresh data and resume only from their own
+    validated progress ledger.
     """
-    current_year = date.today().year
+    target_end = end_date or date.today()
+    current_year = target_end.year
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     incomplete_filers: list[str] = []
     # Filers this run actually FINISHED. The caller cannot infer this from the
@@ -1110,12 +1370,28 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
     # list have no downloaded file of any kind, and filer 4572 — marked done,
     # nothing on disk — is 9,031 rows short of ORESTAR for 2023 alone.
     completed_filers: list[str] = []
-    prior_counts = _prior_counts()
+    prior_counts = _prior_counts() if not identity_remediation else {}
+    progress = _identity_progress(
+        reset_filers=filer_ids if identity_remediation and reset_identity_progress else ()
+    ) if identity_remediation else {}
+    failure_counts = _identity_failures(
+        reset_filers=filer_ids if identity_remediation and reset_identity_progress else ()
+    ) if identity_remediation else {}
+    initial_progress_keys = set(progress)
+    if identity_remediation:
+        progressed_filers = {str(key[-1]) for key in progress}
+        quarantine = [
+            fid for fid in filer_ids
+            if reset_identity_progress or str(fid) not in progressed_filers
+        ]
+        _quarantine_identity_cache(quarantine)
+    retryable_tree_failure = False
     skipped_windows = 0
 
-    log.info("Backfilling %d filers year-by-year from %d to %d (%d window counts "
-             "known from earlier runs)", len(filer_ids), start_year, current_year,
-             len(prior_counts))
+    log.info("Backfilling %d filers from %d to %d (%d ordinary counts, %d forced "
+             "windows known; identity remediation=%s)", len(filer_ids), start_year,
+             current_year, len(prior_counts), len(progress),
+             "yes" if identity_remediation else "no")
 
     with sync_playwright() as p:
         browser, context, page = _setup_browser_retrying(p)
@@ -1123,6 +1399,7 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
         for fid in filer_ids:
             log.info("=== Backfilling filer %s ===", fid)
             filer_had_error = False
+            forced_branches = {}
             # ONE window per filer, not one per year.
             #
             # This used to seed twenty-one year windows per committee, which
@@ -1142,7 +1419,7 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
             # type, then date, then amount, then contributor whenever a window
             # comes back at the cap — a big filer just pays one extra level of
             # splitting, and #77 means that tree is only ever derived once.
-            queue = [("ALL", date(start_year, 1, 1), date.today(),
+            queue = [("ALL", date(start_year, 1, 1), target_end,
                       None, None, None)]
             qi = 0
             while qi < len(queue):
@@ -1153,10 +1430,30 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
                 # learned this window's size and we hold that many rows. Without
                 # this the retrigger chain re-walks the same ground every run and
                 # spends its whole request budget rediscovering what it knew.
-                _pk = (tran_type, str(yr_start), str(yr_end), str(af), str(at),
-                       str(pp), str(fid))
+                _pk = _filer_progress_key(queue[qi], fid)
+                if identity_remediation and _pk in progress:
+                    _fresh = progress[_pk]
+                    if _fresh > ORESTAR_ROW_CAP:
+                        subs = _narrow_filer(tran_type, yr_start, yr_end, af, at, pp)
+                        if not subs:
+                            log.error(
+                                "Forced progress contains terminal capped window for "
+                                "filer %s %s %s→%s%s — INCOMPLETE",
+                                fid, tran_type, yr_start, yr_end,
+                                _narrowing_label(af, at, pp),
+                            )
+                            filer_had_error = True
+                        else:
+                            queue[qi + 1:qi + 1] = subs
+                            forced_branches[_pk] = [
+                                _filer_progress_key(child, fid) for child in subs
+                            ]
+                    skipped_windows += 1
+                    qi += 1
+                    continue
+
                 _prior = prior_counts.get(_pk)
-                if _prior is not None:
+                if not identity_remediation and _prior is not None:
                     _held = _held_rows(fid, tran_type, yr_start, yr_end, af, at, pp)
                     if _held is not None and _held >= _prior:
                         log.debug("Filer %s %s %s→%s: hold %d of %d from a previous "
@@ -1191,93 +1488,172 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
                             skipped_windows += 1
                             qi += 1
                             continue
+                result = None
                 try:
-                    result = download_filer_window(page, context, fid, yr_start, yr_end,
-                                                   RAW_DIR, tran_type, af, at, pp)
-                    if result is not None:
-                        consecutive_failures = 0
-
-                        # Cap check — the whole point of this rewrite. A window
-                        # at the cap is NOT a completed window; it is a
-                        # truncated one, and until now the filer path kept it
-                        # and moved on.
-                        #
-                        # CAPPED means ORESTAR's count already said so and no
-                        # file was downloaded; a cap file left on disk by an
-                        # older run reaches the same conclusion the slow way.
-                        # COMPLETE means we already hold every row it reports,
-                        # so there is nothing to narrow and nothing to fetch.
-                        if result is COMPLETE:
-                            rows = 0
-                            skipped_windows += 1
-                        elif result is CAPPED:
-                            rows = ORESTAR_ROW_CAP
-                        else:
-                            rows = _validate_download(result)
-                        if rows >= ORESTAR_ROW_CAP:
-                            subs = _narrow_filer(tran_type, yr_start, yr_end, af, at, pp)
-                            if subs:
-                                log.warning(
-                                    "Cap hit for filer %s %s %s→%s%s (%d rows) — "
-                                    "narrowing into %d sub-queries",
-                                    fid, tran_type, yr_start, yr_end,
-                                    _narrowing_label(af, at, pp), rows, len(subs),
-                                )
-                                queue[qi + 1:qi + 1] = subs
-                            else:
-                                log.error(
-                                    "TRUNCATED: filer %s %s %s%s returned %d rows "
-                                    "(cap %d) and no dimension is left — INCOMPLETE",
-                                    fid, tran_type, yr_start,
-                                    _narrowing_label(af, at, pp), rows, ORESTAR_ROW_CAP,
-                                )
-                                _record_truncated(f"filer{fid}:{tran_type}", yr_start, rows)
-                    else:
-                        # A window that returned nothing is not done. Leave it
-                        # unmarked so the next run retries it, and flag the
-                        # filer so auto-backfill does not tick it off.
-                        filer_had_error = True
-                    qi += 1
+                    result = download_filer_window(
+                        page, context, fid, yr_start, yr_end, RAW_DIR,
+                        tran_type, af, at, pp, force=identity_remediation,
+                    )
                 except SessionExpiredError:
-                    filer_had_error = True
                     log.warning("Session expired during filer %s year %d — restarting browser", fid, year)
                     try:
                         browser.close()
                     except Exception:
                         pass
-                    browser, context, page = setup_browser(p)
-                    # Retry this window once with a fresh session — carrying the
-                    # narrowing dimensions. The retry used to drop them and
-                    # re-request the un-narrowed window, which put a capped
-                    # result back on disk under the un-narrowed name and undid
-                    # the split it was retrying.
                     try:
-                        result = download_filer_window(page, context, fid, yr_start, yr_end,
-                                                       RAW_DIR, tran_type, af, at, pp)
-                        if result is not None:
-                            consecutive_failures = 0
-                            # Deliberately no qi += 1: re-enter on the same
-                            # window so the cap check runs against the file we
-                            # just fetched. It is on disk now, so this costs a
-                            # validate, not a request.
-                            continue
+                        browser, context, page = _setup_browser_retrying(p)
+                        result = download_filer_window(
+                            page, context, fid, yr_start, yr_end, RAW_DIR,
+                            tran_type, af, at, pp, force=identity_remediation,
+                        )
+                        if result is None:
+                            consecutive_failures += 1
                     except Exception as exc:
                         log.error("Failed filer %s year %d after restart: %s", fid, year, exc)
-                    consecutive_failures += 1
-                    if consecutive_failures >= 2:
-                        log.warning("Rate-limited — stopping filer %s at year %d", fid, year)
-                        break
-                    qi += 1
+                        filer_had_error = True
+                        consecutive_failures += 1
                 except Exception as exc:
                     filer_had_error = True
                     log.error("Failed filer %s year %d: %s", fid, year, exc)
                     consecutive_failures += 1
-                    if consecutive_failures >= 2:
-                        log.warning("Rate-limited — stopping filer %s at year %d", fid, year)
-                        break
+
+                if consecutive_failures >= 2:
+                    log.warning("Rate-limited — stopping filer %s at year %d", fid, year)
+                    break
+
+                if result is None:
+                    # A window that returned nothing is not done. Leave it
+                    # unmarked so the next run retries it.
+                    filer_had_error = True
+                    if identity_remediation:
+                        consecutive_failures += 1
+                        if consecutive_failures >= 2:
+                            log.warning("Forced refresh produced no result twice — "
+                                        "stopping filer %s", fid)
+                            break
                     qi += 1
+                    continue
+
+                consecutive_failures = 0
+
+                # Cap check — a capped result is routing evidence, never a
+                # completed leaf. COMPLETE is possible only in normal mode.
+                reported = RECORD_COUNTS.get(_pk)
+                if result is COMPLETE:
+                    rows = 0
+                    skipped_windows += 1
+                elif result is EMPTY:
+                    rows = 0
+                elif result is CAPPED:
+                    rows = reported if reported is not None else ORESTAR_ROW_CAP
+                else:
+                    rows = _validate_download(result)
+
+                needs_split = _needs_filer_split(result, rows, reported)
+                if needs_split:
+                    subs = _narrow_filer(tran_type, yr_start, yr_end, af, at, pp)
+                    if subs:
+                        log.warning(
+                            "Cap hit for filer %s %s %s→%s%s (%d rows) — "
+                            "narrowing into %d sub-queries",
+                            fid, tran_type, yr_start, yr_end,
+                            _narrowing_label(af, at, pp), rows, len(subs),
+                        )
+                        queue[qi + 1:qi + 1] = subs
+                        if identity_remediation:
+                            forced_branches[_pk] = [
+                                _filer_progress_key(child, fid) for child in subs
+                            ]
+                            if reported is None or reported <= ORESTAR_ROW_CAP:
+                                log.error("Forced capped window for filer %s has no "
+                                          "fresh reported count — INCOMPLETE", fid)
+                                filer_had_error = True
+                            else:
+                                progress[_pk] = reported
+                    else:
+                        log.error(
+                            "TRUNCATED: filer %s %s %s%s returned %d rows "
+                            "(cap %d) and no dimension is left — INCOMPLETE",
+                            fid, tran_type, yr_start,
+                            _narrowing_label(af, at, pp), rows, ORESTAR_ROW_CAP,
+                        )
+                        _record_truncated(
+                            f"filer{fid}:{tran_type}:{yr_start}:{yr_end}:"
+                            f"{af}:{at}:{pp}",
+                            yr_start,
+                            rows,
+                        )
+                        filer_had_error = True
+                elif identity_remediation:
+                    if result is COMPLETE or reported is None or rows != reported:
+                        log.error(
+                            "Forced leaf for filer %s %s %s→%s%s did not reconcile "
+                            "(%d exported, %s reported) — INCOMPLETE",
+                            fid, tran_type, yr_start, yr_end,
+                            _narrowing_label(af, at, pp), rows,
+                            "unknown" if reported is None else str(reported),
+                        )
+                        if result is not COMPLETE:
+                            result.unlink(missing_ok=True)
+                        filer_had_error = True
+                    else:
+                        progress[_pk] = reported
+                qi += 1
             else:
                 # Queue drained without breaking — filer is done
+                if identity_remediation:
+                    tree_failures = _identity_tree_failures(progress, forced_branches)
+                    failed_parents = {
+                        parent for parent, _kind, _message in tree_failures
+                    }
+                    for parent in set(forced_branches) - failed_parents:
+                        failure_counts.pop(parent, None)
+                    mismatch_parents = set()
+                    for parent, kind, tree_error in tree_failures:
+                        if kind == "missing":
+                            # A leaf request failed, but every sibling remains
+                            # valid. Preserve the subtree so the next resume
+                            # skips directly to the absent key.
+                            log.error("Forced partition remains incomplete: %s",
+                                      tree_error)
+                            continue
+                        mismatch_parents.add(parent)
+                        failure_counts[parent] = failure_counts.get(parent, 0) + 1
+                        attempt = failure_counts[parent]
+                        log.error(
+                            "Forced partition reconciliation failed (attempt %d): %s",
+                            attempt, tree_error,
+                        )
+                        if attempt == 1:
+                            retryable_tree_failure = True
+                        else:
+                            log.error(
+                                "Partition %s failed reconciliation repeatedly; "
+                                "leaving the filer incomplete for diagnosis",
+                                parent,
+                            )
+                    if mismatch_parents:
+                        repeated = any(
+                            failure_counts[parent] > 1 for parent in mismatch_parents
+                        )
+                        if repeated:
+                            # Do not leave an ancestor root that makes the auto
+                            # selector treat this diagnosed-bad filer as an
+                            # active resume forever, starving every healthy
+                            # candidate behind it. It remains on the deferred
+                            # exact-missing list and can start a new snapshot
+                            # after the other work drains.
+                            removed = _discard_identity_filer(progress, fid)
+                        else:
+                            removed = _discard_identity_subtrees(
+                                progress, forced_branches, mismatch_parents,
+                            )
+                        log.warning(
+                            "Invalidated %d forced window(s) so the bad subtree "
+                            "cannot be trusted on resume", removed,
+                        )
+                    if failed_parents:
+                        filer_had_error = True
                 if not filer_had_error:
                     log.info("Filer %s: all %d windows downloaded successfully", fid, len(queue))
                     completed_filers.append(fid)
@@ -1304,6 +1680,9 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
     # windows. Only _fetch_range flushed them, so every filer-targeted fetch
     # threw its counts away and left nothing to verify against.
     _flush_record_counts()
+    if identity_remediation:
+        _save_identity_progress(progress)
+        _save_identity_failures(failure_counts)
 
     # What this run finished, for the workflow to tick off. Rewritten each run,
     # never appended: it describes THIS run, and the durable record is
@@ -1325,23 +1704,33 @@ def backfill_filers(filer_ids: list[str], start_year: int = 2006) -> None:
     # filers that keep failing (e.g. huge filers that always get rate-limited).
     # Format: "filer_id:count" per line.
     incomplete_path = RAW_DIR.parent / "incomplete_backfills.txt"
+    existing: dict[str, int] = {}
+    if incomplete_path.exists():
+        for line in incomplete_path.read_text().strip().split("\n"):
+            if ":" in line:
+                fid_str, cnt = line.split(":", 1)
+                existing[fid_str.strip()] = int(cnt)
+            elif line.strip():
+                existing[line.strip()] = 1
+    for fid in completed_filers:
+        existing.pop(str(fid), None)
     if incomplete_filers:
         log.info("Incomplete filers (will retry next run): %s", " ".join(incomplete_filers))
-        existing: dict[str, int] = {}
-        if incomplete_path.exists():
-            for line in incomplete_path.read_text().strip().split("\n"):
-                if ":" in line:
-                    fid_str, cnt = line.split(":", 1)
-                    existing[fid_str.strip()] = int(cnt)
-                elif line.strip():
-                    existing[line.strip()] = 1
         for fid in incomplete_filers:
             existing[fid] = existing.get(fid, 0) + 1
             log.info("  Filer %s: retry count now %d", fid, existing[fid])
+    if existing:
         incomplete_path.write_text(
             "\n".join(f"{fid}:{cnt}" for fid, cnt in sorted(existing.items())) + "\n"
         )
+    else:
+        incomplete_path.unlink(missing_ok=True)
     log.info("Filer backfill complete. Raw files in: %s", RAW_DIR)
+    if identity_remediation:
+        retained_progress = len(set(progress) - initial_progress_keys)
+        print(f"REMEDIATION_RESULT progress={retained_progress} "
+              f"retry={1 if retryable_tree_failure else 0} "
+              f"completed={len(completed_filers)} incomplete={len(incomplete_filers)}")
 
 
 def run_incremental(days: int = 14) -> None:
@@ -1458,8 +1847,15 @@ def main() -> None:
         default="incremental",
     )
     parser.add_argument("--days",        type=int,  default=14,   dest="days")
-    parser.add_argument("--start-year",  type=int,  default=2017, dest="start_year")
+    parser.add_argument("--start-year",  type=int,  default=None, dest="start_year")
     parser.add_argument("--end-year",    type=int,  default=None, dest="end_year")
+    parser.add_argument(
+        "--end-date",
+        type=date.fromisoformat,
+        default=None,
+        dest="end_date",
+        help="Freeze filer-targeted searches at YYYY-MM-DD across chained runs",
+    )
     parser.add_argument(
         "--date-field",
         choices=["filed", "tran"],
@@ -1472,20 +1868,60 @@ def main() -> None:
         nargs="+",
         help="Fetch all transactions for specific filer committee IDs (bypasses --mode)",
     )
+    parser.add_argument(
+        "--identity-remediation",
+        action="store_true",
+        help=("Force fresh filer exports without count/held-row shortcuts; "
+              "requires --filer-ids"),
+    )
+    parser.add_argument(
+        "--reset-identity-progress",
+        action="store_true",
+        help="Start a new forced-remediation chain for the requested filer IDs",
+    )
+    parser.add_argument(
+        "--clear-identity-progress",
+        action="store_true",
+        help="Clear completed forced-remediation progress for --filer-ids and exit",
+    )
 
     args = parser.parse_args()
 
+    if (args.identity_remediation or args.reset_identity_progress
+            or args.clear_identity_progress) and not args.filer_ids:
+        parser.error("identity remediation options require --filer-ids")
+    if args.reset_identity_progress and not args.identity_remediation:
+        parser.error("--reset-identity-progress requires --identity-remediation")
+    if args.identity_remediation and args.end_date is None:
+        parser.error("--identity-remediation requires a frozen --end-date")
+
+    start_year = args.start_year
+    if start_year is None:
+        start_year = 2006 if args.filer_ids else 2017
+    if args.identity_remediation and start_year != 2006:
+        parser.error("--identity-remediation requires --start-year=2006")
+
+    if args.clear_identity_progress:
+        clear_identity_progress(args.filer_ids)
+        return
+
     if args.filer_ids:
-        backfill_filers(args.filer_ids, start_year=args.start_year)
+        backfill_filers(
+            args.filer_ids,
+            start_year=start_year,
+            end_date=args.end_date,
+            identity_remediation=args.identity_remediation,
+            reset_identity_progress=args.reset_identity_progress,
+        )
     elif args.mode == "incremental":
         run_incremental(days=args.days)
     elif args.mode == "backfill":
-        run_backfill(start_year=args.start_year, end_year=args.end_year,
+        run_backfill(start_year=start_year, end_year=args.end_year,
                      date_field=args.date_field)
     elif args.mode == "test":
         run_test(days=args.days)
     elif args.mode == "count-remaining":
-        count_remaining(start_year=args.start_year, end_year=args.end_year,
+        count_remaining(start_year=start_year, end_year=args.end_year,
                         date_field=args.date_field)
     elif args.mode == "check-gaps":
         check_split_gaps(date_field=args.date_field)
