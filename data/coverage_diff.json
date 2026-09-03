@@ -82,8 +82,8 @@
  {
   "filer_id": "324",
   "name": "Democratic Party of Lane County",
-  "orestar": 11963,
-  "held": 11980,
+  "orestar": 12058,
+  "held": 12075,
   "complete": false,
   "surplus": [
    "3536434",
@@ -106,7 +106,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "221",
@@ -179,7 +179,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "20136",
@@ -206,7 +206,7 @@
  {
   "filer_id": "21770",
   "name": "Committee to Elect Jeremy Gordon",
-  "orestar": 286,
+  "orestar": 287,
   "held": 286,
   "complete": false,
   "surplus": [
@@ -225,10 +225,11 @@
    "5658787",
    "5658799",
    "5658801",
-   "5658813"
+   "5658813",
+   "5787805"
   ],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "317",
@@ -248,7 +249,7 @@
    "149900"
   ],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "24622",
@@ -266,10 +267,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01",
-  "last_attempt": "2026-09-02",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "20709",
@@ -313,7 +311,7 @@
   "filer_id": "24681",
   "name": "Friends for Neyssa-sary Change",
   "orestar": 371,
-  "held": 374,
+  "held": 375,
   "complete": false,
   "surplus": [
    "5556849",
@@ -323,11 +321,10 @@
    "5626526"
   ],
   "missing": [
-   "5673102",
-   "5718023"
+   "5673102"
   ],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "22134",
@@ -344,7 +341,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "24362",
@@ -396,7 +393,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "19768",
@@ -415,7 +412,7 @@
    "5528948"
   ],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "24775",
@@ -453,27 +450,16 @@
   "filer_id": "24710",
   "name": "Joanna Robinson for Oregon",
   "orestar": 299,
-  "held": 294,
+  "held": 302,
   "complete": false,
   "surplus": [
    "5564577",
    "5564579",
-   "5564580",
-   "5784945"
+   "5564580"
   ],
-  "missing": [
-   "5787758",
-   "5787759",
-   "5787760",
-   "5787761",
-   "5787762",
-   "5787765",
-   "5787768",
-   "5787772",
-   "5787773"
-  ],
+  "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "24826",
@@ -536,7 +522,7 @@
    "5716344"
   ],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "349",
@@ -648,7 +634,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "306",
@@ -681,6 +667,21 @@
   ],
   "superseded": [],
   "checked": "2026-09-02"
+ },
+ {
+  "filer_id": "24732",
+  "name": "Friends of Nichole Biechler",
+  "orestar": 47,
+  "held": 50,
+  "complete": false,
+  "surplus": [
+   "5576699",
+   "5785023",
+   "5785026"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "618",
@@ -742,7 +743,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "16986",
@@ -843,7 +844,7 @@
    "5766594"
   ],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "125",
@@ -862,33 +863,34 @@
  {
   "filer_id": "24020",
   "name": "We The People",
-  "orestar": 119,
+  "orestar": 120,
   "held": 121,
   "complete": false,
   "surplus": [
    "5379122",
    "5767225"
   ],
-  "missing": [],
+  "missing": [
+   "5788158"
+  ],
   "superseded": [],
-  "checked": "2026-09-01",
-  "last_attempt": "2026-09-02",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "24427",
   "name": "Let Us Paddle PAC",
-  "orestar": 159,
+  "orestar": 160,
   "held": 161,
   "complete": false,
   "surplus": [
    "5589183",
    "5589185"
   ],
-  "missing": [],
+  "missing": [
+   "5789567"
+  ],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "21358",
@@ -916,7 +918,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "16291",
@@ -930,7 +932,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "20790",
@@ -958,7 +960,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "24457",
@@ -1000,21 +1002,23 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "22066",
   "name": "Friends for Denise Krause",
-  "orestar": 1019,
+  "orestar": 1020,
   "held": 1021,
   "complete": false,
   "surplus": [
    "5539691",
    "5600771"
   ],
-  "missing": [],
+  "missing": [
+   "5755196"
+  ],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "21883",
@@ -1028,7 +1032,10 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-02",
+  "last_attempt": "2026-09-03",
+  "last_failure": "unusable_window",
+  "failure_count": 1
  },
  {
   "filer_id": "23028",
@@ -1152,21 +1159,17 @@
  {
   "filer_id": "24572",
   "name": "Friends of Rachel Philip",
-  "orestar": 179,
-  "held": 175,
+  "orestar": 180,
+  "held": 180,
   "complete": false,
   "surplus": [
    "5648743"
   ],
   "missing": [
-   "5784792",
-   "5784794",
-   "5784798",
-   "5784799",
-   "5787813"
+   "5784777"
   ],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "16508",
@@ -1231,7 +1234,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "5067",
@@ -1275,17 +1278,18 @@
  {
   "filer_id": "23238",
   "name": "Evergreen PAC",
-  "orestar": 1004,
-  "held": 1004,
+  "orestar": 1008,
+  "held": 1007,
   "complete": false,
   "surplus": [
    "5610563"
   ],
   "missing": [
-   "5787697"
+   "5788232",
+   "5789751"
   ],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "23277",
@@ -1420,7 +1424,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "24241",
@@ -1490,28 +1494,33 @@
  {
   "filer_id": "24822",
   "name": "Pencil PAC",
-  "orestar": 61,
-  "held": 62,
+  "orestar": 66,
+  "held": 66,
   "complete": false,
   "surplus": [
    "5561338"
   ],
-  "missing": [],
+  "missing": [
+   "5788130"
+  ],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "24918",
   "name": "Whitney Rilee for Baker County Commissioner",
-  "orestar": 62,
+  "orestar": 64,
   "held": 63,
   "complete": false,
   "surplus": [
    "5598603"
   ],
-  "missing": [],
+  "missing": [
+   "5789677",
+   "5789684"
+  ],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "24692",
@@ -1537,7 +1546,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "24509",
@@ -1563,7 +1572,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "24621",
@@ -1576,7 +1585,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "24973",
@@ -1591,7 +1600,7 @@
    "5686840"
   ],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "24854",
@@ -1617,7 +1626,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "18748",
@@ -1656,7 +1665,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "18844",
@@ -1684,7 +1693,7 @@
    "5699127"
   ],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "24563",
@@ -1736,7 +1745,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "24679",
@@ -1751,7 +1760,7 @@
    "5596044"
   ],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "24446",
@@ -1770,16 +1779,14 @@
   "filer_id": "24761",
   "name": "Myrna for Oregon",
   "orestar": 412,
-  "held": 412,
+  "held": 413,
   "complete": false,
   "surplus": [
    "5663327"
   ],
-  "missing": [
-   "5787351"
-  ],
+  "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "5115",
@@ -1849,7 +1856,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "22133",
@@ -1880,15 +1887,15 @@
  {
   "filer_id": "21352",
   "name": "Summers for Oregon",
-  "orestar": 862,
-  "held": 863,
+  "orestar": 874,
+  "held": 875,
   "complete": false,
   "surplus": [
    "5674836"
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "23140",
@@ -1927,7 +1934,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "18462",
@@ -1953,7 +1960,10 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-02",
+  "last_attempt": "2026-09-03",
+  "last_failure": "unusable_window",
+  "failure_count": 1
  },
  {
   "filer_id": "21678",
@@ -2264,32 +2274,23 @@
   "filer_id": "21827",
   "name": "Friends for Sue Piazza",
   "orestar": 367,
-  "held": 366,
-  "complete": false,
-  "surplus": [
-   "5785957"
-  ],
-  "missing": [
-   "5787192",
-   "5787194"
-  ],
+  "held": 367,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "20272",
   "name": "Friends of Bobby Levy",
   "orestar": 883,
   "held": 883,
-  "complete": false,
-  "surplus": [
-   "5752411"
-  ],
-  "missing": [
-   "5787188"
-  ],
+  "complete": true,
+  "surplus": [],
+  "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "15343",
@@ -8655,5 +8656,38 @@
   "missing": [],
   "superseded": [],
   "checked": "2026-09-02"
+ },
+ {
+  "filer_id": "23526",
+  "name": "Milligan for Polk",
+  "orestar": 21,
+  "held": 21,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-09-03"
+ },
+ {
+  "filer_id": "24844",
+  "name": "Crary For Oregon Senate",
+  "orestar": 26,
+  "held": 26,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-09-03"
+ },
+ {
+  "filer_id": "24595",
+  "name": "Friends of Chris Cummings",
+  "orestar": 125,
+  "held": 125,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-09-03"
  }
 ]
