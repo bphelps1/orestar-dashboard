@@ -1245,7 +1245,7 @@ def main() -> int:
     successful_ids: set[str] = set()
 
     with sync_playwright() as p:
-        browser, _ctx, page = F.setup_browser(p)
+        browser, _ctx, page = F.setup_browser_retrying(p)
         try:
             for t in targets:
                 if deadline and time.monotonic() > deadline:
@@ -1313,7 +1313,7 @@ def main() -> int:
                         browser.close()
                     except Exception:                    # noqa: BLE001
                         pass
-                    browser, _ctx, page = F.setup_browser(p)
+                    browser, _ctx, page = F.setup_browser_retrying(p)
                     continue
                 consecutive_failures = 0
                 ours, superseded_by_us = _held_ids(fid, start, end)

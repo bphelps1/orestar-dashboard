@@ -57,6 +57,25 @@ class _Response:
     content = b"fresh export"
 
 
+def test_browser_setup_retries_transient_initial_navigation(monkeypatch) -> None:
+    expected = (object(), object(), object())
+    attempts = []
+    sleeps = []
+
+    def setup(_playwright):
+        attempts.append(True)
+        if len(attempts) < 3:
+            raise F.PlaywrightTimeout("Page.goto timed out")
+        return expected
+
+    monkeypatch.setattr(F, "setup_browser", setup)
+    monkeypatch.setattr(F.time, "sleep", sleeps.append)
+
+    assert F.setup_browser_retrying(object()) is expected
+    assert len(attempts) == 3
+    assert sleeps == [15, 30]
+
+
 def test_results_count_polls_and_accepts_zero() -> None:
     delayed = _ResultPage(["Loading…", "Still loading…", "1,234 records found"])
     assert F._read_results_count(delayed) == 1234

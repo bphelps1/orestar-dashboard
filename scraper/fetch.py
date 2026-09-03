@@ -127,7 +127,7 @@ def setup_browser(playwright):
         _load_search_form(page)
         return browser, context, page
     except Exception:
-        # _setup_browser_retrying may immediately try again. Do not leave a
+        # setup_browser_retrying may immediately try again. Do not leave a
         # headed Chromium process behind for every failed setup attempt.
         browser.close()
         raise
@@ -1317,7 +1317,7 @@ def download_filer_window(
         return None
 
 
-def _setup_browser_retrying(playwright, attempts: int = 3):
+def setup_browser_retrying(playwright, attempts: int = 3):
     """Open the browser, surviving a slow ORESTAR.
 
     setup_browser() ends in page.goto(SEARCH_URL, timeout=60_000), and when
@@ -1394,7 +1394,7 @@ def backfill_filers(
              "yes" if identity_remediation else "no")
 
     with sync_playwright() as p:
-        browser, context, page = _setup_browser_retrying(p)
+        browser, context, page = setup_browser_retrying(p)
         consecutive_failures = 0
         for fid in filer_ids:
             log.info("=== Backfilling filer %s ===", fid)
@@ -1501,7 +1501,7 @@ def backfill_filers(
                     except Exception:
                         pass
                     try:
-                        browser, context, page = _setup_browser_retrying(p)
+                        browser, context, page = setup_browser_retrying(p)
                         result = download_filer_window(
                             page, context, fid, yr_start, yr_end, RAW_DIR,
                             tran_type, af, at, pp, force=identity_remediation,
