@@ -35,6 +35,18 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Wait for other ORESTAR jobs
+        uses: ./.github/actions/await-orestar
+
+      - name: Refresh branch after coordination wait
+        # The older scraper may have pushed exactly the rows this report checks.
+        # Verification only uploads an artifact, so replacing the pre-wait
+        # snapshot with the current branch is safe and avoids false "missing"
+        # findings against stale local data.
+        run: |
+          git fetch --depth=1 origin "$GITHUB_REF_NAME"
+          git reset --hard FETCH_HEAD
+
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:

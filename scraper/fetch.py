@@ -1342,6 +1342,36 @@ def setup_browser_retrying(playwright, attempts: int = 3):
             time.sleep(15 * attempt)
 
 
+def _is_transient_orestar_startup_failure(exc: Exception) -> bool:
+    """Return whether initial setup reached ORESTAR but got no usable form.
+
+    Browser installation/launch errors are structural and must fail normally.
+    Navigation failures and known session redirects are transient failures for
+    which a quiet cooldown can help. A rendered page without the expected form
+    is deliberately excluded: that can also mean a structural selector change.
+    """
+    message = str(exc)
+    return (
+        "Page.goto" in message
+        or isinstance(exc, SessionExpiredError)
+    )
+
+
+def _setup_initial_filer_browser(playwright, identity_remediation: bool):
+    """Set up the initial filer browser and mark retryable startup exhaustion.
+
+    Keep this marker around the initial setup only. ``setup_browser_retrying``
+    is also called after session expiry, when a filer may already have made
+    progress; replaying the whole command at that point is not safe.
+    """
+    try:
+        return setup_browser_retrying(playwright)
+    except Exception as exc:
+        if identity_remediation and _is_transient_orestar_startup_failure(exc):
+            print("REMEDIATION_STARTUP_EXHAUSTED attempts=3", flush=True)
+        raise
+
+
 def backfill_filers(
     filer_ids: list[str],
     start_year: int = 2006,
@@ -1394,7 +1424,9 @@ def backfill_filers(
              "yes" if identity_remediation else "no")
 
     with sync_playwright() as p:
-        browser, context, page = setup_browser_retrying(p)
+        browser, context, page = _setup_initial_filer_browser(
+            p, identity_remediation,
+        )
         consecutive_failures = 0
         for fid in filer_ids:
             log.info("=== Backfilling filer %s ===", fid)
