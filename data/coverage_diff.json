@@ -7792,14 +7792,10 @@
   "filer_id": "24510",
   "name": "Max Sherman for Oregon",
   "orestar": 317,
-  "held": 314,
-  "complete": false,
+  "held": 317,
+  "complete": true,
   "surplus": [],
-  "missing": [
-   "5789748",
-   "5789749",
-   "5789750"
-  ],
+  "missing": [],
   "superseded": [],
   "checked": "2026-09-03"
  },
