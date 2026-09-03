@@ -7804,13 +7804,10 @@
   "filer_id": "21892",
   "name": "Adam4Oregon",
   "orestar": 367,
-  "held": 365,
-  "complete": false,
+  "held": 367,
+  "complete": true,
   "surplus": [],
-  "missing": [
-   "5788235",
-   "5788237"
-  ],
+  "missing": [],
   "superseded": [],
   "checked": "2026-09-03"
  },
