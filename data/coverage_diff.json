@@ -3445,14 +3445,10 @@
   "filer_id": "14024",
   "name": "Redmond Firefighters Association",
   "orestar": 298,
-  "held": 295,
-  "complete": false,
+  "held": 298,
+  "complete": true,
   "surplus": [],
-  "missing": [
-   "5788359",
-   "5789572",
-   "5789606"
-  ],
+  "missing": [],
   "superseded": [],
   "checked": "2026-09-03"
  },
