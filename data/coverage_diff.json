@@ -1238,15 +1238,12 @@
   "filer_id": "23238",
   "name": "Evergreen PAC",
   "orestar": 1008,
-  "held": 1007,
+  "held": 1009,
   "complete": false,
   "surplus": [
    "5610563"
   ],
-  "missing": [
-   "5788232",
-   "5789751"
-  ],
+  "missing": [],
   "superseded": [],
   "checked": "2026-09-03"
  },
