@@ -5065,13 +5065,10 @@
   "filer_id": "24682",
   "name": "Alex for Albany",
   "orestar": 21,
-  "held": 19,
-  "complete": false,
+  "held": 21,
+  "complete": true,
   "surplus": [],
-  "missing": [
-   "5789759",
-   "5789760"
-  ],
+  "missing": [],
   "superseded": [],
   "checked": "2026-09-03"
  },
