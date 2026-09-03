@@ -73,6 +73,18 @@ on:
         description: "Internal: which run of the retrigger chain this is"
         required: false
         default: "1"
+      verification_retry:
+        description: "Internal: delayed retries already used by an exact verification gate"
+        required: false
+        default: "0"
+      verification_parent_run_id:
+        description: "Internal: failed exact-gate run holding the retry cooldown"
+        required: false
+        default: ""
+      verification_not_before:
+        description: "Internal: Unix time before which a cooled exact-gate retry must not scrape"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -91,9 +103,9 @@ concurrency:
 jobs:
   diff:
     runs-on: ubuntu-latest
-    # 30m coordination wait + up to 25m browser install + 70m collector,
-    # with room to commit evidence and emit the next targeted dispatch.
-    timeout-minutes: 150
+    # 30m coordination wait + up to 25m browser install + 70m collector + a
+    # possible 20m exact-gate cooldown, with room to commit and dispatch.
+    timeout-minutes: 180
 
     steps:
       - name: Check out repository
@@ -106,6 +118,65 @@ jobs:
           # collector's own 70-minute deadline can always stop and commit.
           max-wait-minutes: "30"
           fail-on-timeout: "true"
+
+      - name: Honor exact-gate retry handoff
+        if: inputs.verification_parent_run_id != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_RUN: ${{ inputs.verification_parent_run_id }}
+          NOT_BEFORE: ${{ inputs.verification_not_before }}
+        run: |
+          case "$SOURCE_RUN" in
+            ''|*[!0-9]*)
+              echo "::error::Invalid exact-gate retry source run ID."
+              exit 1
+              ;;
+          esac
+          case "$NOT_BEFORE" in
+            ''|*[!0-9]*)
+              echo "::error::Invalid exact-gate retry not-before time."
+              exit 1
+              ;;
+          esac
+
+          # The source queues us before sleeping so later ORESTAR jobs cannot
+          # take our place in line. Do not mistake a cancelled/timed-out source
+          # for a completed cooldown: cancellation remains an instruction to
+          # stop the chain. A short poll covers Actions API propagation after
+          # await-orestar observes that the source is no longer in progress.
+          STATUS=""
+          CONCLUSION=""
+          for ATTEMPT in 1 2 3; do
+            STATE=$(gh api \
+              "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" \
+              --jq '.status + "\t" + (.conclusion // "")' 2>/dev/null || true)
+            if [ -n "$STATE" ]; then
+              IFS=$'\t' read -r STATUS CONCLUSION <<< "$STATE"
+            fi
+            if [ "$STATUS" = "completed" ] && [ -n "$CONCLUSION" ]; then
+              break
+            fi
+            sleep 5
+          done
+          if [ "$STATUS" != "completed" ]; then
+            echo "::error::Could not confirm completion of retry source run $SOURCE_RUN."
+            exit 1
+          fi
+          if [ "$CONCLUSION" != "failure" ]; then
+            echo "::error::Retry source run $SOURCE_RUN concluded '$CONCLUSION'; refusing to continue after cancellation or an unexpected handoff."
+            exit 1
+          fi
+
+          NOW=$(date +%s)
+          if [ "$NOT_BEFORE" -gt "$NOW" ]; then
+            REMAINING=$((NOT_BEFORE - NOW))
+            if [ "$REMAINING" -gt 1500 ]; then
+              echo "::error::Exact-gate retry cooldown is unexpectedly long ($REMAINING seconds)."
+              exit 1
+            fi
+            echo "Source ended early; holding the ORESTAR lane for the remaining $REMAINING-second cooldown."
+            sleep "$REMAINING"
+          fi
 
       - name: Refresh branch after coordination wait
         # Unique remediation-gate concurrency groups prevent pending gates
@@ -164,7 +235,21 @@ jobs:
           # setup steps, so the script stops on its own terms rather than being
           # killed mid-committee.
           ARGS="$ARGS --max-minutes 70"
+          # An exact verification deliberately exits non-zero when IDs remain
+          # missing. Bash's implicit -e would normally stop on that pipeline
+          # before the counters below reached GITHUB_OUTPUT, making a genuine
+          # mismatch indistinguishable from a browser that never opened. Keep
+          # the collector status, publish its evidence, then return the same
+          # status at the end of the step.
+          set +e
           xvfb-run --auto-servernum python scraper/diff_coverage.py $ARGS 2>&1 | tee /tmp/diff.log
+          PIPE_STATUSES=("${PIPESTATUS[@]}")
+          set -e
+          DIFF_STATUS=${PIPE_STATUSES[0]}
+          TEE_STATUS=${PIPE_STATUSES[1]:-0}
+          if [ "$DIFF_STATUS" -eq 0 ] && [ "$TEE_STATUS" -ne 0 ]; then
+            DIFF_STATUS=$TEE_STATUS
+          fi
 
           # Stable counters emitted by the collector. `attempted` and
           # `unusable` make a cooldown visible; `usable` alone cannot distinguish
@@ -174,21 +259,37 @@ jobs:
           USABLE=0
           UNUSABLE=0
           BLOCKED=0
+          RETRYABLE=0
+          RETRY_IDS=""
           for KV in $RESULT; do
             case "$KV" in
               attempted=*) ATTEMPTED=${KV#attempted=} ;;
               usable=*)    USABLE=${KV#usable=} ;;
               unusable=*)  UNUSABLE=${KV#unusable=} ;;
               blocked=*)   BLOCKED=${KV#blocked=} ;;
+              retryable=*) RETRYABLE=${KV#retryable=} ;;
+              retry_ids=*) RETRY_IDS=${KV#retry_ids=} ;;
             esac
           done
+          # Browser startup fails before the collector can emit RUN_RESULT.
+          # Match only the exhausted final attempt: an earlier setup failure
+          # can precede a successful setup and an unrelated later error.
+          if [ "$DIFF_STATUS" -ne 0 ] && [ "$USABLE" -eq 0 ] && \
+             grep -q 'Browser setup failed (attempt 3/3)' /tmp/diff.log; then
+            RETRYABLE=1
+            RETRY_IDS="${{ inputs.filer_ids }}"
+          fi
+          RETRY_IDS=${RETRY_IDS//,/ }
           echo "attempted=$ATTEMPTED" >> "$GITHUB_OUTPUT"
           echo "usable=$USABLE" >> "$GITHUB_OUTPUT"
           echo "unusable=$UNUSABLE" >> "$GITHUB_OUTPUT"
           echo "blocked=$BLOCKED" >> "$GITHUB_OUTPUT"
+          echo "retryable=$RETRYABLE" >> "$GITHUB_OUTPUT"
+          echo "retry_ids=$RETRY_IDS" >> "$GITHUB_OUTPUT"
           # Backward-compatible name used by the chain guard below.
           echo "diffed=$USABLE" >> "$GITHUB_OUTPUT"
-          echo "Attempted $ATTEMPTED committees: $USABLE usable, $UNUSABLE unusable, blocked=$BLOCKED."
+          echo "Attempted $ATTEMPTED committees: $USABLE usable, $UNUSABLE unusable, blocked=$BLOCKED, retryable=$RETRYABLE."
+          exit "$DIFF_STATUS"
 
       - name: Clear verified remediation progress
         id: cleanup
@@ -241,8 +342,8 @@ jobs:
         run: |
           # Three hard stops, because an unbounded chain that makes no progress
           # is worse than no chain: 12 runs, and a run with ZERO usable
-          # committees. The F5 breaker is deliberately NOT one of them — see
-          # the breaker note below: a fresh runner is a fresh IP.
+          # committees. A rolling-sweep breaker is deliberately NOT one of
+          # them; exact verification gates use the cooled recovery path below.
           #
           # 12 rather than the survey's 40. Each run here is a full 70-minute
           # budget of heavy paging, so twelve is already most of a day of the
@@ -252,6 +353,28 @@ jobs:
           # ordering exactly where this one left off.
           CHAIN=${{ inputs.chain_index || '1' }}
           if [ "${{ steps.diff.outcome }}" != "success" ]; then
+            # A targeted exact gate can fail without producing evidence when
+            # F5 refuses browser startup (or after a transient unusable
+            # collection). Preserve its completed fetch tree, hold the shared
+            # ORESTAR lane quiet for a measured cooldown, and retry on a fresh
+            # runner. A usable diff with genuinely missing IDs publishes
+            # retryable=0 and stops here instead of looping.
+            if [ "${{ inputs.require_no_missing }}" = "true" ] && \
+               [ -n "${{ inputs.filer_ids }}" ] && \
+               [ "${{ steps.diff.outputs.retryable }}" = "1" ]; then
+              if [ "${{ steps.commit.outcome }}" != "success" ]; then
+                echo "Retryable verification evidence was not committed — stopping."
+                exit 0
+              fi
+              bash scripts/retry_identity_gate.sh \
+                "${{ inputs.verification_retry || '0' }}" \
+                "${{ github.ref_name }}" \
+                "${{ steps.diff.outputs.retry_ids }}" \
+                "${{ inputs.start_year }}" \
+                "${{ inputs.resume_auto_backfill }}" \
+                "${{ github.run_id }}"
+              exit 0
+            fi
             echo "Diff step did not finish successfully — stopping the chain."
             exit 0
           fi
@@ -283,12 +406,13 @@ jobs:
             echo "Chain limit reached ($CHAIN) — the daily schedule continues from here."
             exit 0
           fi
-          # A tripped breaker is NOT a reason to stop chaining.
+          # A tripped breaker is NOT automatically a reason to stop chaining.
           #
-          # This used to exit here, on the reasoning that a blocked runner
-          # needs a real cooldown. That reasoning assumed the block follows the
-          # ACCOUNT. It does not: every run gets a fresh GitHub runner on a
-          # different IP, and F5 blocks the IP.
+          # A fresh runner alone is not always sufficient: immediate exact-gate
+          # retries have repeated the same startup refusal. Those gates take an
+          # explicit 20-minute cooldown in retry_identity_gate.sh. A rolling
+          # sweep, however, reaches this branch only after producing usable
+          # evidence, and successor setup supplies a natural quiet interval.
           #
           # Measured, not assumed. Run 33237734544 tripped the breaker and
           # ended at 07:04. The next run started at 07:16 — twelve minutes
