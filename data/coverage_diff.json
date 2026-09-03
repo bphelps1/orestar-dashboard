@@ -644,23 +644,6 @@
   "checked": "2026-09-03"
  },
  {
-  "filer_id": "1471",
-  "name": "SDLF",
-  "orestar": 9908,
-  "held": 9910,
-  "complete": false,
-  "surplus": [
-   "5458760",
-   "5738878",
-   "5755917"
-  ],
-  "missing": [
-   "5787377"
-  ],
-  "superseded": [],
-  "checked": "2026-09-02"
- },
- {
   "filer_id": "24732",
   "name": "Friends of Nichole Biechler",
   "orestar": 47,
@@ -672,6 +655,22 @@
    "5785026"
   ],
   "missing": [],
+  "superseded": [],
+  "checked": "2026-09-03"
+ },
+ {
+  "filer_id": "1471",
+  "name": "SDLF",
+  "orestar": 9909,
+  "held": 9910,
+  "complete": false,
+  "surplus": [
+   "5458760",
+   "5738878"
+  ],
+  "missing": [
+   "5767201"
+  ],
   "superseded": [],
   "checked": "2026-09-03"
  },
@@ -2325,15 +2324,15 @@
  {
   "filer_id": "3865",
   "name": "Oregon Firearms Federation PAC",
-  "orestar": 3906,
-  "held": 3905,
+  "orestar": 3907,
+  "held": 3906,
   "complete": true,
   "surplus": [],
   "missing": [],
   "superseded": [
    "2041931"
   ],
-  "checked": "2026-08-30"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "16459",
@@ -2344,7 +2343,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "3215",
@@ -2355,7 +2354,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "24797",
@@ -2388,7 +2387,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "17983",
@@ -2509,7 +2508,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "18980",
@@ -2619,7 +2618,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "23290",
@@ -3150,7 +3149,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "22874",
@@ -3466,13 +3465,17 @@
  {
   "filer_id": "14024",
   "name": "Redmond Firefighters Association",
-  "orestar": 295,
+  "orestar": 298,
   "held": 295,
-  "complete": true,
+  "complete": false,
   "surplus": [],
-  "missing": [],
+  "missing": [
+   "5788359",
+   "5789572",
+   "5789606"
+  ],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "5793",
@@ -3666,7 +3669,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "9366",
@@ -3677,7 +3680,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "19321",
@@ -3732,7 +3735,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "5575",
@@ -3875,7 +3878,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "4509",
@@ -3886,7 +3889,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "15862",
@@ -3897,7 +3900,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "24938",
@@ -3908,7 +3911,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "5908",
@@ -3919,7 +3922,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "278",
@@ -3930,7 +3933,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "19210",
@@ -3941,7 +3944,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "15220",
@@ -3952,7 +3955,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "4452",
@@ -3963,7 +3966,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "4865",
@@ -3974,7 +3977,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "18371",
@@ -3985,7 +3988,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "18315",
@@ -3996,7 +3999,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "20415",
@@ -4007,7 +4010,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "20470",
@@ -4018,7 +4021,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "5428",
@@ -4029,7 +4032,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "17174",
@@ -4040,7 +4043,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "8126",
@@ -4051,7 +4054,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "14108",
@@ -4062,7 +4065,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "19018",
@@ -4073,7 +4076,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "20327",
@@ -4084,7 +4087,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "18545",
@@ -4095,7 +4098,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "20941",
@@ -4106,7 +4109,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "13785",
@@ -4117,7 +4120,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "23392",
@@ -4128,7 +4131,10 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-02",
+  "last_attempt": "2026-09-03",
+  "last_failure": "unusable_window",
+  "failure_count": 1
  },
  {
   "filer_id": "5147",
@@ -4139,7 +4145,10 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-02",
+  "last_attempt": "2026-09-03",
+  "last_failure": "unusable_window",
+  "failure_count": 1
  },
  {
   "filer_id": "1970",
@@ -5501,7 +5510,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "337",
@@ -8445,7 +8454,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "15348",
@@ -8456,7 +8465,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "3889",
@@ -8467,7 +8476,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "12878",
@@ -8478,7 +8487,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "336",
@@ -8489,7 +8498,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "15109",
@@ -8500,45 +8509,31 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "318",
   "name": "Josephine County Democratic Central Committee",
-  "orestar": 4363,
-  "held": 4348,
-  "complete": false,
-  "surplus": [],
-  "missing": [
-   "5774721",
-   "5774725",
-   "5774729",
-   "5774730",
-   "5784465",
-   "5784466",
-   "5784467",
-   "5784468",
-   "5784469",
-   "5784470",
-   "5784471",
-   "5784477",
-   "5784478",
-   "5784479",
-   "5784481"
-  ],
-  "superseded": [],
-  "checked": "2026-08-30"
- },
- {
-  "filer_id": "14046",
-  "name": "Friends of Dan Rayfield",
-  "orestar": 4909,
-  "held": 4909,
+  "orestar": 4369,
+  "held": 4369,
   "complete": true,
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-03"
+ },
+ {
+  "filer_id": "14046",
+  "name": "Friends of Dan Rayfield",
+  "orestar": 4913,
+  "held": 4912,
+  "complete": false,
+  "surplus": [],
+  "missing": [
+   "5751604"
+  ],
+  "superseded": [],
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "307",
@@ -8560,18 +8555,18 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "5926",
   "name": "Community in Support of NC12",
-  "orestar": 435,
-  "held": 435,
+  "orestar": 437,
+  "held": 437,
   "complete": true,
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "20376",
@@ -8582,7 +8577,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-01"
+  "checked": "2026-09-03"
  },
  {
   "filer_id": "299",
