@@ -36,24 +36,55 @@ permissions:
   contents: write
   actions: write
 
-# Keep only one survey run pending/running. Cross-workflow serialization is
-# handled by await-orestar; a shared group lets GitHub evict an older pending
-# run when two self-chaining workflows dispatch near each other.
+# A replacement dispatched after a coordination timeout must not share a
+# pending slot with a later manual/scheduled run: GitHub would evict the older
+# waiter. Runtime serialization is handled fail-closed by await-orestar.
 concurrency:
-  group: coverage-survey
+  group: coverage-survey-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:
   survey:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    # 30m coordination wait + up to 25m browser install + the collector's
+    # 70m self-deadline, with room to persist and dispatch the next slice.
+    timeout-minutes: 180
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
       - name: Wait for other ORESTAR jobs
+        id: orestar_wait
+        continue-on-error: true
         uses: ./.github/actions/await-orestar
+        with:
+          max-wait-minutes: "30"
+          fail-on-timeout: "true"
+
+      - name: Requeue after coordination timeout
+        if: steps.orestar_wait.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash scripts/dispatch_retry.sh coverage-survey.yml --ref "${{ github.ref_name }}" \
+            -f limit="${{ inputs.limit }}" \
+            -f filer_ids="${{ inputs.filer_ids }}" \
+            -f recheck="${{ inputs.recheck }}" \
+            -f chain_index="${{ inputs.chain_index }}"
+
+      - name: Refuse uncoordinated coverage survey
+        if: steps.orestar_wait.outcome == 'failure'
+        run: |
+          echo "::error::ORESTAR remained busy; queued the same survey slice instead of overlapping it."
+          exit 1
+
+      - name: Refresh branch after coordination wait
+        # coverage_survey.json is cumulative. Another serialized run may have
+        # extended it while this run waited, so scrape from that exact tip.
+        run: |
+          git fetch --depth=1 origin "$GITHUB_REF_NAME"
+          git reset --hard FETCH_HEAD
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -90,7 +121,7 @@ jobs:
           if [ "${{ inputs.recheck }}" = "true" ]; then
             ARGS="$ARGS --recheck"
           fi
-          # Comfortably inside the job's 90-minute timeout, so the script
+          # Comfortably inside the post-coordination job budget, so the script
           # always stops itself rather than being killed mid-run.
           ARGS="$ARGS --max-minutes 70"
           xvfb-run --auto-servernum python scraper/survey_coverage.py $ARGS 2>&1 | tee /tmp/survey.log
@@ -115,31 +146,17 @@ jobs:
       # protect is worse than no guard.
       - name: Commit survey results
         id: commit
-        if: always()
+        if: always() && steps.orestar_wait.outcome == 'success'
         run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          # A run that measured nothing writes no file, and `git add` on a
-          # missing path exits 128 under `bash -e` — so the step that exists to
-          # save progress failed the whole job for the crime of having none.
-          if [ ! -f data/coverage_survey.json ]; then
-            echo "No survey file — this run measured nothing to commit."
-            exit 0
-          fi
-          git add data/coverage_survey.json
-          if git diff --staged --quiet; then
-            echo "No survey progress to commit."
-            exit 0
-          fi
-          git commit -m "data: coverage survey progress [skip ci]"
-          git pull --rebase origin ${{ github.ref_name }} || true
-          git push
+          bash scripts/push_data.sh \
+            "data: coverage survey progress [skip ci]" \
+            data/coverage_survey.json
 
       - name: Re-trigger if the survey is unfinished
         # A manual cancellation is a request to stop the chain, not to create
         # its replacement. The commit step above may still preserve partial
         # progress, but only a non-cancelled run may dispatch a successor.
-        if: always() && !cancelled()
+        if: always() && !cancelled() && steps.orestar_wait.outcome == 'success'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
@@ -173,8 +190,11 @@ jobs:
           from pathlib import Path
           sys.path.insert(0, "scraper")
           import supabase_sync
+          from survey_coverage import _evidence_is_current, _expand_actionable_rows
           p = Path("data/coverage_survey.json")
-          done = {str(e["filer_id"]) for e in json.loads(p.read_text())} if p.exists() else set()
+          evidence = {
+              str(e["filer_id"]): e for e in json.loads(p.read_text())
+          } if p.exists() else {}
           conn = supabase_sync._connect()
           with conn.cursor() as cur:
               cur.execute("select data from dashboard_cache where key = 'balance_discrepancies'")
@@ -182,10 +202,17 @@ jobs:
           conn.close()
           if isinstance(d, str):
               d = json.loads(d)
-          rows = d.get("filers") if isinstance(d, dict) else d
-          if rows is None and isinstance(d, dict):
-              rows = next((v for v in d.values() if isinstance(v, list)), [])
-          todo = [r for r in (rows or []) if str(r.get("filer_id")) not in done]
+          if isinstance(d, dict):
+              rows = d.get("rows")
+              if rows is None:
+                  rows = d.get("filers", [])
+          else:
+              rows = d
+          active = _expand_actionable_rows(rows or [])
+          todo = {
+              str(r["filer_id"]) for r in active
+              if not _evidence_is_current(evidence.get(str(r["filer_id"])), r)
+          }
           print(f"{len(todo)} committees still unsurveyed")
           sys.exit(0 if todo else 1)
           EOF
@@ -195,7 +222,8 @@ jobs:
             bash scripts/dispatch_retry.sh coverage-survey.yml --ref ${{ github.ref_name }} \
               -f chain_index="$NEXT" \
               -f limit="${{ inputs.limit }}" \
-              -f filer_ids="${{ inputs.filer_ids }}"
+              -f filer_ids="${{ inputs.filer_ids }}" \
+              -f recheck="${{ inputs.recheck }}"
           else
             echo "Survey complete — every flagged committee has been checked."
           fi

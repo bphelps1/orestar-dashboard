@@ -1,9 +1,10 @@
-name: Scrape Earliest Balances
+name: Scrape ORESTAR Account Balances
 
 on:
   schedule:
-    # Run weekly on Sundays at 06:00 UTC (Sat 11 PM PST)
+    # Cheap current-page refresh weekly; full historical Prev crawl monthly.
     - cron: "0 6 * * 0"
+    - cron: "0 7 1 * *"
   workflow_dispatch:
     inputs:
       max_filers:
@@ -28,12 +29,21 @@ on:
         default: "30"
       force:
         description: >
-          Re-scrape everything regardless of age. Does NOT chain — under force
-          every filer is selected on every run, so the remaining count never
-          drops and the chain cannot terminate. Use max_age_days for a full
-          sweep instead.
+          Start a full re-scrape regardless of age. Chained children turn force
+          off and retain this run's fixed freshness cutoff, so the sweep still
+          converges rather than selecting every filer again.
         required: false
         default: "false"
+      current_only:
+        description: >
+          Refresh only the current account-summary page. This is the weekly
+          paired-balance path; historical opening balances are crawled monthly.
+        required: false
+        default: "false"
+      refresh_before_ts:
+        description: "Internal: fixed freshness cutoff shared by every batch"
+        required: false
+        default: ""
       chain_index:
         description: "Internal: which batch of the chain this is"
         required: false
@@ -43,29 +53,26 @@ permissions:
   contents: write
   actions: write          # needed to retrigger itself
 
-# The two ORESTAR browser scrapers share a lane of their own, apart from the
-# aggregation pipeline. Two reasons, and only one of them is about safety:
-#
-#   * Concurrent pushes are already handled — scripts/push_data.sh pushes
-#     first and, if rejected, shallow-fetches the new tip, replays its own
-#     files and retries. So the shared lane was never what protected them.
-#   * Two Playwright scrapers hitting ORESTAR at once is a real risk. On
-#     27 July a balances batch failed all 200 page loads right after the daily
-#     job pulled 7,245 pages through the site. Keeping BOTH scrapers in this
-#     one lane means they can never overlap.
-#
-# What the shared lane was actually costing: GitHub keeps one pending run per
-# group, so a third arrival evicts the waiting one. The self-retriggering
-# balances chain re-claimed the lane every batch and evicted a scheduled
-# Candidate Filings run outright — zero jobs, logged as "cancelled".
+# The runtime await-orestar barrier below serializes every Playwright scraper.
+# A shared GitHub concurrency key is not that barrier: GitHub retains only one
+# pending run per key, so a third arrival silently evicts the older waiter.
+# Unique queue slots preserve weekly, monthly, and chained work; total ordering
+# in await-orestar still guarantees that only one reaches ORESTAR at a time.
 concurrency:
-  group: orestar-scrape
+  # Every run keeps its own queue slot. Cross-workflow and same-workflow site
+  # serialization is handled by await-orestar below; a shared concurrency key
+  # lets GitHub retain only one pending run, so a weekly child could evict a
+  # monthly historical sweep before it starts.
+  group: account-summary-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    # Worst case is a 45-minute exclusive-access wait, 25-minute browser
+    # install, and the scraper's 150-minute soft deadline. Keep enough margin
+    # for setup, aggregation, and a final cache push after that soft stop.
+    timeout-minutes: 260
 
     steps:
       - name: Check out repository
@@ -73,11 +80,87 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Resolve sweep parameters
+        run: |
+          MAX="${{ github.event.inputs.max_filers || '200' }}"
+          FORCE="${{ github.event.inputs.force || 'false' }}"
+          CURRENT_ONLY="${{ github.event.inputs.current_only || 'false' }}"
+          MAX_AGE="${{ github.event.inputs.max_age_days || '30' }}"
+          REFRESH_BEFORE="${{ github.event.inputs.refresh_before_ts }}"
+          FILER_IDS="${{ github.event.inputs.filer_ids }}"
+          BATCH="${{ github.event.inputs.chain_index || '1' }}"
+
+          # Translate a schedule exactly once. If exclusive access times out,
+          # the replacement is a workflow_dispatch run and therefore must
+          # receive the resolved mode/cutoff explicitly.
+          if [ "${{ github.event.schedule }}" = "0 6 * * 0" ]; then
+            CURRENT_ONLY=true
+            MAX_AGE=7
+          elif [ "${{ github.event.schedule }}" = "0 7 1 * *" ]; then
+            CURRENT_ONLY=false
+            MAX_AGE=30
+          fi
+
+          # Freeze one cutoff for the entire sweep, including coordination
+          # retries and self-dispatched batches.
+          if [ "$FORCE" = "true" ] && [ -z "$FILER_IDS" ]; then
+            REFRESH_BEFORE=$(date -u +%s)
+          elif [ -z "$REFRESH_BEFORE" ]; then
+            if [ -n "${{ github.event.schedule }}" ]; then
+              REFRESH_BEFORE=$(date -u +%s)
+            else
+              REFRESH_BEFORE=$(date -u -d "$MAX_AGE days ago" +%s)
+            fi
+          fi
+
+          echo "max_filers=$MAX" >> "$GITHUB_ENV"
+          echo "force=$FORCE" >> "$GITHUB_ENV"
+          echo "current_only=$CURRENT_ONLY" >> "$GITHUB_ENV"
+          echo "max_age_days=$MAX_AGE" >> "$GITHUB_ENV"
+          echo "refresh_before_ts=$REFRESH_BEFORE" >> "$GITHUB_ENV"
+          echo "filer_ids=$FILER_IDS" >> "$GITHUB_ENV"
+          echo "chain_index=$BATCH" >> "$GITHUB_ENV"
+
       # Never let two ORESTAR scrapers run at once — see
       # .github/actions/await-orestar for why this is a runtime check rather
       # than a concurrency group or a schedule gap.
       - name: Wait for other ORESTAR jobs
+        id: orestar_wait
+        continue-on-error: true
         uses: ./.github/actions/await-orestar
+        with:
+          # These jobs rewrite whole summary/sweep files. Proceeding after a
+          # timeout can lose another batch's captures, so defer the run rather
+          # than fail open into concurrent state mutation.
+          fail-on-timeout: "true"
+
+      - name: Requeue after coordination timeout
+        if: steps.orestar_wait.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash scripts/dispatch_retry.sh earliest-balances.yml --ref "${{ github.ref_name }}" \
+            -f max_filers="${{ env.max_filers }}" \
+            -f filer_ids="${{ env.filer_ids }}" \
+            -f max_age_days="${{ env.max_age_days }}" \
+            -f force="${{ env.force }}" \
+            -f current_only="${{ env.current_only }}" \
+            -f refresh_before_ts="${{ env.refresh_before_ts }}" \
+            -f chain_index="${{ env.chain_index }}"
+
+      - name: Refuse uncoordinated account-summary scrape
+        if: steps.orestar_wait.outcome == 'failure'
+        run: |
+          echo "::error::ORESTAR remained busy; queued a replacement account-summary run instead of overlapping it."
+          exit 1
+
+      - name: Refresh branch after coordination wait
+        # Checkout happens before the local wait action can run. A transaction
+        # scraper may publish rows while this job waits; refresh now so the
+        # account-summary timestamp is paired with the current transaction set.
+        run: |
+          git fetch --depth=1 origin "$GITHUB_REF_NAME"
+          git reset --hard FETCH_HEAD
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -99,36 +182,46 @@ jobs:
       - name: Install Xvfb (virtual display for headed browser)
         run: sudo apt-get install -y xvfb
 
-      - name: Scrape earliest-year beginning balances
+      - name: Scrape account summaries
         run: |
-          MAX="${{ github.event.inputs.max_filers || '200' }}"
-          FORCE="${{ github.event.inputs.force || 'false' }}"
-          FILER_IDS="${{ github.event.inputs.filer_ids }}"
+          MAX="${{ env.max_filers }}"
+          FORCE="${{ env.force }}"
+          CURRENT_ONLY="${{ env.current_only }}"
+          MAX_AGE="${{ env.max_age_days }}"
+          REFRESH_BEFORE="${{ env.refresh_before_ts }}"
+          FILER_IDS="${{ env.filer_ids }}"
+
           if [ -n "$FILER_IDS" ]; then
             # Targeted repair. --force so a cached-but-incomplete filer is
             # actually re-read rather than skipped as fresh.
             ARGS="--filer-ids $FILER_IDS --force"
+            if [ "$CURRENT_ONLY" = "true" ]; then
+              ARGS="$ARGS --current-only"
+            fi
             echo "Targeted scrape of: $FILER_IDS"
             xvfb-run --auto-servernum python scraper/fetch_earliest_balances.py $ARGS
             echo "targeted=true" >> "$GITHUB_ENV"
             exit 0
           fi
-          # Comfortably inside the job's 180-minute timeout, so the script
+          # Comfortably inside the job's 260-minute timeout, so the script
           # always stops itself rather than being cancelled. A cancelled step
           # fails the success() gate on the retrigger, which is how a sweep of
           # 5,454 filers previously did one partial batch and stopped.
-          ARGS="--max-age-days ${{ github.event.inputs.max_age_days || '30' }} --max-minutes 150"
+          ARGS="--max-age-days $MAX_AGE --refresh-before-ts $REFRESH_BEFORE --max-minutes 150"
           if [ "$MAX" != "0" ]; then
             ARGS="$ARGS --max-filers $MAX"
           fi
           if [ "$FORCE" = "true" ]; then
             ARGS="$ARGS --force"
           fi
+          if [ "$CURRENT_ONLY" = "true" ]; then
+            ARGS="$ARGS --current-only"
+          fi
           xvfb-run --auto-servernum python scraper/fetch_earliest_balances.py $ARGS
 
       - name: Check remaining filers
         id: remaining
-        if: always()
+        if: always() && steps.orestar_wait.outcome == 'success'
         run: |
           REMAINING_FILE="data/earliest_balances_remaining.txt"
           if [ -f "$REMAINING_FILE" ]; then
@@ -140,9 +233,9 @@ jobs:
           echo "remaining=$REMAINING" >> "$GITHUB_OUTPUT"
 
       - name: Re-aggregate with updated beginning balances (final batch only)
-        if: always() && steps.remaining.outputs.remaining == '0'
+        if: always() && steps.orestar_wait.outcome == 'success' && steps.remaining.outputs.remaining == '0'
         run: |
-          echo "All filers scraped — running full aggregation..."
+          echo "All selected account summaries scraped — running full aggregation..."
           python scraper/process.py
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
@@ -151,9 +244,9 @@ jobs:
           SUPABASE_STORAGE_BUCKET: exports
 
       - name: Commit and push updated data
-        if: always()
+        if: always() && steps.orestar_wait.outcome == 'success'
         run: |
-          bash scripts/push_data.sh "chore: update earliest balances $(date -u +%Y-%m-%d)" data/ docs/data/
+          bash scripts/push_data.sh "chore: refresh account summaries $(date -u +%Y-%m-%d)" data/ docs/data/
 
       # Bounded chain. Each run hands off to the next, but only up to
       # MAX_CHAIN batches; after that it stops and the next scheduled run picks
@@ -180,6 +273,9 @@ jobs:
           MAX_CHAIN: "40"
         run: |
           BATCH="${{ github.event.inputs.chain_index || '1' }}"
+          CURRENT_ONLY="${{ env.current_only }}"
+          MAX_AGE="${{ env.max_age_days }}"
+          REFRESH_BEFORE="${{ env.refresh_before_ts }}"
           if [ "$BATCH" -ge "$MAX_CHAIN" ]; then
             echo "Reached $MAX_CHAIN chained batches; yielding the lane."
             echo "${{ steps.remaining.outputs.remaining }} filers remain — the next"
@@ -187,9 +283,11 @@ jobs:
             exit 0
           fi
           echo "Retriggering workflow for batch $((BATCH + 1)) of $MAX_CHAIN..."
-          bash scripts/dispatch_retry.sh earliest-balances.yml \
+          bash scripts/dispatch_retry.sh earliest-balances.yml --ref "${{ github.ref_name }}" \
             -f max_filers="${{ github.event.inputs.max_filers || '200' }}" \
-            -f max_age_days="${{ github.event.inputs.max_age_days || '30' }}" \
+            -f max_age_days="$MAX_AGE" \
             -f force="false" \
+            -f current_only="$CURRENT_ONLY" \
+            -f refresh_before_ts="$REFRESH_BEFORE" \
             -f chain_index="$((BATCH + 1))"
           echo "Retrigger dispatched."

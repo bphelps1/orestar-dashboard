@@ -843,13 +843,13 @@ const CALC_TILE_META = {
   orestar_ending: {
     label: "ORESTAR Ending Balance",
     orestar: true,
-    tip: "<strong>Source:</strong> Scraped directly from the ORESTAR account summary page.<br><strong>Meaning:</strong> The official ending cash balance reported to the state. Compare this to our calculated ending balance above — any difference means our transaction data may be incomplete or categorized differently.",
+    tip: "<strong>Source:</strong> Scraped directly from the ORESTAR account summary page.<br><strong>Comparison:</strong> For All Time, this read is paired with the published app balance from an exact, fingerprinted transaction snapshot. The two timestamps bound the capture window.",
   },
   orestar_discrepancy: {
-    label: "Discrepancy",
+    label: "Discrepancy at Capture",
     orestar: true,
     subtotal: true,
-    tip: "<strong>Counted:</strong> Our calculated ending balance minus the ORESTAR-reported ending balance.<br><strong>Meaning:</strong> A positive number means we calculate more cash than ORESTAR reports; negative means less. Large discrepancies signal missing transactions or categorization differences.",
+    tip: "<strong>Counted:</strong> The app balance saved when the ORESTAR page was read, minus ORESTAR's balance from that same capture.<br><strong>Meaning:</strong> New transactions collected later do not change this number. A positive number means the matched app snapshot was higher; negative means lower.",
   },
   // ── ORESTAR-only balance sheet items (cannot be calculated from transactions) ──
   accounts_receivable: {
@@ -975,6 +975,9 @@ function buildCalcSummary(profile, year) {
   const orestarYearly = profile.orestar_yearly || {};
   const orestarYear = year ? (orestarYearly[year] || null) : null;
   const orestarCurrent = profile.orestar_account_summary || {};
+  const comparison = profile.orestar_comparison || {};
+  const paired = comparison.status === "paired" && comparison.delta_at_capture != null;
+  const currentPair = paired && comparison.actionable === true;
 
   let orestarEnding = null;
   let orestarContrib = null, orestarExpend = null;
@@ -991,11 +994,22 @@ function buildCalcSummary(profile, year) {
     orestarBegBal = orestarYear.beginning_balance;
     hasOrestar = true;
   } else if (!year && orestarCurrent.year) {
-    // All-time: use the current year's ORESTAR account summary
-    orestarEnding = orestarCurrent.ending_cash_balance != null
-      ? orestarCurrent.ending_cash_balance : null;
+    // All-time validation uses the immutable paired value.  The current app
+    // balance may contain transactions collected after this ORESTAR page was
+    // read, so subtracting one from the other would manufacture a discrepancy.
+    orestarEnding = currentPair
+      ? comparison.orestar_cash_on_hand
+      : (orestarCurrent.ending_cash_balance != null
+          ? orestarCurrent.ending_cash_balance : null);
     hasOrestar = true;
   }
+
+  // We currently freeze the all-time cash balance only. Historical pages are
+  // useful source values, but late backfills mean today's per-year app totals
+  // are not a collection-time pair and must not be labelled discrepancies.
+  const comparisonDelta = !year && currentPair
+    ? comparison.delta_at_capture
+    : null;
 
   return {
     cash_contributions: Math.round(cashContrib * 100) / 100,
@@ -1010,9 +1024,7 @@ function buildCalcSummary(profile, year) {
     ending_cash_balance: Math.round(endingCalc * 100) / 100,
     // ORESTAR values for validation
     orestar_ending: orestarEnding,
-    orestar_discrepancy: orestarEnding != null
-      ? Math.round((endingCalc - orestarEnding) * 100) / 100
-      : null,
+    orestar_discrepancy: comparisonDelta,
     // Per-year ORESTAR breakdown (when available)
     orestar_beginning_balance: orestarBegBal,
     orestar_contributions: orestarContrib,
@@ -1033,6 +1045,10 @@ function buildCalcSummary(profile, year) {
       : (orestarCurrent.outstanding_personal_expenditures || 0),
     _has_orestar: hasOrestar,
     _has_orestar_yearly: year && !!orestarYear,
+    _orestar_comparable: !year && currentPair,
+    // Component totals are not frozen in v1 of the paired snapshot. Showing
+    // them is useful; warning on live-vs-captured line items is not.
+    _orestar_line_comparable: false,
   };
 }
 
@@ -1125,7 +1141,8 @@ function renderAcctSummaryTiles(profile, year) {
 
       // ORESTAR per-tile warning: show if our value differs from ORESTAR by >$1
       let warnHTML = "";
-      if (meta.orestar_field && calcData[meta.orestar_field] != null) {
+      if (calcData._orestar_line_comparable
+          && meta.orestar_field && calcData[meta.orestar_field] != null) {
         const orestarVal = calcData[meta.orestar_field];
         const delta = Math.round((val - orestarVal) * 100) / 100;
         if (Math.abs(delta) > 1) {
@@ -1152,7 +1169,10 @@ function renderAcctSummaryTiles(profile, year) {
   }).join("");
 
   // Per-year discrepancy warnings with line-item detail
-  const disc = profile.yearly_discrepancies;
+  // Per-year app values have not yet been captured with their matching ORESTAR
+  // pages. Keep the legacy diagnostics in the data for audits, but do not
+  // render them as current discrepancies in the public UI.
+  const disc = profile.orestar_yearly_comparisons;
   if (disc && Object.keys(disc).length > 0) {
     const discYears = Object.keys(disc).sort();
     const showYears = year ? discYears.filter(y => y === year) : discYears;
@@ -2242,9 +2262,12 @@ function discrepancySeverity(absDisc) {
   return "red";
 }
 
-function formatTimestamp(unixTs) {
-  if (!unixTs) return "unknown";
-  const d = new Date(unixTs * 1000);
+function formatTimestamp(value) {
+  if (!value) return "unknown";
+  const d = typeof value === "number" || /^\d+(\.\d+)?$/.test(String(value))
+    ? new Date(Number(value) * 1000)
+    : new Date(value);
+  if (Number.isNaN(d.getTime())) return "unknown";
   return d.toLocaleString("en-US", {
     hour: "numeric", minute: "2-digit", hour12: true,
     month: "long", day: "numeric", year: "numeric",
@@ -2268,10 +2291,15 @@ function updateCohIndicator(profile) {
   const fullTl = profile.timeline || [];
   const calcCoh = statsFromTimeline(fullTl, profile.beginning_balances).cashOnHand;
 
-  const src = profile.cash_on_hand_source;
   const acct = profile.orestar_account_summary || {};
-  const orestarEnding = acct.ending_cash_balance != null ? acct.ending_cash_balance : null;
-  const disc = orestarEnding != null ? Math.round((calcCoh - orestarEnding) * 100) / 100 : 0;
+  const latestOrestar = acct.ending_cash_balance != null ? acct.ending_cash_balance : null;
+  const comparison = profile.orestar_comparison || {};
+  const paired = comparison.status === "paired"
+    && comparison.delta_at_capture != null;
+  const comparable = paired && comparison.actionable === true;
+  const orestarEnding = comparable ? comparison.orestar_cash_on_hand : latestOrestar;
+  const appAtCapture = comparable ? comparison.app_cash_on_hand : null;
+  const disc = comparable ? Math.round(comparison.delta_at_capture * 100) / 100 : 0;
   const absDisc = Math.abs(disc);
 
   // A closed committee gets a plain label, not a warning triangle.
@@ -2307,10 +2335,9 @@ function updateCohIndicator(profile) {
     return;
   }
 
-  // Gate on having an ORESTAR figure to compare against. The old test
-  // read a source label that always said the balance came from ORESTAR;
-  // it never did — the balance is calculated from transactions.
-  if (orestarEnding != null && absDisc > 0.01) {
+  // Warn only on a paired snapshot.  Today's app balance against an older
+  // ORESTAR page is useful context, but it is not evidence of a discrepancy.
+  if (comparable && absDisc > 0.01) {
     const severity = discrepancySeverity(absDisc);
     ind.hidden = false;
     ind.className = `coh-indicator coh-warn-${severity}`;
@@ -2321,7 +2348,7 @@ function updateCohIndicator(profile) {
     ind.removeAttribute("title");
 
     // Build rich popover
-    const scrapeTs = acct.scrape_ts || 0;
+    const scrapeTs = comparison.captured_at || acct.scrape_ts || 0;
 
     const popover = document.createElement("div");
     popover.className = "disc-popover";
@@ -2341,7 +2368,7 @@ function updateCohIndicator(profile) {
     // that to our arithmetic would be wrong, and silently absorbing it would be
     // worse, so the reader is told where the difference actually lives.
     const loanNote = (() => {
-      const yd = profile.yearly_discrepancies || {};
+      const yd = profile.orestar_yearly_comparisons || {};
       const yrs = Object.keys(yd).filter(y => yd[y] && yd[y].orestar_omits_loans);
       if (!yrs.length) return "";
       yrs.sort();
@@ -2364,7 +2391,7 @@ function updateCohIndicator(profile) {
     // claims $213,961.90 of expenditures against 161 itemised transactions
     // totalling $173,367.64, with exactly one $40,000 row in ORESTAR's list.
     const itemisedNote = (() => {
-      const yd = profile.yearly_discrepancies || {};
+      const yd = profile.orestar_yearly_comparisons || {};
       const yrs = Object.keys(yd).filter(y => {
         const v = yd[y];
         return v && v.rows_complete && v.summary_vs_itemised != null
@@ -2431,16 +2458,22 @@ function updateCohIndicator(profile) {
              `deleted.</div>`;
     })();
 
+    const appChange = comparison.app_balance_change_since_capture || 0;
+    const changeRow = Math.abs(appChange) > 0.01
+      ? `<div class="disc-row"><span>App balance change since capture:</span><span>${appChange >= 0 ? "+" : ""}${fmt$(appChange)}</span></div>`
+      : "";
     popover.innerHTML = `
-      <div class="disc-row"><span>ORESTAR ending cash balance:</span><span>${orestarEnding != null ? fmt$(orestarEnding) : "N/A"}</span></div>
-      <div class="disc-row"><span>Calculated cash on hand:</span><span>${fmt$(calcCoh)}</span></div>
-      <div class="disc-row disc-diff"><span>Difference:</span><span>${disc >= 0 ? "+" : ""}${fmt$(disc)}</span></div>
+      <div class="disc-row"><span>ORESTAR balance at capture:</span><span>${fmt$(orestarEnding)}</span></div>
+      <div class="disc-row"><span>App balance at capture:</span><span>${fmt$(appAtCapture)}</span></div>
+      <div class="disc-row disc-diff"><span>Difference at capture:</span><span>${disc >= 0 ? "+" : ""}${fmt$(disc)}</span></div>
+      <div class="disc-row"><span>App balance now:</span><span>${fmt$(calcCoh)}</span></div>
+      ${changeRow}
       ${loanNote}
       ${itemisedNote}
       ${chainNote}
       ${withdrawnNote}
       ${exemptLoanNoteText(profile) ? `<div class="disc-note">${esc(exemptLoanNoteText(profile))}</div>` : ""}
-      <div class="disc-ts">ORESTAR account summary scraped at: ${formatTimestamp(scrapeTs)}</div>
+      <div class="disc-ts">App snapshot built: ${formatTimestamp(comparison.app_snapshot_created_at)}<br>ORESTAR summary read: ${formatTimestamp(scrapeTs)}</div>
     `;
     popover.hidden = true;
     ind.parentElement.style.position = "relative";
@@ -2453,7 +2486,7 @@ function updateCohIndicator(profile) {
     ind.addEventListener("focus", showPopover);
     ind.addEventListener("blur", hidePopover);
     ind.addEventListener("click", () => { popover.hidden = !popover.hidden; });
-  } else if (orestarEnding == null) {
+  } else if (latestOrestar == null) {
     // Genuinely unchecked: no account summary on file to compare against.
     //
     // This used to test `src === "calculated"`, which is not the same question.
@@ -2467,6 +2500,17 @@ function updateCohIndicator(profile) {
     ind.textContent = "EST";
     ind.setAttribute("tabindex", "0");
     ind.title = "No ORESTAR account summary scraped yet, so this balance is unchecked.";
+  } else if (!comparable) {
+    // Legacy summaries have a timestamp but no saved app-side snapshot.  Do
+    // not turn their live difference into a warning while the new paired
+    // capture sweep converges.
+    ind.hidden = false;
+    ind.className = "coh-indicator coh-estimated";
+    ind.textContent = "SYNC";
+    ind.setAttribute("tabindex", "0");
+    ind.title = paired
+      ? "The app or ORESTAR state has changed since this capture window. A fresh paired summary is required before treating the old difference as current."
+      : "ORESTAR summary available, but it has not yet been paired with a matching app transaction snapshot.";
   } else {
     // ORESTAR agrees with the calculation. That is the good case, and it earns
     // silence — same as the multi-filer cards, and what .coh-ok intends.
@@ -2498,11 +2542,12 @@ function exemptLoanNoteText(profile) {
 
 // Build discrepancy indicator HTML for multi-filer cards (inline)
 function cohIndicatorHTML(profile) {
-  const src = profile.cash_on_hand_source;
-  const calcCoh = statsFromTimeline(profile.timeline || [], profile.beginning_balances).cashOnHand;
   const acct = profile.orestar_account_summary || {};
-  const orestarEnding = acct.ending_cash_balance != null ? acct.ending_cash_balance : null;
-  const disc = orestarEnding != null ? Math.round((calcCoh - orestarEnding) * 100) / 100 : 0;
+  const latestOrestar = acct.ending_cash_balance != null ? acct.ending_cash_balance : null;
+  const comparison = profile.orestar_comparison || {};
+  const paired = comparison.status === "paired" && comparison.delta_at_capture != null;
+  const comparable = paired && comparison.actionable === true;
+  const disc = comparable ? Math.round(comparison.delta_at_capture * 100) / 100 : 0;
   const absDisc = Math.abs(disc);
   // Same rule as updateCohIndicator: a finished committee is labelled, not
   // warned about. Kept in step with that function deliberately — two badges
@@ -2514,13 +2559,20 @@ function cohIndicatorHTML(profile) {
                 (exNote ? ` ${exNote}` : "");
     return `<span class="coh-indicator coh-closed" tabindex="0" title="${esc(tip)}">Closed</span>`;
   }
-  if (orestarEnding == null) {
+  if (latestOrestar == null) {
     return '<span class="coh-indicator coh-estimated" tabindex="0" title="No ORESTAR account summary scraped yet, so this balance is unchecked">EST</span>';
+  }
+  if (!comparable) {
+    const tip = paired
+      ? "The app or ORESTAR state has changed since this capture window; refresh the pair before treating its old difference as current"
+      : "ORESTAR summary available, but it has not yet been paired with a matching app transaction snapshot";
+    return `<span class="coh-indicator coh-estimated" tabindex="0" title="${esc(tip)}">SYNC</span>`;
   }
   if (absDisc > 0.01) {
     const severity = discrepancySeverity(absDisc);
-    const tsText = formatTimestamp(acct.scrape_ts || 0);
-    const tip = `ORESTAR ending: ${fmt$(orestarEnding || 0)} | Calculated: ${fmt$(calcCoh)} | Diff: ${fmt$(disc)} | Scraped: ${tsText}`;
+    const tsText = formatTimestamp(comparison.captured_at || acct.scrape_ts || 0);
+    const appTs = formatTimestamp(comparison.app_snapshot_created_at);
+    const tip = `ORESTAR capture: ${fmt$(comparison.orestar_cash_on_hand || 0)} | App snapshot: ${fmt$(comparison.app_cash_on_hand || 0)} | Difference: ${fmt$(disc)} | App built: ${appTs} | ORESTAR read: ${tsText}`;
     return `<span class="coh-indicator coh-warn-${severity}" tabindex="0" title="${esc(tip)}">\u26a0</span>`;
   }
   return '';

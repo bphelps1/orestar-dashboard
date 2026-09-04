@@ -26,8 +26,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "scraper"))
 
 
 def run_aggregate(df, mock_orestar=None, tmp_path=None):
-    """Helper: run aggregate() with mocked filesystem and ORESTAR data."""
-    from process import aggregate, AGG_DIR, TRANS_DIR
+    """Run aggregate() with isolated, production-shaped ORESTAR cache files."""
+    from process import aggregate
 
     if mock_orestar is None:
         mock_orestar = {}
@@ -39,9 +39,40 @@ def run_aggregate(df, mock_orestar=None, tmp_path=None):
     trans_dir = tmp_path / "transactions"
     trans_dir.mkdir(parents=True, exist_ok=True)
 
+    # Production no longer calls the retired scrape_account_summaries helper
+    # during aggregation. Account pages are collected separately and consumed
+    # from the yearly cache, with a proven earliest-page anchor alongside it.
+    yearly = {}
+    earliest = {}
+    for fid, row in mock_orestar.items():
+        year = int(row.get("year") or 0)
+        if year:
+            summary = {
+                "beginning_balance": row.get("beginning_balance", 0.0),
+                "ending_cash_balance": row.get("ending_cash_balance", 0.0),
+                "contributions": row.get("orestar_contributions", 0.0),
+                "expenditures": row.get("orestar_expenditures", 0.0),
+                "other_receipts": row.get("orestar_other_receipts", 0.0),
+                "other_disbursements": row.get("orestar_other_disbursements", 0.0),
+                "balance_adjustments": row.get("balance_adjustments", 0.0),
+                "scrape_ts": row.get("ts", 0),
+            }
+            yearly[str(fid)] = {
+                "years": {str(year): summary},
+                "ts": row.get("ts", 0),
+            }
+            earliest[str(fid)] = {
+                "earliest_year": year,
+                "beginning_balance": row.get("beginning_balance", 0.0),
+                "reached_earliest": True,
+                "ts": row.get("ts", 0),
+            }
+    (tmp_path / "orestar_yearly_summaries.json").write_text(json.dumps(yearly))
+    (tmp_path / "earliest_balances.json").write_text(json.dumps(earliest))
+
     with patch("process.AGG_DIR", agg_dir), \
+         patch("process.DATA_DIR", tmp_path), \
          patch("process.TRANS_DIR", trans_dir), \
-         patch("process.scrape_account_summaries", return_value=mock_orestar), \
          patch("process.shutil"):
         aggregate(df)
 
@@ -135,7 +166,9 @@ def test_per_filer_coh_with_orestar(tmp_path):
 
     # COH = anchor_beginning + net_from_anchor_onward = 50000 + 3000 = 53000
     assert filer_data["cash_on_hand"] == 53000.0
-    assert filer_data["cash_on_hand_source"] == "orestar"
+    # ORESTAR supplies the opening anchor/check; the ending balance remains a
+    # transaction calculation and is never silently replaced by ORESTAR.
+    assert filer_data["cash_on_hand_source"] == "calculated"
     assert filer_data["orestar_account_summary"]["scrape_ts"] == 1711500000
 
 

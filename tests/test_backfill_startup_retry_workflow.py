@@ -1001,7 +1001,11 @@ def test_await_scope_and_tracking_require_this_fetch_success() -> None:
     candidate = (ROOT / ".github" / "workflows" / "candidate-filings.yml").read_text()
     candidate_wait = candidate[candidate.index("uses: ./.github/actions/await-orestar"):]
     candidate_wait = candidate_wait.split("\n      - name:", 1)[0]
-    assert 'fail-on-timeout: "true"' not in candidate_wait
+    assert 'fail-on-timeout: "true"' in candidate_wait
+    assert "Requeue after coordination timeout" in candidate
+    assert candidate.index("Requeue after coordination timeout") < candidate.index(
+        "Scrape candidate filings"
+    )
 
     await_action = AWAIT_ACTION.read_text()
     verify = VERIFY_WORKFLOW.read_text()

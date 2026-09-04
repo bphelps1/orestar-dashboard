@@ -14,15 +14,20 @@ on:
 
 permissions:
   contents: write
+  actions: write          # requeue instead of overlapping after a busy timeout
 
 concurrency:
-  group: data-pipeline
+  # A requeued run needs its own pending slot; await-orestar serializes the
+  # whole workflow before site access and scripts/push_data.sh handles pushes.
+  group: candidate-filings-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:
   filings:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    # 25m coordination wait + up to 25m browser install, with enough room for
+    # setup, the short filings scrape, map rebuild, and a retry dispatch.
+    timeout-minutes: 90
     env:
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -38,14 +43,33 @@ jobs:
       # .github/actions/await-orestar for why this is a runtime check rather
       # than a concurrency group or a schedule gap.
       - name: Wait for other ORESTAR jobs
+        id: orestar_wait
+        continue-on-error: true
         uses: ./.github/actions/await-orestar
         with:
-          # This job's own timeout is 40 minutes, so it cannot afford the
-          # default 45-minute wait — it would spend its entire budget queueing
-          # and be killed before doing any work, which is exactly what happened
-          # on 4 August. 25 leaves ample room for a job whose real work takes
-          # about two minutes.
+          # The work itself is short; bound queueing so a replacement can be
+          # dispatched well inside the job's 90-minute budget.
           max-wait-minutes: "25"
+          fail-on-timeout: "true"
+
+      - name: Requeue after coordination timeout
+        if: steps.orestar_wait.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/dispatch_retry.sh candidate-filings.yml --ref "${{ github.ref_name }}"
+
+      - name: Refuse uncoordinated candidate scrape
+        if: steps.orestar_wait.outcome == 'failure'
+        run: |
+          echo "::error::ORESTAR remained busy; queued a replacement filings scrape instead of overlapping it."
+          exit 1
+
+      - name: Refresh branch after coordination wait
+        # The map rebuild consumes current repository data after scraping; do
+        # not combine fresh filings with the checkout from before this wait.
+        run: |
+          git fetch --depth=1 origin "$GITHUB_REF_NAME"
+          git reset --hard FETCH_HEAD
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5

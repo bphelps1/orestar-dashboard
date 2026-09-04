@@ -241,10 +241,23 @@ def _run_selector(
     done="",
     incomplete="",
     progress_rows=None,
+    details=None,
 ):
     data = tmp_path / "data"
     (data / "aggregated" / "filers").mkdir(parents=True)
-    (data / "aggregated" / "filer_index.json").write_text("[]")
+    details = details or []
+    (data / "aggregated" / "filer_index.json").write_text(json.dumps([
+        {
+            "slug": row["slug"],
+            "name": row.get("name", row["slug"]),
+            "filer_id": (row.get("filer_ids") or [""])[0],
+        }
+        for row in details
+    ]))
+    for row in details:
+        (data / "aggregated" / "filers" / f"{row['slug']}.json").write_text(
+            json.dumps(row)
+        )
     (data / "coverage_diff.json").write_text(json.dumps(diff_rows))
     if survey_rows is not None:
         (data / "coverage_survey.json").write_text(json.dumps(survey_rows))
@@ -275,6 +288,41 @@ def _run_selector(
         end_path.read_text().strip() if end_path.exists() else None,
         resume_path.read_text().strip(),
     )
+
+
+def test_closed_pair_cannot_drive_dollar_fallback_but_missing_rows_can(
+    tmp_path,
+) -> None:
+    closed = {
+        "slug": "closed",
+        "name": "Closed Committee",
+        "filer_ids": ["40"],
+        # Retain a scalar to prove every automatic dollar path fails closed.
+        "orestar_discrepancy": 125.0,
+        "closed": True,
+        "orestar_comparison": {
+            "status": "paired",
+            "actionable": False,
+            "delta_at_capture": 125.0,
+        },
+    }
+
+    ids, mode, _end, _resume = _run_selector(
+        tmp_path / "dollar", [], details=[closed]
+    )
+    assert ids is None
+    assert mode == "count"
+
+    # Closure only suppresses heuristic dollar remediation. Concrete per-ID
+    # row evidence remains authoritative and must still be repairable.
+    ids, mode, _end, _resume = _run_selector(
+        tmp_path / "rows",
+        [],
+        survey_rows=[{"filer_id": "40", "missing": 1, "name": "Closed Committee"}],
+        details=[closed],
+    )
+    assert ids == "40"
+    assert mode == "count"
 
 
 def test_exact_selector_overrides_historical_done_and_batches_one(tmp_path) -> None:

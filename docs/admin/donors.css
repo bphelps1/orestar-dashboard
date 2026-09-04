@@ -355,10 +355,16 @@
    grey so it reads as a caveat on the number beside it — these rows stay in
    the list because the fix is to re-scrape them. */
 .bd-tag-stale { background: #fefcbf; color: #975a16; }
+.bd-tag-unpaired { background: #fed7d7; color: #9b2c2c; }
+.bd-reason {
+  display: block;
+  margin-top: 3px;
+  color: #718096;
+  font-size: .76rem;
+}
 
-/* Activity filed after ORESTAR's summary was captured. Shown next to the
-   difference so a reader can see the committee is ahead of ORESTAR rather
-   than in disagreement with it. */
+/* A scope-level balance/count change after the pair was captured. Shown next
+   to the frozen difference as context, never folded into that difference. */
 .bd-since {
   display: block;
   font-size: 0.78em;

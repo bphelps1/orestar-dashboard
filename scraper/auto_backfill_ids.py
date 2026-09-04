@@ -208,23 +208,32 @@ if not filers and survey_rows:
     unit = "rows"
     mode = "count"
 elif not filers:
-    # No survey yet — fall back to the dollar ranking so the workflow still
-    # functions, but say so, because this is the ranking that misfires.
-    print("No coverage survey found — falling back to dollar-discrepancy order. "
+    # No row-count evidence yet.  A dollar difference may select a useful
+    # committee, but only when it came from a paired ORESTAR/app capture.  Live
+    # transactions against an older summary are deliberately not eligible:
+    # that fallback is what repeatedly sent the backfill after healthy filers.
+    print("No coverage survey found — considering paired balance snapshots only. "
           "Run the Coverage Survey workflow to target by rows actually missing.")
     for f in FILERS_DIR.glob("*.json"):
         with open(f) as fh:
             d = json.load(fh)
         slug = d.get("slug", f.stem)
-        fid = slug_to_fid.get(slug)
+        scope_ids = sorted({str(fid) for fid in (d.get("filer_ids") or []) if str(fid)})
+        # An aggregate dollar gap cannot say which physical committee is
+        # missing a row. Count/identity evidence is per-filer and may still
+        # queue these scopes; the heuristic dollar fallback must not guess.
+        if len(scope_ids) != 1:
+            continue
+        fid = scope_ids[0]
         if (not fid or fid in already_done or fid in exact_covered
                 or incomplete.get(fid, 0) >= MAX_RETRIES):
             continue
-        disc = abs(d.get("orestar_discrepancy", 0))
-        yearly = d.get("yearly_discrepancies", {})
-        if yearly:
-            max_yearly = max(abs(v.get("discrepancy", 0)) for v in yearly.values())
-            disc = max(disc, max_yearly)
+        comparison = d.get("orestar_comparison") or {}
+        if (comparison.get("status") != "paired"
+                or not comparison.get("actionable")
+                or d.get("closed")):
+            continue
+        disc = abs(comparison.get("delta_at_capture") or 0)
         if disc > 0.01:
             filers.append((disc, fid, d.get("name", "")))
     filers.sort(reverse=True)
