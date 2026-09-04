@@ -8710,18 +8710,10 @@
   "filer_id": "315",
   "name": "Jackson County Republican Central Committee",
   "orestar": 6687,
-  "held": 6680,
-  "complete": false,
+  "held": 6687,
+  "complete": true,
   "surplus": [],
-  "missing": [
-   "5793534",
-   "5793535",
-   "5793537",
-   "5793551",
-   "5793553",
-   "5793554",
-   "5793555"
-  ],
+  "missing": [],
   "superseded": [],
   "checked": "2026-09-04"
  },
