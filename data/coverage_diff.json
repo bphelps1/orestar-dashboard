@@ -580,7 +580,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "17090",
@@ -2390,7 +2390,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "19990",
@@ -2456,7 +2456,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "312",
@@ -2467,7 +2467,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "22530",
@@ -2522,7 +2522,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "18980",
@@ -2566,7 +2566,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "5587",
@@ -2610,7 +2610,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "22682",
@@ -3113,13 +3113,15 @@
  {
   "filer_id": "346",
   "name": "Wasco County Democratic Central Committee",
-  "orestar": 1703,
+  "orestar": 1704,
   "held": 1703,
-  "complete": true,
+  "complete": false,
   "surplus": [],
-  "missing": [],
+  "missing": [
+   "5790802"
+  ],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "14465",
@@ -3163,7 +3165,10 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-03",
+  "last_attempt": "2026-09-04",
+  "last_failure": "unusable_window",
+  "failure_count": 1
  },
  {
   "filer_id": "22874",
@@ -3229,7 +3234,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "13185",
@@ -3383,7 +3388,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "6568",
@@ -3548,7 +3553,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "16023",
@@ -3603,7 +3608,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "14265",
@@ -3614,7 +3619,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "12585",
@@ -3647,7 +3652,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "15610",
@@ -3669,7 +3674,10 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-03",
+  "last_attempt": "2026-09-04",
+  "last_failure": "unusable_window",
+  "failure_count": 1
  },
  {
   "filer_id": "9366",
@@ -7994,7 +8002,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "24613",
@@ -8005,7 +8013,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "21395",
@@ -8016,7 +8024,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "14594",
@@ -8027,7 +8035,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "15432",
@@ -8038,7 +8046,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "20446",
@@ -8049,7 +8057,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "13428",
@@ -8060,18 +8068,18 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "340",
   "name": "Tillamook County Republican Central Committee",
-  "orestar": 672,
-  "held": 672,
+  "orestar": 674,
+  "held": 674,
   "complete": true,
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "16588",
@@ -8082,7 +8090,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "17065",
@@ -8093,7 +8101,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "20199",
@@ -8104,7 +8112,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "7606",
@@ -8126,7 +8134,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "6446",
@@ -8137,18 +8145,18 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "20477",
   "name": "Eugene REALTORS for Community",
-  "orestar": 851,
-  "held": 851,
+  "orestar": 852,
+  "held": 852,
   "complete": true,
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "20522",
@@ -8159,7 +8167,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "12512",
@@ -8170,7 +8178,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "19135",
@@ -8181,7 +8189,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "17862",
@@ -8192,7 +8200,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "21903",
@@ -8203,7 +8211,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "338",
@@ -8214,7 +8222,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "21775",
@@ -8225,7 +8233,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "21632",
@@ -8236,7 +8244,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "16321",
@@ -8247,7 +8255,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "14544",
@@ -8258,7 +8266,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "19463",
@@ -8280,7 +8288,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "23365",
@@ -8302,21 +8310,22 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "21544",
   "name": "Voices for Catherine McMullen",
-  "orestar": 1669,
-  "held": 1667,
+  "orestar": 1690,
+  "held": 1687,
   "complete": false,
   "surplus": [],
   "missing": [
-   "5752066",
-   "5787811"
+   "5755615",
+   "5793599",
+   "5793602"
   ],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "20102",
@@ -8327,7 +8336,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "3571",
@@ -8338,7 +8347,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "342",
@@ -8349,7 +8358,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "20209",
@@ -8360,20 +8369,18 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "14183",
   "name": "Citizens for Tony DeBone",
   "orestar": 2038,
-  "held": 2037,
-  "complete": false,
+  "held": 2038,
+  "complete": true,
   "surplus": [],
-  "missing": [
-   "5787228"
-  ],
+  "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "14364",
@@ -8617,7 +8624,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "147",
@@ -8628,7 +8635,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "23526",
