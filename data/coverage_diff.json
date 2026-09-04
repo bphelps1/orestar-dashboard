@@ -40,7 +40,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "319",
@@ -73,7 +73,7 @@
    "5513821"
   ],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "324",
@@ -197,7 +197,7 @@
    "5671844"
   ],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "16291",
@@ -322,7 +322,7 @@
  {
   "filer_id": "15132",
   "name": "Friends of Sharon Meieran",
-  "orestar": 2651,
+  "orestar": 2652,
   "held": 2656,
   "complete": false,
   "surplus": [
@@ -332,9 +332,11 @@
    "5725285",
    "5743646"
   ],
-  "missing": [],
+  "missing": [
+   "5757892"
+  ],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "24681",
@@ -460,7 +462,7 @@
   "filer_id": "351",
   "name": "Yamhill County Republican Party",
   "orestar": 1494,
-  "held": 1497,
+  "held": 1498,
   "complete": false,
   "surplus": [
    "5648944",
@@ -468,11 +470,27 @@
    "5648946",
    "5648947"
   ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-09-04"
+ },
+ {
+  "filer_id": "23208",
+  "name": "Teacher Tiffany for the People",
+  "orestar": 2190,
+  "held": 2193,
+  "complete": false,
+  "surplus": [
+   "5585599",
+   "5622811",
+   "5659034",
+   "5785460"
+  ],
   "missing": [
-   "5788229"
+   "5790330"
   ],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "24710",
@@ -607,7 +625,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "313",
@@ -624,22 +642,7 @@
    "1764317"
   ],
   "superseded": [],
-  "checked": "2026-09-03"
- },
- {
-  "filer_id": "23208",
-  "name": "Teacher Tiffany for the People",
-  "orestar": 2190,
-  "held": 2193,
-  "complete": false,
-  "surplus": [
-   "5585599",
-   "5622811",
-   "5659034"
-  ],
-  "missing": [],
-  "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "24571",
@@ -1053,7 +1056,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "18726",
@@ -1081,7 +1084,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "266",
@@ -1095,7 +1098,21 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
+ },
+ {
+  "filer_id": "1524",
+  "name": "Future PAC, House Builders",
+  "orestar": 18507,
+  "held": 18509,
+  "complete": false,
+  "surplus": [
+   "5458857",
+   "5458861"
+  ],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "24707",
@@ -1362,7 +1379,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "300",
@@ -1375,7 +1392,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "24948",
@@ -1986,7 +2003,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "21729",
@@ -1999,7 +2016,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "19280",
@@ -2025,7 +2042,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "20290",
@@ -2051,7 +2068,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "350",
@@ -2069,15 +2086,20 @@
  {
   "filer_id": "17890",
   "name": "Friends of Janeen Sollman",
-  "orestar": 2119,
+  "orestar": 2123,
   "held": 2120,
   "complete": false,
   "surplus": [
    "5572674"
   ],
-  "missing": [],
+  "missing": [
+   "5793596",
+   "5793597",
+   "5793598",
+   "5793600"
+  ],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "15377",
@@ -2103,7 +2125,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "16623",
@@ -2129,7 +2151,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "326",
@@ -2144,7 +2166,7 @@
    "1657097"
   ],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "17892",
@@ -2157,7 +2179,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "16719",
@@ -2170,7 +2192,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "15984",
@@ -2183,7 +2205,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "5785",
@@ -2644,9 +2666,9 @@
   "missing": [],
   "superseded": [],
   "checked": "2026-09-02",
-  "last_attempt": "2026-09-03",
+  "last_attempt": "2026-09-04",
   "last_failure": "unusable_window",
-  "failure_count": 1
+  "failure_count": 2
  },
  {
   "filer_id": "69",
@@ -2679,10 +2701,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02",
-  "last_attempt": "2026-09-03",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "18384",
@@ -3034,10 +3053,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30",
-  "last_attempt": "2026-09-03",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "21530",
@@ -3169,10 +3185,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30",
-  "last_attempt": "2026-09-03",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "20170",
@@ -4118,10 +4131,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02",
-  "last_attempt": "2026-09-03",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "5147",
@@ -4132,10 +4142,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02",
-  "last_attempt": "2026-09-03",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "1970",
@@ -4564,10 +4571,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02",
-  "last_attempt": "2026-09-03",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "18604",
@@ -4578,10 +4582,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02",
-  "last_attempt": "2026-09-03",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "22957",
@@ -5032,10 +5033,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02",
-  "last_attempt": "2026-09-03",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "21205",
@@ -5267,9 +5265,9 @@
   "missing": [],
   "superseded": [],
   "checked": "2026-09-02",
-  "last_attempt": "2026-09-03",
+  "last_attempt": "2026-09-04",
   "last_failure": "unusable_window",
-  "failure_count": 1
+  "failure_count": 2
  },
  {
   "filer_id": "16114",
@@ -5434,10 +5432,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30",
-  "last_attempt": "2026-09-03",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "14027",
@@ -5448,10 +5443,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30",
-  "last_attempt": "2026-09-03",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "15000",
@@ -5869,10 +5861,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30",
-  "last_attempt": "2026-09-03",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "18773",
@@ -5883,10 +5872,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30",
-  "last_attempt": "2026-09-03",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "18879",
@@ -6238,10 +6224,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30",
-  "last_attempt": "2026-09-03",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "4238",
@@ -6252,10 +6235,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30",
-  "last_attempt": "2026-09-03",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "18252",
@@ -6679,17 +6659,12 @@
   "filer_id": "21488",
   "name": "Michele Stroh for Senate",
   "orestar": 83,
-  "held": 82,
-  "complete": false,
+  "held": 83,
+  "complete": true,
   "surplus": [],
-  "missing": [
-   "5784628"
-  ],
+  "missing": [],
   "superseded": [],
-  "checked": "2026-08-30",
-  "last_attempt": "2026-09-03",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "19380",
@@ -6700,10 +6675,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30",
-  "last_attempt": "2026-09-03",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "25003",
@@ -7110,10 +7082,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30",
-  "last_attempt": "2026-09-03",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "16542",
@@ -7544,10 +7513,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30",
-  "last_attempt": "2026-09-03",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "13557",
@@ -8412,10 +8378,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30",
-  "last_attempt": "2026-09-03",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "19517",
@@ -8426,10 +8389,7 @@
   "surplus": [],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30",
-  "last_attempt": "2026-09-03",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "622",
