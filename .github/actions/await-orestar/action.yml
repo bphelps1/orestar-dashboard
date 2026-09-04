@@ -1,7 +1,7 @@
 name: Await ORESTAR
 description: >
-  Wait until no other ORESTAR-scraping workflow is running, so two of them never
-  hit the site at once.
+  Wait until no other ORESTAR-scraping workflow is active or freshly queued,
+  pending, requested, or waiting, so two of them never hit the site at once.
 
 # Why this exists, and why it is not a concurrency group.
 #
@@ -30,6 +30,10 @@ inputs:
       How long to wait before giving up and proceeding anyway. Proceeding beats
       skipping: a skipped daily refresh means a day with no data, and the
       scrapers' own failure guards will catch a genuinely bad overlap.
+
+      A cooled identity-backfill retry is the exception: its display title is
+      recognized below and never overlapped, because overlap would invalidate
+      the quiet interval and immediately recreate the F5 failure being healed.
 
       MUST be comfortably below the calling job's own timeout-minutes, with
       room left for the work itself. Waiting consumes the job's budget like any
@@ -70,7 +74,8 @@ runs:
         .github/workflows/candidate-filings.yml
         .github/workflows/backfill.yml
         .github/workflows/coverage-diff.yml
-        .github/workflows/coverage-survey.yml'
+        .github/workflows/coverage-survey.yml
+        .github/workflows/verify-filers.yml'
 
         ME_STARTED=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
                        -q .run_started_at 2>/dev/null || echo "")
@@ -85,21 +90,45 @@ runs:
         echo "This run ($GITHUB_RUN_ID) started $ME_STARTED"
 
         DEADLINE=$(( $(date +%s) + MAX_WAIT * 60 ))
+        # GitHub still reports one abandoned March backfill as queued with no
+        # jobs. A real queued contender can wait behind this repo's longest
+        # five-hour job, but a day-old record cannot still be part of the live
+        # handoff. Ignore only those demonstrably stale queue records.
+        PREACTIVE_FRESH_AFTER=$(date -u -d '24 hours ago' '+%Y-%m-%dT%H:%M:%SZ')
+        SAW_COOLDOWN_RETRY=false
         while :; do
-          # Ask for the in-flight runs, then filter in shell. Deliberately not a
-          # clever jq one-liner: this decides whether two scrapers hit ORESTAR
-          # together, and it needs to be obvious on sight and testable offline.
+          # Ask separately for pre-active and active runs. A retry child has its
+          # own concurrency group so it can start before its failed parent
+          # exits; without queued/pending/waiting contenders in this barrier,
+          # an older scraper can become active during the child's quiet cooldown.
           #
           # Only runs ordered before this one count. GitHub's run_started_at is
           # second-granularity, so timestamp comparison alone lets two runs in
           # the same second both proceed. Numeric run ID is the deterministic
           # tie-breaker (the lower ID was created first).
-          if ! RAW=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?status=in_progress&per_page=100" \
-                  --jq '.workflow_runs[] | [.id, .path, .run_started_at, .name] | @tsv' 2>/dev/null); then
+          API_OK=true
+          ACTIVE=""
+          PREACTIVE=""
+          # Query the earlier lifecycle state first. If a run advances from
+          # pending to active between snapshots, the second query still sees it.
+          # The created-since bound excludes GitHub's months-old queued zombie;
+          # pagination prevents a fresh waiter being crowded off the first page
+          # by a busy day of completed chain runs.
+          if ! PREACTIVE=$(gh api --paginate --method GET \
+                  "repos/$GITHUB_REPOSITORY/actions/runs" \
+                  -f per_page=100 -f "created=>=$PREACTIVE_FRESH_AFTER" \
+                  --jq '.workflow_runs[] | select(.status == "queued" or .status == "pending" or .status == "requested" or .status == "waiting") | [.id, .path, (.run_started_at // .created_at), .name, (.display_title // .name), .status, (.updated_at // .created_at)] | @tsv' 2>/dev/null); then
+            API_OK=false
+          fi
+          if ! ACTIVE=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?status=in_progress&per_page=100" \
+                  --jq '.workflow_runs[] | [.id, .path, (.run_started_at // .created_at), .name, (.display_title // .name), .status, (.updated_at // .created_at)] | @tsv' 2>/dev/null); then
+            API_OK=false
+          fi
+          if [ "$API_OK" != "true" ]; then
             # An API hiccup must not be read as "the coast is clear" — that is
             # the mistake that dispatched a job into a running one already.
             if [ "$(date +%s)" -ge "$DEADLINE" ]; then
-              if [ "$FAIL_ON_TIMEOUT" = "true" ]; then
+              if [ "$FAIL_ON_TIMEOUT" = "true" ] || [ "$SAW_COOLDOWN_RETRY" = "true" ]; then
                 echo "::error::Could not establish exclusive access before the coordination deadline."
                 exit 1
               fi
@@ -110,11 +139,22 @@ runs:
             sleep "$POLL"; continue
           fi
 
+          RAW="$PREACTIVE"
+          if [ -n "$ACTIVE" ]; then
+            [ -n "$RAW" ] && RAW+=$'\n'
+            RAW+="$ACTIVE"
+          fi
           BUSY=""
-          while IFS=$'\t' read -r id path started name; do
+          CURRENT_COOLDOWN_RETRY=false
+          while IFS=$'\t' read -r id path started name display_title state updated; do
             [ -n "$id" ] || continue
             [ "$id" = "$GITHUB_RUN_ID" ] && continue
             echo "$PEERS" | tr -d ' ' | grep -qx "$path" || continue
+            if [ "$state" != "in_progress" ] && [ -n "$updated" ] && \
+               [[ "$updated" < "$PREACTIVE_FRESH_AFTER" ]]; then
+              echo "::warning::Ignoring stale pre-active ORESTAR run $id (state $state, last updated $updated)."
+              continue
+            fi
             if [[ "$started" < "$ME_STARTED" ]]; then
               :
             elif [[ "$started" = "$ME_STARTED" ]] && \
@@ -123,15 +163,27 @@ runs:
             else
               continue
             fi
+            case "$display_title" in
+              "Historical Backfill startup retry "*)
+                # Cooled retry children may legitimately outlast a peer's
+                # ordinary fail-open deadline. Overlapping one would destroy
+                # the quiet interval it exists to provide, so remember it even
+                # across a later coordination-API hiccup.
+                CURRENT_COOLDOWN_RETRY=true
+                ;;
+            esac
             BUSY="$BUSY$name"$'\n'
           done <<< "$RAW"
+          # A failed API poll must remember the last proved cooldown retry, but
+          # a successful snapshot is authoritative and may clear that state.
+          SAW_COOLDOWN_RETRY=$CURRENT_COOLDOWN_RETRY
 
           if [ -z "$BUSY" ]; then
-            echo "No older ORESTAR run in flight — proceeding."
+            echo "No older ORESTAR run active or freshly queued — proceeding."
             exit 0
           fi
           if [ "$(date +%s)" -ge "$DEADLINE" ]; then
-            if [ "$FAIL_ON_TIMEOUT" = "true" ]; then
+            if [ "$FAIL_ON_TIMEOUT" = "true" ] || [ "$SAW_COOLDOWN_RETRY" = "true" ]; then
               echo "::error::Older ORESTAR run still active after ${MAX_WAIT}m; refusing to overlap a state writer."
               exit 1
             fi

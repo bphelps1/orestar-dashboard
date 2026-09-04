@@ -1,4 +1,5 @@
 name: Historical Backfill (one-time)
+run-name: ${{ startsWith(inputs.end_date, 'startup:') && format('Historical Backfill startup retry {0}', inputs.end_date) || 'Historical Backfill (one-time)' }}
 
 on:
   workflow_dispatch:
@@ -14,7 +15,7 @@ on:
         default: ""
         type: string
       end_date:
-        description: "Internal: frozen end date for a chained filer remediation (YYYY-MM-DD)"
+        description: "Internal: frozen remediation end date, optionally carrying a startup-retry handoff"
         required: false
         default: ""
         type: string
@@ -68,11 +69,57 @@ permissions:
 # runtime question about what is actually running, which delays rather than
 # evicts, and which every ORESTAR job honours.
 concurrency:
-  group: orestar-scrape
+  # A startup-retry child must be able to start while its failed parent is
+  # finishing; the shared pending slot could otherwise evict it. The child
+  # still waits behind every older ORESTAR run in await-orestar below.
+  group: ${{ startsWith(inputs.end_date, 'startup:') && format('orestar-scrape-retry-{0}', inputs.end_date) || 'orestar-scrape' }}
   cancel-in-progress: false
 
 jobs:
+  elect_retry:
+    runs-on: ubuntu-latest
+    outputs:
+      proceed: ${{ steps.elect.outputs.proceed }}
+    steps:
+      - name: Coalesce duplicate startup retries
+        id: elect
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HANDOFF: ${{ inputs.end_date }}
+        run: |
+          if [[ "$HANDOFF" != startup:* ]]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # dispatch_retry.sh is intentionally at-least-once. If GitHub accepts
+          # a dispatch but loses the response, several identical children can
+          # exist. Their logical concurrency group serializes them; only the
+          # oldest run may do work or create the next retry generation.
+          EXPECTED_TITLE="Historical Backfill startup retry $HANDOFF"
+          RAW=$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/backfill.yml/runs?event=workflow_dispatch&per_page=100" \
+            --jq '.workflow_runs[] | [.id, .display_title] | @tsv')
+          while IFS=$'\t' read -r RUN_ID DISPLAY_TITLE; do
+            [ -n "$RUN_ID" ] || continue
+            if [ "$DISPLAY_TITLE" = "$EXPECTED_TITLE" ] && \
+               [ "$RUN_ID" -lt "$GITHUB_RUN_ID" ]; then
+              BACKFILL_JOBS=$(gh api \
+                "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs?per_page=100" \
+                --jq '[.jobs[] | select(.name == "backfill" and .conclusion != "skipped")] | length')
+              if [ "$BACKFILL_JOBS" -gt 0 ]; then
+                echo "Duplicate of earlier logical retry run $RUN_ID — coalescing."
+                echo "proceed=false" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              echo "Earlier logical retry $RUN_ID never entered backfill; taking over."
+            fi
+          done <<< "$RAW"
+          echo "proceed=true" >> "$GITHUB_OUTPUT"
+
   backfill:
+    needs: elect_retry
+    if: needs.elect_retry.outputs.proceed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 300
 
@@ -88,6 +135,97 @@ jobs:
         uses: ./.github/actions/await-orestar
         with:
           fail-on-timeout: "true"
+
+      - name: Validate identity-backfill startup retry handoff
+        id: startup_handoff
+        if: startsWith(inputs.end_date, 'startup:')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HANDOFF: ${{ inputs.end_date }}
+          FILER_IDS: ${{ inputs.filer_ids }}
+          IDENTITY_MODE: ${{ inputs.identity_remediation }}
+          RESUME_AUTO: ${{ inputs.resume_auto }}
+          RESET_AUTO: ${{ inputs.reset_auto }}
+          VERIFICATION_IDS: ${{ inputs.verification_filer_ids }}
+        run: |
+          if [[ ! "$HANDOFF" =~ ^startup:[0-9]{4}-[0-9]{2}-[0-9]{2}:[12]:[0-9]+:[0-9]+:(true|false)$ ]]; then
+            echo "::error::Invalid identity-backfill startup handoff."
+            exit 1
+          fi
+          IFS=: read -r HANDOFF_KIND END_DATE RETRY_INDEX SOURCE_RUN SOURCE_ATTEMPT IDENTITY_RESUME HANDOFF_EXTRA <<< "$HANDOFF"
+          if [ "$HANDOFF_KIND" != "startup" ] || [ -n "$HANDOFF_EXTRA" ]; then
+            echo "::error::Invalid identity-backfill startup handoff."
+            exit 1
+          fi
+          if [[ ! "$END_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+            echo "::error::Invalid startup-retry end date: $END_DATE"
+            exit 1
+          fi
+          case "$RETRY_INDEX" in
+            1|2) ;;
+            *) echo "::error::Invalid startup-retry index: $RETRY_INDEX"; exit 1 ;;
+          esac
+          case "$SOURCE_RUN" in
+            ''|*[!0-9]*) echo "::error::Invalid startup-retry parent run ID."; exit 1 ;;
+          esac
+          case "$SOURCE_ATTEMPT" in
+            ''|*[!0-9]*) echo "::error::Invalid startup-retry parent attempt."; exit 1 ;;
+          esac
+          case "$IDENTITY_RESUME" in
+            true|false) ;;
+            *) echo "::error::Invalid startup-retry identity-resume state."; exit 1 ;;
+          esac
+          if [ "$IDENTITY_MODE" != "true" ] || [ "$RESUME_AUTO" != "true" ] || \
+             [ -z "$FILER_IDS" ] || [ "$FILER_IDS" = "auto" ] || \
+             [[ ! "$FILER_IDS" =~ ^[0-9]+([ ]+[0-9]+)*$ ]] || \
+             [ -z "$VERIFICATION_IDS" ] || \
+             [[ ! "$VERIFICATION_IDS" =~ ^[0-9]+([ ]+[0-9]+)*$ ]] || \
+             ( [ "$RESET_AUTO" != "true" ] && [ "$RESET_AUTO" != "false" ] ); then
+            echo "::error::Invalid functional inputs for an identity-backfill startup retry."
+            exit 1
+          fi
+
+          # Authenticate the exact source attempt, not merely the run ID. A
+          # manual rerun must not retroactively authorize a stale child, and a
+          # cancellation remains an instruction to stop the chain.
+          STATE=""
+          LATEST=""
+          for ATTEMPT in 1 2 3; do
+            STATE=$(gh api \
+              "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/attempts/$SOURCE_ATTEMPT" \
+              --jq '[.id, .run_attempt, .path, .event, .status, (.conclusion // "")] | @tsv' \
+              2>/dev/null || true)
+            LATEST=$(gh api \
+              "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" \
+              --jq '[.run_attempt, .status, (.conclusion // "")] | @tsv' \
+              2>/dev/null || true)
+            [ -n "$STATE" ] && [ -n "$LATEST" ] && break
+            sleep 5
+          done
+          if [ -z "$STATE" ] || [ -z "$LATEST" ]; then
+            echo "::error::Could not read current state for retry source run $SOURCE_RUN attempt $SOURCE_ATTEMPT."
+            exit 1
+          fi
+          IFS=$'\t' read -r ACTUAL_RUN ACTUAL_ATTEMPT SOURCE_PATH SOURCE_EVENT STATUS CONCLUSION <<< "$STATE"
+          IFS=$'\t' read -r LATEST_ATTEMPT LATEST_STATUS LATEST_CONCLUSION <<< "$LATEST"
+          if [ "$ACTUAL_RUN" != "$SOURCE_RUN" ] || \
+             [ "$ACTUAL_ATTEMPT" != "$SOURCE_ATTEMPT" ] || \
+             [ "$SOURCE_PATH" != ".github/workflows/backfill.yml" ] || \
+             [ "$SOURCE_EVENT" != "workflow_dispatch" ] || \
+             [ "$STATUS" != "completed" ] || \
+             [ "$CONCLUSION" != "failure" ] || \
+             [ "$LATEST_ATTEMPT" != "$SOURCE_ATTEMPT" ] || \
+             [ "$LATEST_STATUS" != "completed" ] || \
+             [ "$LATEST_CONCLUSION" != "failure" ]; then
+            echo "::error::Invalid retry source: path=$SOURCE_PATH event=$SOURCE_EVENT exact=$STATUS/$CONCLUSION latest=$LATEST_ATTEMPT:$LATEST_STATUS/$LATEST_CONCLUSION."
+            exit 1
+          fi
+
+          echo "end_date=$END_DATE" >> "$GITHUB_OUTPUT"
+          echo "retry_index=$RETRY_INDEX" >> "$GITHUB_OUTPUT"
+          echo "parent_run=$SOURCE_RUN" >> "$GITHUB_OUTPUT"
+          echo "parent_attempt=$SOURCE_ATTEMPT" >> "$GITHUB_OUTPUT"
+          echo "identity_resume=$IDENTITY_RESUME" >> "$GITHUB_OUTPUT"
 
       - name: Refresh branch after coordination wait
         # Checkout happens before the wait because the wait action is local.
@@ -124,11 +262,26 @@ jobs:
           FILER_IDS="${{ inputs.filer_ids }}"
           IDENTITY_MODE="${{ inputs.identity_remediation }}"
           IS_AUTO="${{ inputs.resume_auto }}"
-          IDENTITY_RESUME=false
-          IDENTITY_END_DATE="${{ inputs.end_date }}"
+          IDENTITY_RESUME="${{ steps.startup_handoff.outputs.identity_resume || 'false' }}"
+          IDENTITY_END_DATE="${{ steps.startup_handoff.outputs.end_date || inputs.end_date }}"
           VERIFICATION_IDS="${{ inputs.verification_filer_ids }}"
           CHAIN="${{ inputs.chain_index || '1' }}"
-          if [ "$CHAIN" = "1" ]; then
+          STARTUP_RETRY="${{ steps.startup_handoff.outputs.retry_index || '0' }}"
+          STARTUP_PARENT="${{ steps.startup_handoff.outputs.parent_run }}"
+          case "$CHAIN" in
+            ''|*[!0-9]*) echo "Invalid backfill chain index: $CHAIN"; exit 1 ;;
+          esac
+          if [ -n "$STARTUP_PARENT" ]; then
+            if [ "$IDENTITY_MODE" != "true" ] || [ "$IS_AUTO" != "true" ] || \
+               [ -z "$FILER_IDS" ] || [ "$FILER_IDS" = "auto" ] || \
+               [ -z "$VERIFICATION_IDS" ] || \
+               ( [ "${{ inputs.reset_auto }}" != "true" ] && \
+                 [ "${{ inputs.reset_auto }}" != "false" ] ); then
+              echo "Invalid functional inputs for an identity-backfill startup retry."
+              exit 1
+            fi
+          fi
+          if [ "$CHAIN" = "1" ] && [ "$STARTUP_RETRY" = "0" ]; then
             # The first run defines the immutable verification scope. Ignore
             # any stale/internal value supplied by a manual dispatch.
             VERIFICATION_IDS=""
@@ -165,6 +318,9 @@ jobs:
               echo "identity_resume=$IDENTITY_RESUME" >> "$GITHUB_OUTPUT"
               echo "identity_end_date=$IDENTITY_END_DATE" >> "$GITHUB_OUTPUT"
               echo "verification_ids=$VERIFICATION_IDS" >> "$GITHUB_OUTPUT"
+              echo "chain=$CHAIN" >> "$GITHUB_OUTPUT"
+              echo "startup_retry=$STARTUP_RETRY" >> "$GITHUB_OUTPUT"
+              echo "startup_parent=$STARTUP_PARENT" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             echo "Auto-resolved filer IDs: $FILER_IDS"
@@ -173,7 +329,8 @@ jobs:
           else
             echo "resolved=$FILER_IDS" >> "$GITHUB_OUTPUT"
             echo "is_auto=$IS_AUTO" >> "$GITHUB_OUTPUT"
-            if [ "$IDENTITY_MODE" = "true" ] && [ "$CHAIN" -gt 1 ] 2>/dev/null; then
+            if [ -z "$STARTUP_PARENT" ] && [ "$IDENTITY_MODE" = "true" ] && \
+               [ "$CHAIN" -gt 1 ] 2>/dev/null; then
               IDENTITY_RESUME=true
             fi
           fi
@@ -192,6 +349,43 @@ jobs:
           echo "identity_resume=$IDENTITY_RESUME" >> "$GITHUB_OUTPUT"
           echo "identity_end_date=$IDENTITY_END_DATE" >> "$GITHUB_OUTPUT"
           echo "verification_ids=$VERIFICATION_IDS" >> "$GITHUB_OUTPUT"
+          echo "chain=$CHAIN" >> "$GITHUB_OUTPUT"
+          echo "startup_retry=$STARTUP_RETRY" >> "$GITHUB_OUTPUT"
+          echo "startup_parent=$STARTUP_PARENT" >> "$GITHUB_OUTPUT"
+
+      - name: Hold identity-backfill startup retry cooldown
+        if: steps.resolve.outputs.startup_parent != ''
+        env:
+          COOLDOWN_SECONDS: "1200"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_RUN: ${{ steps.resolve.outputs.startup_parent }}
+          SOURCE_ATTEMPT: ${{ steps.startup_handoff.outputs.parent_attempt }}
+        run: |
+          case "$COOLDOWN_SECONDS" in
+            ''|*[!0-9]*) echo "::error::Invalid startup cooldown."; exit 1 ;;
+          esac
+          echo "::warning::Holding the ORESTAR lane quiet for ${COOLDOWN_SECONDS}s before startup retry ${{ steps.resolve.outputs.startup_retry }}/2."
+          sleep "$COOLDOWN_SECONDS"
+
+          # A maintainer can rerun or cancel the source while this child is
+          # cooling down. Recheck at the handoff boundary so that newer attempt
+          # remains authoritative instead of racing a now-stale child.
+          LATEST=""
+          for ATTEMPT in 1 2 3; do
+            LATEST=$(gh api \
+              "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" \
+              --jq '[.run_attempt, .status, (.conclusion // "")] | @tsv' \
+              2>/dev/null || true)
+            [ -n "$LATEST" ] && break
+            sleep 5
+          done
+          IFS=$'\t' read -r LATEST_ATTEMPT LATEST_STATUS LATEST_CONCLUSION <<< "$LATEST"
+          if [ "$LATEST_ATTEMPT" != "$SOURCE_ATTEMPT" ] || \
+             [ "$LATEST_STATUS" != "completed" ] || \
+             [ "$LATEST_CONCLUSION" != "failure" ]; then
+            echo "::error::Startup retry became stale during cooldown: latest=$LATEST_ATTEMPT:$LATEST_STATUS/$LATEST_CONCLUSION."
+            exit 1
+          fi
 
       # Gated on "auto mode found nothing", NOT on "no filer ids given".
       #
@@ -216,6 +410,15 @@ jobs:
           FILER_IDS="${{ steps.resolve.outputs.resolved }}"
           if [ -n "$FILER_IDS" ]; then
             echo "Filer-targeted backfill: $FILER_IDS"
+            # This marker is committed and otherwise describes the preceding
+            # run. Clear it for the guarded identity-auto path so no failure
+            # can mistake a prior filer's completion for this request's result.
+            # Other targeted modes may intentionally commit partial progress
+            # after fetch failure, so they must not inherit this deletion.
+            if [ "${{ steps.resolve.outputs.identity_mode }}" = "true" ] && \
+               [ "${{ steps.resolve.outputs.is_auto }}" = "true" ]; then
+              rm -f data/completed_backfills.txt
+            fi
             ARGS="--filer-ids $FILER_IDS --start-year=${{ inputs.start_year }}"
             if [ "${{ steps.resolve.outputs.identity_mode }}" = "true" ]; then
               END_DATE="${{ steps.resolve.outputs.identity_end_date }}"
@@ -228,19 +431,37 @@ jobs:
                 ARGS="$ARGS --reset-identity-progress"
               fi
             fi
+            set +e
             set -o pipefail
             xvfb-run --auto-servernum python scraper/fetch.py $ARGS 2>&1 | tee /tmp/backfill.log
+            PIPE_STATUSES=("${PIPESTATUS[@]}")
+            set -e
+            FETCH_STATUS=${PIPE_STATUSES[0]}
+            TEE_STATUS=${PIPE_STATUSES[1]:-0}
+            if [ "$FETCH_STATUS" -eq 0 ] && [ "$TEE_STATUS" -ne 0 ]; then
+              FETCH_STATUS=$TEE_STATUS
+            fi
             RESULT=$(grep '^REMEDIATION_RESULT ' /tmp/backfill.log | tail -1 || true)
             PROGRESS=0
             RETRY=0
+            STARTUP_RETRYABLE=0
             for KV in $RESULT; do
               case "$KV" in
                 progress=*) PROGRESS=${KV#progress=} ;;
                 retry=*)    RETRY=${KV#retry=} ;;
               esac
             done
+            if [ "$FETCH_STATUS" -ne 0 ] && \
+               [ "${{ steps.resolve.outputs.identity_mode }}" = "true" ] && \
+               [ "${{ steps.resolve.outputs.is_auto }}" = "true" ] && \
+               grep -qx 'REMEDIATION_STARTUP_EXHAUSTED attempts=3' /tmp/backfill.log && \
+               ! grep -q 'REMEDIATION_RESULT ' /tmp/backfill.log; then
+              STARTUP_RETRYABLE=1
+            fi
             echo "progress=$PROGRESS" >> "$GITHUB_OUTPUT"
             echo "retry=$RETRY" >> "$GITHUB_OUTPUT"
+            echo "startup_retryable=$STARTUP_RETRYABLE" >> "$GITHUB_OUTPUT"
+            exit "$FETCH_STATUS"
           else
             ARGS="--mode=backfill --start-year=${{ inputs.start_year }} --date-field=${{ inputs.date_field }}"
             if [ -n "${{ inputs.end_year }}" ]; then
@@ -249,11 +470,35 @@ jobs:
             xvfb-run --auto-servernum python scraper/fetch.py $ARGS
             echo "progress=0" >> "$GITHUB_OUTPUT"
             echo "retry=0" >> "$GITHUB_OUTPUT"
+            echo "startup_retryable=0" >> "$GITHUB_OUTPUT"
             echo "end_date=" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Retry transient identity-backfill startup
+        if: >-
+          always() && !cancelled() &&
+          steps.fetch.outcome == 'failure' &&
+          steps.fetch.outputs.startup_retryable == '1'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash scripts/retry_backfill_startup.sh \
+            "${{ steps.resolve.outputs.startup_retry }}" \
+            "${{ github.ref_name }}" \
+            "${{ steps.resolve.outputs.resolved }}" \
+            "${{ inputs.start_year }}" \
+            "${{ steps.fetch.outputs.end_date }}" \
+            "${{ inputs.date_field }}" \
+            "${{ steps.resolve.outputs.chain }}" \
+            "${{ steps.resolve.outputs.is_auto }}" \
+            "${{ steps.resolve.outputs.identity_resume }}" \
+            "${{ inputs.reset_auto }}" \
+            "${{ steps.resolve.outputs.verification_ids }}" \
+            "${{ github.run_id }}" \
+            "${{ github.run_attempt }}"
+
       - name: Track successfully backfilled filers (auto mode)
-        if: "!cancelled() && steps.resolve.outputs.is_auto == 'true' && steps.resolve.outputs.resolved != ''"
+        if: "!cancelled() && steps.fetch.outcome == 'success' && steps.resolve.outputs.is_auto == 'true' && steps.resolve.outputs.resolved != ''"
         run: |
           # Mark done ONLY what the scraper reports it actually finished.
           #
@@ -390,7 +635,7 @@ jobs:
                   -f resume_auto_backfill="$IS_AUTO"
                 exit 0
               fi
-              CHAIN="${{ github.event.inputs.chain_index || '1' }}"
+              CHAIN="${{ steps.resolve.outputs.chain }}"
               if [ "$CHAIN" -ge 40 ] 2>/dev/null; then
                 echo "Identity-remediation chain limit reached ($CHAIN): $REMAIN"
                 exit 0
@@ -430,7 +675,7 @@ jobs:
               exit 0
             fi
 
-            CHAIN="${{ github.event.inputs.chain_index || '1' }}"
+            CHAIN="${{ steps.resolve.outputs.chain }}"
             if [ "$CHAIN" -ge 40 ] 2>/dev/null; then
               echo "Chain limit reached ($CHAIN) with these still unfinished: $REMAIN"
               exit 0
@@ -473,7 +718,7 @@ jobs:
             # lane — so anything queued behind it is cancelled outright rather than
             # delayed. Yielding costs nothing: every window fetched is committed, so
             # the next scheduled or manual run picks up exactly where this stopped.
-            BATCH="${{ github.event.inputs.chain_index || '1' }}"
+            BATCH="${{ steps.resolve.outputs.chain }}"
             # 40, not 8. The bound is a runaway-loop backstop, not lane
             # rationing — that was the data-pipeline concern and no longer
             # applies. At ~25 fetches per run before ORESTAR throttles, the
