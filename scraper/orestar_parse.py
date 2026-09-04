@@ -22,6 +22,16 @@ import re
 _AMOUNT = r"(\()?\s*(-\s*)?\$\s*([\d,]+\.\d{2})\s*(\))?"
 
 
+def _amount_value(match: re.Match[str]) -> float:
+    """Convert one ``_AMOUNT`` match, including accounting signs."""
+    value = float(match.group(3).replace(",", ""))
+    negative = (
+        bool(match.group(2) and match.group(2).strip() == "-")
+        or bool(match.group(1) and match.group(4))
+    )
+    return -value if negative else value
+
+
 def parse_dollar(html: str, label: str, default: float | None = None) -> float | None:
     """First dollar amount following `label`, signed correctly.
 
@@ -42,15 +52,26 @@ def parse_dollar(html: str, label: str, default: float | None = None) -> float |
     #
     # Matching case-insensitively removes the whole class rather than the four
     # instances of it. No label on this page differs only by case.
-    m = re.search(re.escape(label) + r".*?" + _AMOUNT, html or "",
-                  re.DOTALL | re.IGNORECASE)
-    if not m:
-        return default
-    val = float(m.group(3).replace(",", ""))
-    # Parenthesised only counts when BOTH parens are present — a stray "(" from
-    # surrounding markup must not silently negate an otherwise positive figure.
-    negative = bool(m.group(2) and m.group(2).strip() == "-") or bool(m.group(1) and m.group(4))
-    return -val if negative else val
+    document = html or ""
+    # Never let a missing/truncated value borrow the next table row's amount.
+    # ORESTAR occasionally returns a partially rendered page through its F5
+    # layer.  The old ``label + .*? + amount`` expression crossed ``</tr>`` and
+    # turned this:
+    #
+    #   Total Contributions  [missing]
+    #   Total Expenditures    $500.00
+    #
+    # into $500 for BOTH fields.  Iterate label occurrences (some pages contain
+    # hidden duplicates), but bound each lookup to the current row whenever row
+    # markup is present.
+    for label_match in re.finditer(re.escape(label), document, re.IGNORECASE):
+        tail = document[label_match.end():]
+        boundary = re.search(r"</?tr\b", tail, re.IGNORECASE)
+        field = tail[:boundary.start()] if boundary else tail
+        amount = re.search(_AMOUNT, field, re.DOTALL | re.IGNORECASE)
+        if amount:
+            return _amount_value(amount)
+    return default
 
 def parse_dollar_between(html: str, start_label: str, end_label: str,
                          label: str, default: float | None = None) -> float | None:

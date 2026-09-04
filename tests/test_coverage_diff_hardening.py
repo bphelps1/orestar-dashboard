@@ -489,10 +489,10 @@ def test_row_diff_keeps_null_as_an_explicit_override(monkeypatch, tmp_path) -> N
 
     complete, withdrawn = P._row_diff()
 
-    assert complete["failed-with-date"] == (None, date(2026, 8, 28))
-    assert complete["failed-without-date"] == (None, None)
-    assert complete["usable-surplus"] == (False, date(2026, 8, 27))
-    assert complete["usable-clean"] == (True, date(2026, 8, 26))
+    assert complete["failed-with-date"] == (None, rows[0])
+    assert complete["failed-without-date"] == (None, rows[1])
+    assert complete["usable-surplus"] == (False, rows[2])
+    assert complete["usable-clean"] == (True, rows[3])
     assert withdrawn == {"usable-surplus": {"11", "12"}}
 
 
@@ -1048,9 +1048,9 @@ def test_collect_window_requires_exact_reported_count(monkeypatch) -> None:
 
 
 def test_aggregate_evidence_covers_every_filer() -> None:
-    summary_ts = datetime(2026, 8, 28, 12, 0).timestamp()
-    current = date(2026, 8, 28)
-    stale = date(2026, 8, 27)
+    summary_ts = datetime.fromisoformat("2026-08-28T12:00:00+00:00").timestamp()
+    current = {"checked_at": "2026-08-28T13:00:00+00:00"}
+    stale = {"checked_at": "2026-08-28T11:00:00+00:00"}
 
     assert P._aggregate_row_verdict(
         ["a", "b"], summary_ts, {"a": (True, current)}
@@ -1067,6 +1067,9 @@ def test_aggregate_evidence_covers_every_filer() -> None:
         ["a", "b"], summary_ts,
         {"a": (True, current), "b": (True, current)},
     ) is True
+    assert P._aggregate_row_verdict(
+        ["a"], summary_ts, {"a": (True, date(2026, 8, 28))}
+    ) is None
     assert P._aggregate_row_verdict(
         ["a", "b"], summary_ts,
         {"a": (True, current), "b": (False, current)},

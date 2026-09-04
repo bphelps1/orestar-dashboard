@@ -41,7 +41,7 @@ import logging
 import re
 import sys
 import time
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -51,6 +51,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
 import fetch as F
 import supabase_sync
+from balance_snapshot import evidence_is_current
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 SURVEY_PATH = DATA_DIR / "coverage_survey.json"
@@ -66,6 +67,33 @@ FIRST_YEAR = 2006
 # ---------------------------------------------------------------------------
 # Inputs
 # ---------------------------------------------------------------------------
+
+def _expand_actionable_rows(rows: list[dict]) -> list[dict]:
+    """Expand aggregate comparison scopes into physical IDs for surveying."""
+    expanded: dict[str, dict] = {}
+    for row in rows or []:
+        if (row.get("comparison_status") != "paired"
+                or row.get("newer_app_data") or row.get("closed")):
+            continue
+        ids = row.get("filer_ids") or [row.get("filer_id")]
+        for raw_fid in ids:
+            fid = str(raw_fid or "").strip()
+            if not fid:
+                continue
+            candidate = {**row, "filer_id": fid}
+            previous = expanded.get(fid)
+            if previous is None or abs(candidate.get("delta") or 0) > abs(previous.get("delta") or 0):
+                expanded[fid] = candidate
+    return list(expanded.values())
+
+
+def _evidence_is_current(evidence: dict | None, comparison: dict | None) -> bool:
+    """Whether a count was measured after the paired summary it supports."""
+    comparison = comparison or {}
+    return evidence_is_current(
+        evidence,
+        comparison.get("scrape_ts") or comparison.get("captured_at"),
+    )
 
 def _flagged_committees() -> list[dict]:
     """Committees with a balance discrepancy, worst first.
@@ -87,10 +115,13 @@ def _flagged_committees() -> list[dict]:
                 d = json.loads(d)
     finally:
         conn.close()
-    rows = d.get("filers") if isinstance(d, dict) else d
-    if rows is None and isinstance(d, dict):
-        rows = next((v for v in d.values() if isinstance(v, list)), [])
-    out = [r for r in (rows or []) if r.get("filer_id")]
+    if isinstance(d, dict):
+        rows = d.get("rows")
+        if rows is None:  # compatibility with the older cache envelope
+            rows = d.get("filers", [])
+    else:
+        rows = d
+    out = _expand_actionable_rows(rows or [])
     out.sort(key=lambda r: -abs(r.get("delta", 0) or 0))
     return out
 
@@ -480,7 +511,13 @@ def main() -> int:
         log.info("--recheck: forgetting %d recorded result(s) of the %d targeted; "
                  "%d other committees keep theirs",
                  len(_forgotten), len(targets), len(surveyed))
-    todo = [t for t in targets if t not in surveyed]
+    if args.filer_ids:
+        todo = [t for t in targets if t not in surveyed]
+    else:
+        todo = [
+            t for t in targets
+            if not _evidence_is_current(surveyed.get(t), by_id.get(t))
+        ]
     log.info("%d committees flagged, %d already surveyed, %d to go",
              len(targets), len(targets) - len(todo), len(todo))
     if not todo:
@@ -575,7 +612,8 @@ def main() -> int:
                 "surplus": max(ours - n, 0),
                 "delta": meta.get("delta"),
                 "dormant": meta.get("dormant"),
-                "checked": today.isoformat(),
+                "checked": today.isoformat(),       # compatibility
+                "checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             }
             _save_survey(surveyed)
             done_this_run += 1

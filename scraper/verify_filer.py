@@ -764,12 +764,31 @@ def get_filers_with_discrepancies(threshold: float = 100.0) -> list[tuple[str, s
             continue
         with open(detail_path) as f:
             detail = json.load(f)
-        # Read discrepancy from detail file (not index — index doesn't have it)
-        disc = abs(detail.get("orestar_discrepancy", 0.0))
+        # Automatic verification must be driven by an immutable paired
+        # capture, not by the legacy scalar.  Old generated detail files can
+        # still contain ``orestar_discrepancy`` even though their ORESTAR
+        # balance was not captured alongside the app state.  Fail closed on
+        # missing/stale/closed comparison metadata and read the delta from the
+        # paired evidence itself.
+        comparison = detail.get("orestar_comparison")
+        if (not isinstance(comparison, dict)
+                or comparison.get("status") != "paired"
+                or comparison.get("actionable") is not True
+                or detail.get("closed")):
+            continue
+        try:
+            disc = abs(float(comparison["delta_at_capture"]))
+        except (KeyError, TypeError, ValueError):
+            continue
         if disc >= threshold:
-            fid = detail.get("orestar_account_summary", {}).get("filer_id")
-            if not fid:
-                fid = str(entry.get("filer_id", ""))
+            scope_ids = sorted({str(fid) for fid in (detail.get("filer_ids") or [])
+                                if str(fid)})
+            # The aggregate delta does not identify which component filer is
+            # responsible. Automatic threshold selection waits for per-ID
+            # count/identity evidence instead of guessing a representative.
+            if len(scope_ids) != 1:
+                continue
+            fid = scope_ids[0]
             if fid:
                 results.append((str(fid), entry.get("name", slug), disc))
 

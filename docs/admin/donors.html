@@ -120,10 +120,10 @@
     <section class="admin-section">
       <h2>Cash on Hand vs ORESTAR</h2>
       <p class="section-desc">
-        Every committee's calculated cash on hand, checked against the ending balance on
-        its own ORESTAR account summary. Cash on hand is always calculated from
-        transactions — ORESTAR is the check, never the input — so a gap means either our
-        transaction data is incomplete or ORESTAR's own arithmetic is.
+        Each discrepancy compares the app balance already published from an exact,
+        fingerprinted transaction snapshot with the ORESTAR ending balance read during
+        its matching capture window. If either side changes afterward, the pair moves to
+        “needs refresh” instead of remaining an active discrepancy.
       </p>
       <p class="section-desc">
         <b>Dormant</b> committees have no transactions in the year ORESTAR reports.
@@ -142,6 +142,13 @@
           <option value="all">All committees</option>
           <option value="active">Actively filing only</option>
           <option value="dormant">Dormant only</option>
+        </select>
+        <select id="bd-status" class="bd-select">
+          <option value="actionable">Current discrepancies</option>
+          <option value="refresh">Pairs needing refresh</option>
+          <option value="unpaired">Unpaired / unusable</option>
+          <option value="nonactionable">Trailing blank / likely closed</option>
+          <option value="all">All audit states</option>
         </select>
         <span id="bd-count" class="section-desc"></span>
       </div>

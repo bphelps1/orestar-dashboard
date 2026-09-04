@@ -29,23 +29,12 @@ permissions:
   contents: write
   actions: write          # needed to retrigger itself
 
-# The two ORESTAR browser scrapers share a lane of their own, apart from the
-# aggregation pipeline. Two reasons, and only one of them is about safety:
-#
-#   * Concurrent pushes are already handled — scripts/push_data.sh pushes
-#     first and, if rejected, shallow-fetches the new tip, replays its own
-#     files and retries. So the shared lane was never what protected them.
-#   * Two Playwright scrapers hitting ORESTAR at once is a real risk. On
-#     27 July a balances batch failed all 200 page loads right after the daily
-#     job pulled 7,245 pages through the site. Keeping BOTH scrapers in this
-#     one lane means they can never overlap.
-#
-# What the shared lane was actually costing: GitHub keeps one pending run per
-# group, so a third arrival evicts the waiting one. The self-retriggering
-# balances chain re-claimed the lane every batch and evicted a scheduled
-# Candidate Filings run outright — zero jobs, logged as "cancelled".
+# Give each run its own pending slot. A static/shared group lets GitHub evict an
+# older waiter when another run arrives, including the exact replacement just
+# queued after a coordination timeout. await-orestar provides the real,
+# fail-closed total ordering before any scraper reaches the site.
 concurrency:
-  group: orestar-scrape
+  group: filer-metadata-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -63,7 +52,34 @@ jobs:
       # .github/actions/await-orestar for why this is a runtime check rather
       # than a concurrency group or a schedule gap.
       - name: Wait for other ORESTAR jobs
+        id: orestar_wait
+        continue-on-error: true
         uses: ./.github/actions/await-orestar
+        with:
+          max-wait-minutes: "30"
+          fail-on-timeout: "true"
+
+      - name: Requeue after coordination timeout
+        if: steps.orestar_wait.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash scripts/dispatch_retry.sh filer-metadata.yml --ref "${{ github.ref_name }}" \
+            -f max_filers="${{ github.event.inputs.max_filers || '500' }}" \
+            -f force="${{ github.event.inputs.force || 'false' }}"
+
+      - name: Refuse uncoordinated metadata scrape
+        if: steps.orestar_wait.outcome == 'failure'
+        run: |
+          echo "::error::ORESTAR remained busy; queued the same metadata batch instead of overlapping it."
+          exit 1
+
+      - name: Refresh branch after coordination wait
+        # filer_metadata.json is cumulative. Keep entries written by the run
+        # that held the ORESTAR lane while this checkout was waiting.
+        run: |
+          git fetch --depth=1 origin "$GITHUB_REF_NAME"
+          git reset --hard FETCH_HEAD
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -103,7 +119,7 @@ jobs:
           echo "remaining=$REMAINING" >> "$GITHUB_OUTPUT"
 
       - name: Re-aggregate with updated metadata
-        if: always()
+        if: always() && steps.orestar_wait.outcome == 'success'
         run: python scraper/process.py
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
@@ -112,12 +128,12 @@ jobs:
           SUPABASE_STORAGE_BUCKET: exports
 
       - name: Commit and push updated data
-        if: always()
+        if: always() && steps.orestar_wait.outcome == 'success'
         run: |
           bash scripts/push_data.sh "chore: update filer metadata $(date -u +%Y-%m-%d)" data/ docs/data/
 
       - name: Check if more filers remain and retrigger
-        if: always()
+        if: always() && steps.orestar_wait.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

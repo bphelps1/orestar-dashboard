@@ -18,12 +18,19 @@ import logging
 import re
 import shutil
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pandas as pd
 from rapidfuzz import fuzz, process as rfuzz_process
 
+from balance_snapshot import (
+    SOURCE_FILENAME,
+    build_source as build_balance_snapshot_source,
+    evidence_is_current,
+    paired_comparison,
+    transaction_snapshot_id,
+)
 import orestar_parse
 import supabase_sync
 
@@ -102,16 +109,27 @@ def _aggregate_row_verdict(filer_ids, summary_ts,
         return False
     if not all(verdict is True for verdict in verdicts) or not summary_ts:
         return None
-    summary_day = datetime.fromtimestamp(float(summary_ts)).date()
-    checked_days = [row[1] for row in rows]
-    return True if all(day is not None and day >= summary_day
-                       for day in checked_days) else None
+    evidence_rows = [row[1] for row in rows]
+    current = []
+    for item in evidence_rows:
+        if isinstance(item, dict):
+            current.append(evidence_is_current(item, summary_ts))
+        elif item is not None:
+            # Compatibility for tests/callers passing a bare legacy date. A
+            # date-only value means midnight UTC and is conservatively stale
+            # for a summary read later that day.
+            current.append(evidence_is_current({"checked": str(item)}, summary_ts))
+        else:
+            current.append(False)
+    return True if all(current) else None
 
 
 def _row_diff() -> tuple[dict, dict]:
     """The row-level diff, when one has been run.
 
-    Returns ({filer_id: (complete, checked_date)}, {filer_id: {withdrawn ids}}).
+    Returns ({filer_id: (complete, evidence_row)},
+    {filer_id: {withdrawn ids}}). Keeping the full timestamped row avoids
+    reducing same-day ordering to an unknowable date comparison.
 
     diff_coverage.py compares tran_id SETS rather than counts, which is the
     only thing that can settle completeness here: ORESTAR's search returns
@@ -132,19 +150,13 @@ def _row_diff() -> tuple[dict, dict]:
         complete, withdrawn = {}, {}
         for e in json.loads(path.read_text()):
             fid = str(e["filer_id"])
-            checked = None
-            if e.get("checked"):
-                try:
-                    checked = datetime.fromisoformat(str(e["checked"])).date()
-                except ValueError:
-                    checked = None
             # Presence matters. `complete: null` is an explicit refusal from
             # the identity diff and must override the count survey with
             # unknown; omitting it here silently falls back to the very
             # count-only evidence this file says is not authoritative.
             if "complete" in e:
                 verdict = None if e["complete"] is None else bool(e["complete"])
-                complete[fid] = (verdict, checked)
+                complete[fid] = (verdict, e)
             ids = {str(i) for i in (e.get("surplus") or [])}
             if ids:
                 withdrawn[fid] = ids
@@ -171,12 +183,6 @@ def _row_completeness() -> dict:
     try:
         out = {}
         for e in json.loads(path.read_text()):
-            checked = None
-            if e.get("checked"):
-                try:
-                    checked = datetime.fromisoformat(str(e["checked"])).date()
-                except ValueError:
-                    checked = None
             # Judged on the RAW COUNTS, not on `missing`.
             #
             # `missing` is written as max(orestar - ours, 0) — clamped — so a
@@ -215,7 +221,7 @@ def _row_completeness() -> dict:
                 _complete = (int(_o) == int(_h))
             else:                       # older survey rows without the counts
                 _complete = (e.get("missing") or 0) == 0
-            out[str(e["filer_id"])] = (_complete, checked)
+            out[str(e["filer_id"])] = (_complete, e)
         return out
     except Exception:
         return {}
@@ -226,10 +232,156 @@ def _row_completeness() -> dict:
 # correction (#96) and the exempt one below.
 _LOAN_FIELD_TRUSTWORTHY_FROM = 1787500800.0
 
+
+def _summary_scrape_ts(summary: dict | None, fallback: float = 0.0) -> float:
+    """Oldest contributing scrape timestamp for a committee-year.
+
+    ``scrape_ts`` is the capture time for a physical filer. Combined multi-ID
+    summaries additionally carry ``scrape_ts_min`` because parser-dependent
+    fields are trustworthy only when every contributing page was scraped
+    after the parser fix. A fresh current-page read must never promote untouched
+    historical years through the filer-level fallback timestamp.
+    """
+    row = summary or {}
+    try:
+        if "scrape_ts_min" in row:
+            value = row.get("scrape_ts_min")
+        elif "scrape_ts" in row:
+            value = row.get("scrape_ts")
+        else:
+            value = fallback
+        return float(value or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _loan_fields_trustworthy(summary: dict | None, fallback: float = 0.0) -> bool:
+    row = summary or {}
+    # New-format combined rows carry the oldest component's parser version.
+    # Never let one freshly parsed member bless a sibling whose optional loan
+    # fields still came from the legacy synthetic-zero parser.
+    version = row.get("summary_field_version_min", row.get("summary_field_version"))
+    if version is not None:
+        try:
+            if int(version) < _SUMMARY_FIELD_VERSION:
+                return False
+        except (TypeError, ValueError):
+            return False
+    return _summary_scrape_ts(summary, fallback) >= _LOAN_FIELD_TRUSTWORTHY_FROM
+
 _SUMMABLE = ("ending_cash_balance", "beginning_balance", "contributions",
              "expenditures", "other_receipts", "other_disbursements",
              "balance_adjustments", "inkind_contributions",
-             "inkind_expenditures", "loans_received", "loan_payments")
+             "inkind_expenditures", "loans_received",
+             "loans_received_exempt", "loan_payments",
+             "loan_payments_exempt", "accounts_receivable",
+             "accounts_payable", "total_outstanding_loans",
+             "outstanding_personal_expenditures", "balance_deficit")
+
+_NULLABLE_SUMMARY_FIELDS = {
+    "inkind_contributions", "inkind_expenditures", "loans_received",
+    "loans_received_exempt", "loan_payments", "loan_payments_exempt",
+    "accounts_receivable", "accounts_payable", "total_outstanding_loans",
+    "outstanding_personal_expenditures", "balance_deficit",
+}
+
+
+def _sum_summary_field(rows: list[dict], key: str) -> float | None:
+    """Sum a scope field without turning one component's unknown into zero."""
+    if key in _NULLABLE_SUMMARY_FIELDS and any(row.get(key) is None for row in rows):
+        return None
+    return round(sum(float(row.get(key) or 0.0) for row in rows), 2)
+
+_SUMMARY_ACTIVITY_FIELDS = (
+    "contributions", "expenditures", "other_receipts",
+    "other_disbursements", "beginning_balance", "ending_cash_balance",
+    "balance_adjustments", "loans_received", "loans_received_exempt",
+    "loan_payments", "loan_payments_exempt", "inkind_contributions",
+    "inkind_expenditures", "accounts_receivable", "accounts_payable",
+    "total_outstanding_loans", "outstanding_personal_expenditures",
+    "balance_deficit",
+)
+_SUMMARY_FIELD_VERSION = 2
+
+
+def _normalize_year_scrape_timestamps(yearly: dict) -> dict:
+    """Migrate legacy per-filer timestamps onto their untouched year rows.
+
+    The original cache stored one ``ts`` beside the ``years`` map. New captures
+    timestamp each year independently so a cheap current-page refresh cannot
+    freshen twenty historical pages. Copying the legacy value only when a row
+    has no explicit timestamp preserves that distinction during rollout and,
+    for multi-ID profiles, prevents a missing key from becoming an artificial
+    ``scrape_ts_min = 0``.
+    """
+    for entry in (yearly or {}).values():
+        if not isinstance(entry, dict):
+            continue
+        try:
+            fallback = float(entry.get("ts") or 0.0)
+        except (TypeError, ValueError):
+            fallback = 0.0
+        for row in (entry.get("years") or {}).values():
+            if isinstance(row, dict):
+                row.setdefault("scrape_ts", fallback)
+    return yearly
+
+
+def _combine_scope_yearly_summaries(yearlies: list[dict]) -> dict:
+    """Combine only committee-years present for every physical filer.
+
+    Treating an absent member as a zero is unsafe: a failed historical crawl
+    can leave one sibling at 2020 while another reaches 2006, after which a
+    sibling-only ORESTAR loan value would be compared with all members' app
+    transactions. Missing coverage stays unknown instead.
+    """
+    combined: dict[str, dict] = {}
+    if not yearlies:
+        return combined
+    for year in {key for years in yearlies for key in years}:
+        rows = [years[year] for years in yearlies if year in years]
+        if len(rows) != len(yearlies):
+            continue
+        base = dict(rows[0])
+        for key in _SUMMABLE:
+            base[key] = _sum_summary_field(rows, key)
+        row_times = [float(row.get("scrape_ts") or 0) for row in rows]
+        base["scrape_ts"] = max(row_times)
+        base["scrape_ts_min"] = min(row_times)
+        field_versions = []
+        for row in rows:
+            try:
+                field_versions.append(int(row.get("summary_field_version") or 0))
+            except (TypeError, ValueError):
+                field_versions.append(0)
+        base["summary_field_version"] = max(field_versions)
+        base["summary_field_version_min"] = min(field_versions)
+        combined[year] = base
+    return combined
+
+
+def _summary_has_activity(row: dict | None) -> bool:
+    return isinstance(row, dict) and any(
+        abs(float(row.get(key) or 0.0)) > 0.0
+        for key in _SUMMARY_ACTIVITY_FIELDS
+    )
+
+
+def _summary_is_confirmed_blank(row: dict | None) -> bool:
+    """Whether a newly parsed row proves that nothing is held or moving."""
+    if not isinstance(row, dict):
+        return False
+    try:
+        field_version = int(row.get("summary_field_version") or 0)
+    except (TypeError, ValueError):
+        return False
+    if field_version < _SUMMARY_FIELD_VERSION:
+        # Legacy optional fields defaulted to zero when the label/value was
+        # absent, so an all-zero legacy row cannot prove closure.
+        return False
+    if any(key not in row or row.get(key) is None for key in _SUMMARY_ACTIVITY_FIELDS):
+        return False
+    return not _summary_has_activity(row)
 
 AGG_DIR       = DATA_DIR / "aggregated"
 ENTITY_MAP    = Path(__file__).parent / "entity_map.json"
@@ -1204,6 +1356,11 @@ def _latest_year_summaries(yearly: dict, filer_ids: list[str]) -> dict:
             continue
         yr = max(years)                      # string years sort correctly
         y = years[yr]
+
+        def _optional_amount(key: str) -> float | None:
+            value = y.get(key)
+            return None if value is None else float(value)
+
         out[str(fid)] = {
             "year": int(yr),
             # When this summary was captured, carried down from the FILER level.
@@ -1218,7 +1375,11 @@ def _latest_year_summaries(yearly: dict, filer_ids: list[str]) -> dict:
             # which is exactly the question the 2026 balance divergence turns on.
             # The popover already tries to show "Scraped: …" and has been printing
             # the epoch.
-            "ts": float((yearly.get(str(fid)) or {}).get("ts") or 0),
+            "ts": float(
+                y.get("scrape_ts")
+                or (yearly.get(str(fid)) or {}).get("ts")
+                or 0
+            ),
             "beginning_balance": float(y.get("beginning_balance") or 0),
             "ending_cash_balance": float(y.get("ending_cash_balance") or 0),
             "orestar_contributions": float(y.get("contributions") or 0),
@@ -1226,15 +1387,24 @@ def _latest_year_summaries(yearly: dict, filer_ids: list[str]) -> dict:
             "orestar_other_receipts": float(y.get("other_receipts") or 0),
             "orestar_other_disbursements": float(y.get("other_disbursements") or 0),
             "balance_adjustments": float(y.get("balance_adjustments") or 0),
-            "inkind_contributions": float(y.get("inkind_contributions") or 0),
-            "inkind_expenditures": float(y.get("inkind_expenditures") or 0),
-            "loans_received": float(y.get("loans_received") or 0),
-            "loans_received_exempt": float(y.get("loans_received_exempt") or 0),
-            "loan_payments": float(y.get("loan_payments") or 0),
-            "loan_payments_exempt": float(y.get("loan_payments_exempt") or 0),
-            "accounts_receivable": float(y.get("accounts_receivable") or 0),
-            "accounts_payable": float(y.get("accounts_payable") or 0),
-            "scrape_ts": (yearly.get(str(fid)) or {}).get("ts", 0),
+            "inkind_contributions": _optional_amount("inkind_contributions"),
+            "inkind_expenditures": _optional_amount("inkind_expenditures"),
+            "loans_received": _optional_amount("loans_received"),
+            "loans_received_exempt": _optional_amount("loans_received_exempt"),
+            "loan_payments": _optional_amount("loan_payments"),
+            "loan_payments_exempt": _optional_amount("loan_payments_exempt"),
+            "accounts_receivable": _optional_amount("accounts_receivable"),
+            "accounts_payable": _optional_amount("accounts_payable"),
+            "total_outstanding_loans": _optional_amount("total_outstanding_loans"),
+            "outstanding_personal_expenditures": _optional_amount(
+                "outstanding_personal_expenditures"
+            ),
+            "balance_deficit": _optional_amount("balance_deficit"),
+            "scrape_ts": float(
+                y.get("scrape_ts")
+                or (yearly.get(str(fid)) or {}).get("ts")
+                or 0
+            ),
         }
     return out
 
@@ -1394,6 +1564,43 @@ def scrape_account_summaries(
     return result
 
 
+def _trailing_blank_closure(years: dict) -> tuple[bool, int | None, float | None]:
+    """Return closure evidence for one physical ORESTAR filer.
+
+    Closure cannot be inferred after year-wise aggregation: in a multi-ID
+    canonical profile, one filer's trailing blank can be newer than another
+    filer's still-live final statement and falsely close the entire profile.
+    Each physical filer must independently have a real statement followed by
+    at least one blank statement.
+    """
+    if not isinstance(years, dict):
+        return False, None, None
+
+    ordered = sorted(
+        (str(year) for year in years if str(year).isdigit()), key=int
+    )
+    if not ordered:
+        return False, None, None
+
+    # Only a continuous suffix of fully parsed rows can establish closure. An
+    # F5-truncated row or a legacy synthetic-zero row is unknown, not blank.
+    suffix_start = len(ordered)
+    for index in range(len(ordered) - 1, -1, -1):
+        if not _summary_is_confirmed_blank(years[ordered[index]]):
+            break
+        suffix_start = index
+    if suffix_start == len(ordered):
+        return False, None, None
+
+    live = [year for year in ordered[:suffix_start]
+            if _summary_has_activity(years[year])]
+    if not live:
+        return False, None, None
+    blank_from = int(ordered[suffix_start])
+    final_balance = float(years[live[-1]].get("ending_cash_balance") or 0.0)
+    return True, blank_from, final_balance
+
+
 def aggregate_filers(
     df: pd.DataFrame,
     contributions: pd.DataFrame,   # all type C contributions (including in-kind)
@@ -1408,6 +1615,12 @@ def aggregate_filers(
     """Generate filer_index.json and per-filer detail files under data/aggregated/filers/."""
     filers_dir = AGG_DIR / "filers"
     filers_dir.mkdir(parents=True, exist_ok=True)
+
+    # Fingerprint the exact app-side transaction snapshot once.  A freshly
+    # scraped ORESTAR summary is allowed to become an authoritative comparison
+    # only when its saved app balance came from these exact bytes.
+    _transaction_snapshot_id = transaction_snapshot_id(TRANS_DIR)
+    _balance_snapshot_scopes: list[dict] = []
 
     def _filer_type_rows(frame):
         if frame.empty or "book_type" not in frame.columns:
@@ -1489,7 +1702,7 @@ def aggregate_filers(
     _yearly_summaries: dict[str, dict] = {}  # filer_id → {years: {yr: {...}}, ts}
     if _yearly_path.exists():
         with open(_yearly_path) as f:
-            _yearly_summaries = json.load(f)
+            _yearly_summaries = _normalize_year_scrape_timestamps(json.load(f))
         log.info("Loaded yearly ORESTAR summaries for %d filers", len(_yearly_summaries))
 
     if _filer_id_col:
@@ -1589,7 +1802,7 @@ def aggregate_filers(
                 continue
             merged = dict(parts[0])
             for k in _SUMMABLE:
-                merged[k] = round(sum(float(p.get(k) or 0) for p in parts), 2)
+                merged[k] = _sum_summary_field(parts, k)
             # Freshness for an aggregate is bounded by its newest component.
             # Using parts[0]'s timestamp can let older row-diff evidence certify
             # a canonical name even though another committee's summary was
@@ -1646,14 +1859,7 @@ def aggregate_filers(
             if len(yearlies) == 1:
                 _name_to_yearly[canon_name] = yearlies[0]
                 continue
-            combined: dict[str, dict] = {}
-            for yr in {y for d in yearlies for y in d}:
-                rows = [d[yr] for d in yearlies if yr in d]
-                base = dict(rows[0])
-                for k in _SUMMABLE:
-                    base[k] = round(sum(float(r.get(k) or 0) for r in rows), 2)
-                combined[yr] = base
-            _name_to_yearly[canon_name] = combined
+            _name_to_yearly[canon_name] = _combine_scope_yearly_summaries(yearlies)
 
     # Load filer metadata (party, office, committee type) from scraper cache
     _filer_metadata_path = DATA_DIR / "filer_metadata.json"
@@ -1891,13 +2097,20 @@ def aggregate_filers(
         # reports a partial amount — it is all or nothing.
         _or_for_coh = _dated(filer_or)  # All type OR, minus anything undated
         _exempt_dropped: dict[str, float] = {}
-        _oi_early = _orestar_data.get(name)
         if (not filer_or.empty and "year" in filer_or.columns
-                and "sub_type" in filer_or.columns
-                and float((_oi_early or {}).get("ts") or 0) >= _LOAN_FIELD_TRUSTWORTHY_FROM):
+                and "sub_type" in filer_or.columns):
             _uncounted_years: set[int] = set()
             for _yr_s, _ty in (_name_to_yearly.get(name, {}) or {}).items():
                 if not str(_yr_s).isdigit() or not isinstance(_ty, dict):
+                    continue
+                if not _loan_fields_trustworthy(_ty):
+                    continue
+                if any(_ty.get(_key) is None for _key in (
+                    "loans_received_exempt", "loan_payments_exempt",
+                )):
+                    # Missing is not a reported zero. Older parsers collapsed
+                    # the two and could consequently delete a real exempt-loan
+                    # transaction from cash-on-hand.
                     continue
                 def _amt_of(_k, _row=_ty):
                     return float(_row.get(_k) or 0.0)
@@ -2065,65 +2278,31 @@ def aggregate_filers(
         # wipe genuine loans from 33,889 committee-years. Where the summary
         # predates the fix, our own figure stands.
         _sum_ts = float((orestar_info or {}).get("ts") or 0)
-        if _sum_ts >= _LOAN_FIELD_TRUSTWORTHY_FROM:
-            _our_loans_by_year = {}
-            if not filer_contrib.empty and "year" in filer_contrib.columns:
-                _lr = filer_contrib[filer_contrib["sub_type"] == "Loan Received (Non-Exempt)"]
-                if not _lr.empty:
-                    _our_loans_by_year = _lr.groupby("year")["amount"].sum().to_dict()
-            _their_years = _name_to_yearly.get(name, {})
-            for _yr_s in list(yearly_nets):
-                _ty = _their_years.get(_yr_s)
-                if not _ty:
-                    continue
-                _theirs = _ty.get("loans_received")
-                if _theirs is None:
-                    continue
-                try:
-                    _ours = float(_our_loans_by_year.get(int(_yr_s), 0.0))
-                except (TypeError, ValueError):
-                    continue
-                _adj = round(float(_theirs) - _ours, 2)
-                if abs(_adj) > 0.01:
-                    yearly_nets[_yr_s] = round(yearly_nets[_yr_s] + _adj, 2)
+        _our_loans_by_year = {}
+        if not filer_contrib.empty and "year" in filer_contrib.columns:
+            _lr = filer_contrib[filer_contrib["sub_type"] == "Loan Received (Non-Exempt)"]
+            if not _lr.empty:
+                _our_loans_by_year = _lr.groupby("year")["amount"].sum().to_dict()
+        _their_years = _name_to_yearly.get(name, {})
+        for _yr_s in list(yearly_nets):
+            _ty = _their_years.get(_yr_s)
+            if not _ty or not _loan_fields_trustworthy(_ty, _sum_ts):
+                continue
+            _theirs = _ty.get("loans_received")
+            if _theirs is None:
+                continue
+            try:
+                _ours = float(_our_loans_by_year.get(int(_yr_s), 0.0))
+            except (TypeError, ValueError):
+                continue
+            _adj = round(float(_theirs) - _ours, 2)
+            if abs(_adj) > 0.01:
+                yearly_nets[_yr_s] = round(yearly_nets[_yr_s] + _adj, 2)
 
-        # Our net as it stood WHEN THE SUMMARY WAS CAPTURED.
-        #
-        # An account summary is a snapshot; transactions keep arriving. Comparing
-        # today's transactions against a summary scraped days ago produces a
-        # divergence that is neither side's fault, and that accounted for 95% of
-        # the 2026 gap — $3,473,683 across 465 committees fell to $189,706 once
-        # the summaries were re-scraped, and it began climbing again immediately
-        # because committees kept filing.
-        #
-        # Re-scraping cannot fix this; it only resets the clock. The fix is to
-        # compare like with like: restrict our side to rows that had been FILED
-        # by the moment ORESTAR's figure was taken. If the two agree as of that
-        # instant, the data is sound and the visible difference is only the
-        # window between then and now.
-        #
-        # Rows are cut by filed_date rather than tran_date because a summary can
-        # only reflect what had been filed when it was read.
-        _asof_ts = float((orestar_info or {}).get("ts") or 0)
-        yearly_nets_asof: dict[str, float] = {}
-        if _asof_ts:
-            _asof_cut = pd.Timestamp(datetime.fromtimestamp(_asof_ts))
-            for _f, _sign in [(_c_for_coh, 1), (_or_for_coh, 1), (_e_for_coh, -1),
-                              (_od_for_coh, -1), (_ba_for_coh, 1)]:
-                if _f.empty or "year" not in _f.columns or "filed_date" not in _f.columns:
-                    continue
-                _g = _f.copy()
-                _g["_fd"] = pd.to_datetime(_g["filed_date"], errors="coerce")
-                _g = _g[_g["_fd"].notna() & (_g["_fd"] <= _asof_cut)]
-                if _g.empty:
-                    continue
-                for _yr, _amt in _g.groupby("year")["amount"].sum().items():
-                    _k = str(int(_yr))
-                    yearly_nets_asof[_k] = yearly_nets_asof.get(_k, 0.0) + _sign * float(_amt)
         beginning_balances: dict[str, float] = {}
         cash_on_hand_source = "calculated"   # always — see the check below
-        has_orestar_check = False
-        orestar_discrepancy = 0.0
+        has_orestar_summary = False
+        orestar_live_difference = None
         orestar_year = 0
 
         sorted_years = sorted(yearly_nets.keys())
@@ -2215,6 +2394,7 @@ def aggregate_filers(
         # declared here so the record above always has a value.
         discrepancy_signature = None
         discrepancy_first_bad_year = None
+        _scope_fids = _name_to_fids.get(name, [])
 
         # Compare against ORESTAR-reported ending balance for validation.
         #
@@ -2228,7 +2408,7 @@ def aggregate_filers(
         if orestar_info and orestar_info.get("year", 0) > 0:
             orestar_year = orestar_info["year"]
             orestar_ending = orestar_info.get("ending_cash_balance", 0.0)
-            has_orestar_check = True
+            has_orestar_summary = True
 
             # Anchor on the last year ORESTAR reports ACTIVITY in, not merely
             # the last year it issued a statement.
@@ -2261,14 +2441,8 @@ def aggregate_filers(
             # no activity at all are skipped.
             _all_years = _name_to_yearly.get(name, {})
             if _all_years:
-                def _has_activity(y: dict) -> bool:
-                    return any(abs(float(y.get(k) or 0)) > 0 for k in
-                               ("contributions", "expenditures", "other_receipts",
-                                "other_disbursements", "beginning_balance",
-                                "ending_cash_balance", "loans_received",
-                                "loan_payments", "balance_adjustments"))
                 _live = sorted((int(y) for y, v in _all_years.items()
-                                if str(y).isdigit() and _has_activity(v)))
+                                if str(y).isdigit() and _summary_has_activity(v)))
                 if _live and _live[-1] < orestar_year:
                     _anchor = _live[-1]
                     log.debug(
@@ -2293,16 +2467,25 @@ def aggregate_filers(
             # Requiring the cash balance to be zero is what separates them,
             # and it is why "no contributions or expenditures this year" is not
             # sufficient on its own.
-            if _all_years:
-                _yrs = sorted((y for y in _all_years if str(y).isdigit()), key=int)
-                _live_yrs = [y for y in _yrs if _has_activity(_all_years[y])]
-                if _live_yrs and _yrs and _yrs[-1] != _live_yrs[-1]:
-                    _blank_from = _yrs[_yrs.index(_live_yrs[-1]) + 1]
-                    is_closed = True
-                    closed_since = int(_blank_from)
-                    closed_final_balance = float(
-                        _all_years[_live_yrs[-1]].get("ending_cash_balance") or 0.0
-                    )
+            # Closure is a physical-filer fact. The year-wise aggregate above
+            # is lossy for multi-ID profiles: one component's newer blank page
+            # can sit after another component's still-live last statement and
+            # make the union look closed. Require independent trailing-blank
+            # evidence for every component before suppressing the aggregate
+            # balance difference.
+            _closures = [
+                _trailing_blank_closure(
+                    (_yearly_summaries.get(str(_fid)) or {}).get("years", {})
+                )
+                for _fid in _scope_fids
+            ]
+            if (_closures and len(_closures) == len(_scope_fids)
+                    and all(item[0] for item in _closures)):
+                is_closed = True
+                closed_since = max(int(item[1]) for item in _closures)
+                closed_final_balance = round(
+                    sum(float(item[2] or 0.0) for item in _closures), 2
+                )
             # A dormant committee still gets a statement: ORESTAR carries its
             # balance forward every year whether or not anything moves. We have
             # no transactions for those years, so looking the year up in our
@@ -2320,7 +2503,45 @@ def aggregate_filers(
                 )
             else:
                 our_anchor_ending = cash_on_hand
-            orestar_discrepancy = round(our_anchor_ending - orestar_ending, 2)
+            orestar_live_difference = round(our_anchor_ending - orestar_ending, 2)
+
+        # The only authoritative all-time comparison is the app balance saved
+        # alongside the ORESTAR page.  Reconstructing a past app state from
+        # filed_date is impossible: late historical backfills and same-day
+        # filings both carry dates unrelated to when we collected them.
+        _comparison = paired_comparison(
+            _scope_fids,
+            _yearly_summaries,
+            current_transaction_id=_transaction_snapshot_id,
+        )
+        if _comparison.get("status") == "paired":
+            _comparison["current_app_cash_on_hand"] = cash_on_hand
+            _comparison["app_balance_change_since_capture"] = round(
+                cash_on_hand - float(_comparison["app_cash_on_hand"]), 2
+            )
+            _comparison["current_tran_count"] = tran_count
+            _comparison["tran_count_change_since_capture"] = (
+                tran_count - int(_comparison.get("app_tran_count") or 0)
+            )
+            # The global transaction fingerprint changes when any committee
+            # receives a row.  For user-facing freshness, scope-level movement
+            # is the useful signal; otherwise one filing would label all 7,000
+            # paired committees as changed.
+            _comparison["app_data_changed_since_capture"] = bool(
+                abs(_comparison["app_balance_change_since_capture"]) > 0.01
+                or _comparison["tran_count_change_since_capture"] != 0
+            )
+            _comparison["actionable"] = bool(
+                not _comparison["app_data_changed_since_capture"]
+                and not _comparison.get("orestar_data_changed_since_capture")
+                and not is_closed
+            )
+            if is_closed:
+                _comparison["actionability_reason"] = "closed_trailing_summary"
+            elif _comparison.get("orestar_data_changed_since_capture"):
+                _comparison["actionability_reason"] = "newer_summary_was_not_paired"
+            elif _comparison["app_data_changed_since_capture"]:
+                _comparison["actionability_reason"] = "app_state_changed_since_capture"
 
         # Per-year discrepancy tracking: compare our rolling calculation
         # against ORESTAR's yearly data — both ending balance AND line items
@@ -2347,16 +2568,16 @@ def aggregate_filers(
         # Per-year loan scaling, shared by the balance, the timeline and this
         # comparison so all three treat loan principal identically.
         _coh_loan_scale: dict[int, float] = {}
-        if _sum_ts >= _LOAN_FIELD_TRUSTWORTHY_FROM:
-            _their_yrs_cmp = _name_to_yearly.get(name, {})
-            for _y, _amt in (_yearly_loans or {}).items():
-                _ty = _their_yrs_cmp.get(str(int(_y)))
-                if not _ty or _ty.get("loans_received") is None:
-                    continue
-                _amt = float(_amt)
-                if abs(_amt) <= 0.01:
-                    continue
-                _coh_loan_scale[int(_y)] = float(_ty["loans_received"]) / _amt
+        _their_yrs_cmp = _name_to_yearly.get(name, {})
+        for _y, _amt in (_yearly_loans or {}).items():
+            _ty = _their_yrs_cmp.get(str(int(_y)))
+            if (not _ty or _ty.get("loans_received") is None
+                    or not _loan_fields_trustworthy(_ty, _sum_ts)):
+                continue
+            _amt = float(_amt)
+            if abs(_amt) <= 0.01:
+                continue
+            _coh_loan_scale[int(_y)] = float(_ty["loans_received"]) / _amt
 
         def _loan_scale_for_year(_y):
             try:
@@ -2478,21 +2699,12 @@ def aggregate_filers(
                     round(our_net_filed - orestar_movement, 2)
                     if orestar_movement is not None else None
                 )
-                # Same year, but our side frozen to the summary's capture time.
-                our_net_asof = (round(yearly_nets_asof.get(yr_s, 0.0), 2)
-                                if _asof_ts else None)
-                delta_movement_asof = (
-                    round(our_net_asof - orestar_movement, 2)
-                    if our_net_asof is not None and orestar_movement is not None else None
-                )
-                # Reconciles as of the capture, diverges now => the gap is the
-                # reporting window, not the data. Regenerates every day by
-                # design, so it is not something to chase.
-                # Same reasoning. The as-of figures are kept because they are
-                # genuinely informative — they say how much of a difference the
-                # reporting window accounts for — but they do not excuse it.
-                # Measured, the window explains little of what is left in 2026:
-                # $241,675 live against $214,909 as-of.
+                # A past per-year app state cannot be reconstructed from
+                # filed_date.  Keep the legacy fields for schema compatibility,
+                # but leave them unknown until per-year values are captured as
+                # part of the paired snapshot too.
+                our_net_asof = None
+                delta_movement_asof = None
                 snapshot_lag = False
 
                 # Deliberately NOT flagging "this would reconcile on another
@@ -2580,31 +2792,17 @@ def aggregate_filers(
                 # behind this canonical name, so completeness must cover that
                 # same set. One representative committee cannot certify an
                 # aggregate containing several committees.
+                _year_summary_ts = float(yr_orestar.get("scrape_ts") or _sum_ts)
                 _rows_complete_here = _aggregate_row_verdict(
-                    _name_to_fids.get(name, []), _sum_ts)
-                # A stale snapshot is not ORESTAR contradicting itself.
-                #
-                # summary_vs_itemised compares our line sums against the STORED
-                # summary. When that summary was captured before the committee
-                # filed, the difference is the capture time — exactly what #108
-                # labels as snapshot_stale — and saying "ORESTAR's summary
-                # disagrees with its own transactions" would assert something
-                # demonstrably untrue. Bring Balance to Salem PAC is the proof:
-                # its stored summary is $180,040 adrift, and ORESTAR's LIVE page
-                # reports our figure to the cent.
-                #
-                # Measured over the committees the note would otherwise appear
-                # on: 56 of 257, worth $536,395 — 69% of the labelled dollars —
-                # are stale rather than self-contradictory.
-                if _rows_complete_here and _sum_ts:
-                    _snap_day = datetime.fromtimestamp(_sum_ts).date()
-                    _lf = None
-                    if not filer_all.empty and "filed_date" in filer_all.columns:
-                        _lf_raw = pd.to_datetime(filer_all["filed_date"],
-                                                 errors="coerce").max()
-                        _lf = None if pd.isna(_lf_raw) else _lf_raw.date()
-                    if _lf is not None and _lf >= _snap_day:
-                        _rows_complete_here = None   # unknowable until re-scraped
+                    _name_to_fids.get(name, []), _year_summary_ts)
+                # A line-item claim also needs a matched app/summary snapshot.
+                # Filing dates cannot prove that match (same-day and backdated
+                # collection are both common), so withdraw the attribution if
+                # this scope has no pair or its calculated state has changed.
+                if (_rows_complete_here
+                        and (_comparison.get("status") != "paired"
+                             or _comparison.get("app_data_changed_since_capture"))):
+                    _rows_complete_here = None
                 if True:
                     yearly_discrepancies[yr_s] = {
                         # True when every line item agrees, so the UI can show
@@ -2740,21 +2938,21 @@ def aggregate_filers(
         # whatever ORESTAR reports for that year. Where ORESTAR reports nothing
         # (2006 for 65 committees) every month goes to zero, which is the point.
         _loan_scale: dict[int, float] = {}
-        if _sum_ts >= _LOAN_FIELD_TRUSTWORTHY_FROM:
-            _their_years_tl = _name_to_yearly.get(name, {})
-            _ours_tl = {}
-            if not filer_contrib.empty and "year" in filer_contrib.columns:
-                _lr_tl = filer_contrib[filer_contrib["sub_type"] == "Loan Received (Non-Exempt)"]
-                if not _lr_tl.empty:
-                    _ours_tl = _lr_tl.groupby("year")["amount"].sum().to_dict()
-            for _y, _ours_amt in _ours_tl.items():
-                _ty = _their_years_tl.get(str(int(_y)))
-                if not _ty or _ty.get("loans_received") is None:
-                    continue
-                _ours_amt = float(_ours_amt)
-                if abs(_ours_amt) <= 0.01:
-                    continue
-                _loan_scale[int(_y)] = float(_ty["loans_received"]) / _ours_amt
+        _their_years_tl = _name_to_yearly.get(name, {})
+        _ours_tl = {}
+        if not filer_contrib.empty and "year" in filer_contrib.columns:
+            _lr_tl = filer_contrib[filer_contrib["sub_type"] == "Loan Received (Non-Exempt)"]
+            if not _lr_tl.empty:
+                _ours_tl = _lr_tl.groupby("year")["amount"].sum().to_dict()
+        for _y, _ours_amt in _ours_tl.items():
+            _ty = _their_years_tl.get(str(int(_y)))
+            if (not _ty or _ty.get("loans_received") is None
+                    or not _loan_fields_trustworthy(_ty, _sum_ts)):
+                continue
+            _ours_amt = float(_ours_amt)
+            if abs(_ours_amt) <= 0.01:
+                continue
+            _loan_scale[int(_y)] = float(_ty["loans_received"]) / _ours_amt
 
         def _scaled_loans(month_key, raw):
             try:
@@ -2896,13 +3094,20 @@ def aggregate_filers(
 
         detail = {
             "name": name, "slug": slug,
+            "filer_ids": _scope_fids,
             "total_in": total_in, "total_inkind": total_inkind,
             "total_out": total_out,
             "total_or": total_or, "total_od": total_od,
             "cash_on_hand": cash_on_hand, "tran_count": tran_count,
             "cash_on_hand_source": cash_on_hand_source,
-            "has_orestar_check": has_orestar_check,
-            "orestar_discrepancy": orestar_discrepancy,
+            "has_orestar_summary": has_orestar_summary,
+            "has_orestar_check": _comparison.get("status") == "paired",
+            "orestar_discrepancy": (
+                _comparison.get("delta_at_capture")
+                if _comparison.get("actionable") else None
+            ),
+            "orestar_live_difference": orestar_live_difference,
+            "orestar_comparison": _comparison,
             # Surfaced on the site as a "Closed" label, so a reader can
             # tell a finished committee from one that is merely quiet.
             "closed": is_closed,
@@ -3032,6 +3237,7 @@ def aggregate_filers(
         index_rows.append({
             "slug": slug, "name": name,
             "filer_id": _fid_for_index,
+            "filer_ids": _scope_fids,
             "total_in": total_in, "total_inkind": total_inkind,
             "total_out": total_out,
             "cash_on_hand": cash_on_hand,
@@ -3047,9 +3253,23 @@ def aggregate_filers(
             "leadership_tier": _leadership_tier,
         })
 
+        if _transaction_snapshot_id and _scope_fids:
+            _balance_snapshot_scopes.append({
+                "filer_ids": _scope_fids,
+                "name": name,
+                "slug": slug,
+                "cash_on_hand": cash_on_hand,
+                "tran_count": tran_count,
+            })
+
     # Sort index by total_in descending
     index_rows.sort(key=lambda r: r["total_in"], reverse=True)
     _write_json("filer_index.json", index_rows)
+    _write_json(SOURCE_FILENAME, build_balance_snapshot_source(
+        _transaction_snapshot_id,
+        _balance_snapshot_scopes,
+        created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    ))
     # Mirror per-filer detail blobs into Postgres (filer_detail table).
     try:
         supabase_sync.bulk_upsert_filer_detail(_filer_detail_rows)
@@ -3060,198 +3280,199 @@ def aggregate_filers(
         len(index_rows), len(index_rows),
     )
 
-    # ── balance_discrepancies.json — where we disagree with ORESTAR ─────────
+    # ── balance_discrepancies.json — paired comparisons only ────────────────
     #
-    # Every committee is checked against its own ORESTAR account summary. Most
-    # agree; the ones that do not are worth a human look, because a gap means
-    # either our transaction data is incomplete or ORESTAR's own arithmetic is.
-    # Precomputed here rather than derived in the browser: filer_detail holds
-    # 7,268 large JSON blobs, and the admin page should not have to pull them
-    # all down to find the couple of thousand that matter.
-    # Cash filed AFTER each committee's summary was captured, per (filer,
-    # cutoff date). Built once from the merged frame rather than queried per
-    # committee: this runs over 7,263 filers, and the alternative is 7,263
-    # round trips to answer one question.
-    #
-    # Same definition as the balance itself — cash contributions and other
-    # receipts in, cash expenditures and disbursements out, in-kind excluded
-    # because it never moves cash. Loans are already inside the contribution
-    # and expenditure sets, exactly as ORESTAR has them.
-    _filer_post_summary: dict[str, dict] = {}
-    _filer_last_filed: dict[str, object] = {}
-    try:
-        _cuts = {}
-        for _r in _filer_detail_rows:
-            _t = ((_r["detail"].get("orestar_account_summary") or {}).get("scrape_ts")) or 0
-            if _t and _r.get("filer_id"):
-                _cuts[str(_r["filer_id"])] = datetime.fromtimestamp(float(_t)).date()
-        # The processing frame names this column "filer id", with a space — it
-        # is the raw ORESTAR header. Only filer_detail and the database use
-        # filer_id. Guarding on the wrong name meant this block was skipped in
-        # full and silently: every committee reported $0.00 of post-summary
-        # activity, the as-of delta equalled the live one everywhere, and no
-        # warning was logged because nothing raised. A guard written to fail
-        # safely instead made the feature do nothing at all.
-        _fid_col = ("filer id" if "filer id" in df.columns
-                    else ("filer_id" if "filer_id" in df.columns else None))
-        if _cuts and "filed_date" in df.columns and _fid_col:
-            _pf = df[df[_fid_col].astype(str).str.strip().isin(_cuts.keys())].copy()
-            _pf["_fd"] = pd.to_datetime(_pf["filed_date"], errors="coerce").dt.date
-            _pf = _pf[_pf["_fd"].notna()]
-            _pf["_cut"] = _pf[_fid_col].astype(str).str.strip().map(_cuts)
-            # When did each committee last file anything at all?
-            #
-            # Taken here, before the cutoff filter, because the question is
-            # about the SNAPSHOT rather than about activity after it: if a
-            # committee filed on or after the day its summary was captured,
-            # that summary provably cannot contain everything we hold, and the
-            # comparison against it is stale by arithmetic rather than by
-            # supposition.
-            #
-            # The post-summary figure above cannot answer this, because it cuts
-            # strictly after the capture DATE and filed_date carries no time.
-            # Bring Balance to Salem PAC filed $180,040 on 2026-08-24 and the
-            # summary was captured 2026-08-24 12:37:45, so its post-summary
-            # activity came out as $0.00 and the gap was recorded as genuine.
-            # ORESTAR's live page now reports exactly our figure, to the cent.
-            for _fid_v, _fd_v in (_pf.groupby(_pf[_fid_col].astype(str).str.strip())["_fd"]
-                                     .max().items()):
-                _filer_last_filed[str(_fid_v)] = _fd_v
-            _pf = _pf[_pf["_fd"] > _pf["_cut"]]
-            if not _pf.empty:
-                _ink = _pf["sub_type"].isin(INKIND_SUBTYPES) if "sub_type" in _pf.columns else False
-                _sign = pd.Series(0.0, index=_pf.index)
-                _sign[(_pf["tran_type"] == "C") & (~_ink)] = 1.0
-                _sign[_pf["tran_type"] == "OR"] = 1.0
-                _sign[(_pf["tran_type"] == "E") & (~_ink)] = -1.0
-                _sign[_pf["tran_type"] == "OD"] = -1.0
-                _pf["_signed"] = _pf["amount"].astype(float) * _sign
-                for (_fid, _cut), _amt in _pf.groupby(
-                        [_pf[_fid_col].astype(str).str.strip(), "_cut"])["_signed"].sum().items():
-                    _filer_post_summary.setdefault(_fid, {})[_cut] = float(_amt)
-        if not _filer_post_summary:
-            log.warning("post-summary activity is empty for all %d committees — "
-                        "the admin comparison is falling back to live deltas "
-                        "(filer id column: %s)", len(_cuts), _fid_col)
-        else:
-            log.info("post-summary activity computed for %d committees",
-                     len(_filer_post_summary))
-    except Exception as _e:
-        log.warning("post-summary activity not computed (%s) — "
-                    "the admin comparison falls back to the live delta", _e)
-
+    # A live app balance and an older ORESTAR summary are not comparable.  The
+    # old code tried to rewind the app with filed_date; that is day-granular,
+    # unrelated to collection time for backfills, and used a different cash
+    # formula from the loan-adjusted live balance.  It created discrepancies
+    # for committees that actually matched.  Only immutable paired captures
+    # can drive this list or downstream remediation now.
     _disc_rows = []
+    _unpaired_rows = []
+    _refresh_rows = []
+    _nonactionable_rows = []
+    _summary_count = 0
+    _paired_count = 0
+    _comparable_count = 0
+    _population_count = 0
+    _unchecked_count = 0
     for _row in _filer_detail_rows:
         _d = _row["detail"]
         _acct = _d.get("orestar_account_summary") or {}
-        if _acct.get("ending_cash_balance") is None:
-            continue                      # never checked — not a discrepancy
-        _delta = round(_d.get("cash_on_hand", 0.0) - _acct["ending_cash_balance"], 2)
-
-        # The same balance as of the moment ORESTAR's figure was captured.
-        #
-        # cash_on_hand covers every transaction we hold; ending_cash_balance is
-        # a snapshot. Anything filed in between is a difference belonging to
-        # neither side, and it reappears continuously: hours after a summary
-        # sweep finished, Cyrus for Oregon was flagged for $45,771 that was
-        # exactly its 16 rows filed since, and Hicks for Senate for $108,312 of
-        # which $91,765 was the same thing.
-        #
-        # Both figures are kept rather than one replacing the other. Showing
-        # only the as-of delta would hide the window; showing only the live one
-        # buries real gaps in it.
-        #
-        # Bring Balance to Salem PAC was cited here as the example of a gap
-        # with no post-summary activity that was "entirely genuine". It was
-        # not. Its $180,040 is two rows filed 2026-08-24 against a summary
-        # captured 2026-08-24 12:37:45; ORESTAR's live page now reports our
-        # figure to the cent. Three more of that group were checked against
-        # ORESTAR directly and every one matched exactly. Hence snapshot_stale
-        # below — post_summary_activity cannot see a same-day filing, so it
-        # said $0.00 and the comparison looked sound.
-        _asof_delta = None
-        _post_summary = None
-        _cut = None
-        _last_filed = None
-        _ts = _acct.get("scrape_ts") or 0
-        # scrape_ts is 0 on summaries captured before #87 recorded it. Treating
-        # that as "captured in 1970" would exclude a committee's whole history
-        # and report its entire balance as post-summary activity, so those keep
-        # the live comparison only.
-        if _ts:
-            _cut = datetime.fromtimestamp(float(_ts)).date()
-            _last_filed = _filer_last_filed.get(str(_row.get("filer_id")))
-            _post = _filer_post_summary.get(str(_row.get("filer_id")), {}).get(_cut)
-            if _post is None:
-                _post = 0.0
-            _post_summary = round(float(_post), 2)
-            _asof_delta = round(_delta - _post_summary, 2)
-
-        # Flag on the AS-OF difference where we have one: that is the real
-        # disagreement. A committee whose entire delta is post-summary activity
-        # is not in disagreement with ORESTAR, it is simply ahead of it.
-        _judge = _asof_delta if _asof_delta is not None else _delta
-        if abs(_judge) <= 0.01:
+        _audit_fids = [str(fid) for fid in (_d.get("filer_ids") or []) if str(fid)]
+        if not _audit_fids:
+            # Without a physical filer ID there is no ORESTAR account-summary
+            # scope to capture. Keep this outside the measurable population.
             continue
-        _disc_rows.append({
-            "slug": _row["slug"], "name": _row["name"], "filer_id": _row.get("filer_id"),
-            "calculated": _d.get("cash_on_hand", 0.0),
-            "orestar": _acct["ending_cash_balance"],
+        _population_count += 1
+        if _acct.get("ending_cash_balance") is None:
+            _unchecked_count += 1
+            _available = []
+            _latest_partial = []
+            for _fid in _audit_fids:
+                _years = (_yearly_summaries.get(_fid) or {}).get("years") or {}
+                if not _years:
+                    continue
+                _latest_year = max(_years)
+                _latest_row = _years[_latest_year]
+                if _latest_row.get("ending_cash_balance") is None:
+                    continue
+                _available.append(_fid)
+                _latest_partial.append((_latest_year, _latest_row))
+            _unpaired_rows.append({
+                "slug": _row["slug"],
+                "name": _row["name"],
+                "filer_id": _row.get("filer_id"),
+                "filer_ids": _audit_fids,
+                "status": "unchecked",
+                "reason": "summary_scope_incomplete",
+                "available_filer_ids": _available,
+                "missing_filer_ids": [
+                    fid for fid in _audit_fids if fid not in set(_available)
+                ],
+                "current_calculated": _d.get("cash_on_hand", 0.0),
+                "latest_orestar": (
+                    round(sum(float(row.get("ending_cash_balance") or 0.0)
+                              for _, row in _latest_partial), 2)
+                    if _latest_partial else None
+                ),
+                "current_tran_count": _d.get("tran_count", 0),
+                "dormant": False,
+                "closed": False,
+                "scrape_ts": (
+                    max(_summary_scrape_ts(row) for _, row in _latest_partial)
+                    if _latest_partial else None
+                ),
+            })
+            continue
+        _summary_count += 1
+        _cmp = _d.get("orestar_comparison") or {}
+        if _cmp.get("status") != "paired":
+            _unpaired_rows.append({
+                "slug": _row["slug"],
+                "name": _row["name"],
+                "filer_id": _row.get("filer_id"),
+                "filer_ids": _d.get("filer_ids") or [],
+                "status": _cmp.get("status") or "unpaired",
+                "reason": _cmp.get("reason") or "capture_missing",
+                "current_calculated": _d.get("cash_on_hand", 0.0),
+                "latest_orestar": _acct.get("ending_cash_balance"),
+                "current_tran_count": _d.get("tran_count", 0),
+                "dormant": str(_acct.get("year")) not in (
+                    _d.get("beginning_balances") or {}
+                ),
+                "closed": bool(_d.get("closed")),
+                "scrape_ts": _acct.get("scrape_ts"),
+            })
+            continue
+
+        _paired_count += 1
+        _delta = round(float(_cmp.get("delta_at_capture") or 0.0), 2)
+        _audit_row = {
+            "slug": _row["slug"],
+            "name": _row["name"],
+            "filer_id": _row.get("filer_id"),
+            "filer_ids": _d.get("filer_ids") or [],
+            "calculated": _cmp.get("app_cash_on_hand", 0.0),
+            "orestar": _cmp.get("orestar_cash_on_hand", 0.0),
             "delta": _delta,
-            # What the comparison is actually judged on: our balance restricted
-            # to rows filed by the summary's capture, against that summary.
-            "asof_delta": _asof_delta,
-            "post_summary_activity": _post_summary,
+            "current_calculated": _d.get("cash_on_hand", 0.0),
+            "latest_orestar": _acct.get("ending_cash_balance"),
+            "app_balance_change_since_capture": round(
+                float(_cmp.get("app_balance_change_since_capture") or 0.0), 2
+            ),
+            "scrape_ts": _cmp.get("captured_at"),
+            "capture_started_at": _cmp.get("capture_started_at"),
+            "app_snapshot_created_at": _cmp.get("app_snapshot_created_at"),
             "orestar_year": _acct.get("year"),
-            "scrape_ts": _acct.get("scrape_ts"),
-            "tran_count": _d.get("tran_count", 0),
-            # A committee with no activity in ORESTAR's year is a different
-            # animal from one that is actively filing and still disagrees.
+            "tran_count": _cmp.get("app_tran_count", 0),
+            "current_tran_count": _d.get("tran_count", 0),
             "dormant": str(_acct.get("year")) not in (_d.get("beginning_balances") or {}),
-            # A closed committee's discrepancy is a different kind of thing
-            # from an active one's, and the Admin tab should say so rather
-            # than listing them side by side as if equivalent.
             "closed": bool(_d.get("closed")),
             "closed_since": _d.get("closed_since"),
-            # "opening_balance" or "missing_transactions" — the Admin tab can
-            # then group by the kind of problem instead of listing an
-            # undifferentiated dollar figure per committee.
-            "signature": _d.get("discrepancy_signature"),
-            "first_bad_year": _d.get("discrepancy_first_bad_year"),
-            # The snapshot provably predates something we hold.
-            #
-            # Not a tolerance and not a guess: if the committee filed on or
-            # after the day its summary was captured, that summary cannot
-            # contain every row on our side, so the difference is at least
-            # partly the capture time rather than a disagreement. Four such
-            # committees were checked against ORESTAR's live page during this
-            # investigation and all four matched our figure exactly.
-            #
-            # These rows are LABELLED, not dropped — they stay in the list with
-            # their dollars visible. The resolution is a fresher summary, and a
-            # reader who cannot see which comparisons are stale cannot tell
-            # which ones to re-scrape.
-            "snapshot_stale": bool(
-                _ts and _last_filed is not None and _last_filed >= _cut),
-            "last_filed": (_last_filed.isoformat()
-                           if _ts and _last_filed is not None else None),
+            "comparison_status": "paired",
+        }
+        if (_cmp.get("app_data_changed_since_capture")
+                or _cmp.get("orestar_data_changed_since_capture")):
+            _audit_row["reason"] = (
+                "newer_summary_was_not_paired"
+                if _cmp.get("orestar_data_changed_since_capture")
+                else "app_state_changed_since_capture"
+            )
+            _refresh_rows.append(_audit_row)
+            continue
+        if _d.get("closed"):
+            if abs(_delta) > 0.01:
+                _audit_row["reason"] = "closed_trailing_summary"
+                _nonactionable_rows.append(_audit_row)
+            continue
+
+        _comparable_count += 1
+        if abs(_delta) <= 0.01:
+            continue
+        _change = round(float(_cmp.get("app_balance_change_since_capture") or 0.0), 2)
+        _newer_app_data = bool(_cmp.get("app_data_changed_since_capture"))
+        _disc_rows.append({
+            "slug": _row["slug"],
+            "name": _row["name"],
+            "filer_id": _row.get("filer_id"),
+            "filer_ids": _d.get("filer_ids") or [],
+            # Both values below were frozen together.  Current values are kept
+            # separately so the admin can see movement without judging on it.
+            "calculated": _cmp.get("app_cash_on_hand", 0.0),
+            "orestar": _cmp.get("orestar_cash_on_hand", 0.0),
+            "delta": _delta,
+            "asof_delta": _delta,  # compatibility for existing admin clients
+            "current_calculated": _d.get("cash_on_hand", 0.0),
+            "latest_orestar": _acct.get("ending_cash_balance"),
+            "live_delta": _d.get("orestar_live_difference"),
+            "post_summary_activity": _change,  # compatibility; app-state change
+            "app_balance_change_since_capture": _change,
+            "comparison_basis": _cmp.get("basis"),
+            "comparison_status": "paired",
+            "transaction_snapshot_id": _cmp.get("app_transaction_snapshot_id"),
+            "orestar_year": _acct.get("year"),
+            "scrape_ts": _cmp.get("captured_at"),
+            "capture_started_at": _cmp.get("capture_started_at"),
+            "app_snapshot_created_at": _cmp.get("app_snapshot_created_at"),
+            "tran_count": _cmp.get("app_tran_count", 0),
+            "current_tran_count": _d.get("tran_count", 0),
+            "dormant": str(_acct.get("year")) not in (_d.get("beginning_balances") or {}),
+            "closed": bool(_d.get("closed")),
+            "closed_since": _d.get("closed_since"),
+            "newer_app_data": _newer_app_data,
+            "snapshot_stale": _newer_app_data,  # compatibility for old clients
         })
-    _disc_rows.sort(key=lambda r: -abs(r["asof_delta"] if r["asof_delta"] is not None else r["delta"]))
+
+    _disc_rows.sort(key=lambda r: -abs(r["delta"]))
+    _newer_count = len(_refresh_rows)
+    _newer_amount = round(sum(abs(r["delta"]) for r in _refresh_rows), 2)
     _write_json("balance_discrepancies.json", {
+        # The admin must never treat the pre-pairing live-vs-old-summary blob
+        # already in Supabase as current evidence during rollout.  Both fields
+        # are required by the client before any row enters the actionable
+        # bucket; an old/malformed payload is displayed as unpaired instead.
+        "schema_version": 2,
+        "basis": "paired_capture_window_v1",
         "generated": datetime.now().isoformat(timespec="seconds"),
-        "checked": sum(1 for r in _filer_detail_rows
-                       if (r["detail"].get("orestar_account_summary") or {})
-                          .get("ending_cash_balance") is not None),
+        "population": _population_count,
+        "checked": _summary_count,
+        "unchecked": _unchecked_count,
+        "paired": _paired_count,
+        "comparable": _comparable_count,
+        "unpaired": len(_unpaired_rows),
+        "refresh_needed": len(_refresh_rows),
+        "nonactionable": len(_nonactionable_rows),
         "flagged": len(_disc_rows),
-        # How many of those comparisons are against a summary that provably
-        # predates the committee's own filings, and what they are worth. Kept
-        # in the payload so the Admin tab can say what the flagged total is
-        # actually made of instead of presenting one undifferentiated number.
-        "snapshot_stale": sum(1 for r in _disc_rows if r.get("snapshot_stale")),
-        "snapshot_stale_amount": round(sum(
-            abs(r["asof_delta"] if r["asof_delta"] is not None else r["delta"])
-            for r in _disc_rows if r.get("snapshot_stale")), 2),
+        "newer_app_data": _newer_count,
+        "newer_app_data_amount": _newer_amount,
+        "snapshot_stale": _newer_count,          # compatibility
+        "snapshot_stale_amount": _newer_amount,
         "rows": _disc_rows,
+        "unpaired_rows": _unpaired_rows,
+        "refresh_rows": _refresh_rows,
+        "nonactionable_rows": _nonactionable_rows,
     })
 
     # ── by_party_type.json — Donor type composition by party by year ────────

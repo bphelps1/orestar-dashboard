@@ -81,9 +81,29 @@ a divergence that is neither side's fault. This accounted for **95% of the 2026
 balance divergence** — $3,473,683 across 465 committees fell to $189,706 once
 the summaries were re-scraped.
 
-`scrape_ts` on each summary records when it was captured. It was itself null
-for 7,297 of 7,299 records until #87, because the timestamp lives at the filer
-level in the yearly file and only the inner year dict was being lifted.
+`scrape_ts` records when the ORESTAR page was read, but a timestamp alone does
+not make the other side reproducible. `filed_date` is only a calendar date and
+describes when the filer submitted a row — not when this app collected it. A
+same-day filing and a five-year-old row found by a backfill can both arrive
+after the summary capture.
+
+The authoritative check is therefore a **paired capture window**. When the
+current ORESTAR page is parsed, the scraper binds its balance to the app balance
+already published from a fingerprinted set of transaction shards. The app-side
+timestamp and the ORESTAR read timestamp bound that window; they are not
+pretended to be one instant. That frozen `delta_at_capture` is the audit fact.
+If either side changes afterward, the pair becomes `refresh_needed` rather than
+remaining an actionable discrepancy.
+
+Legacy summaries without an app-side pair are `legacy_unpaired`, not
+discrepancies. Multi-committee canonical names are paired only when every
+physical filer ID was captured against the same app snapshot.
+
+The inexpensive weekly pass reads only the current summary page. A monthly
+pass retains the historical opening-balance crawl. Every year carries its own
+scrape timestamp, so refreshing 2026 cannot make untouched 2006–2025 pages look
+current. Per-year live deltas remain diagnostic only until per-year app values
+are captured too; they must not drive warnings or automated backfills.
 
 ## 5. Compare like with like, or the difference is your own
 

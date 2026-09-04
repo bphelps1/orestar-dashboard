@@ -36,7 +36,28 @@ jobs:
           fetch-depth: 1
 
       - name: Wait for other ORESTAR jobs
+        id: orestar_wait
+        continue-on-error: true
         uses: ./.github/actions/await-orestar
+        with:
+          fail-on-timeout: "true"
+
+      - name: Requeue after coordination timeout
+        if: steps.orestar_wait.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash scripts/dispatch_retry.sh verify-filers.yml --ref "${{ github.ref_name }}" \
+            -f filer_id="${{ github.event.inputs.filer_id }}" \
+            -f discrepancy_threshold="${{ github.event.inputs.discrepancy_threshold || '100' }}" \
+            -f max_filers="${{ github.event.inputs.max_filers || '10' }}" \
+            -f force="${{ github.event.inputs.force || 'false' }}"
+
+      - name: Refuse uncoordinated verification
+        if: steps.orestar_wait.outcome == 'failure'
+        run: |
+          echo "::error::ORESTAR remained busy; queued the same verification request instead of overlapping it."
+          exit 1
 
       - name: Refresh branch after coordination wait
         # The older scraper may have pushed exactly the rows this report checks.
@@ -91,7 +112,7 @@ jobs:
           xvfb-run --auto-servernum python scraper/verify_filer.py $ARGS
 
       - name: Upload verification reports
-        if: always()
+        if: always() && steps.orestar_wait.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: verification-reports

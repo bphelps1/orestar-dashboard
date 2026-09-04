@@ -1066,20 +1066,96 @@ document.addEventListener("input", e => {
 // and donor lists, and pulling all of that into the browser to find the ~2,700
 // that disagree would be absurd.
 //
-// Note this compares CASH ON HAND against ORESTAR's ending balance, which is
-// the same comparison the dashboard's own indicator makes. It deliberately
-// does not use the stored `orestar_discrepancy` field: that one compared a
-// single year's net against ORESTAR's ending balance, so any committee with no
-// transactions in ORESTAR's reported year appeared to be off by its entire
-// balance. 1,447 committees — 41% of everything it flagged — were wrong that
-// way, Oregon Strong among them, sitting at $889,626.78 on both sides and
-// recorded as $889,626.78 adrift.
+// Only paired captures reach this list.  Each row contains the app balance and
+// ORESTAR balance frozen together; current activity is context, not part of the
+// judged difference.
 
-let bdRows = null;      // full row set, sorted by |delta| descending
+const BD_SCHEMA_VERSION = 2;
+const BD_BASIS = "paired_capture_window_v1";
+
+let bdRows = null;      // active + audit/unpaired buckets, tagged with _bucket
 let bdMeta = {};
 
 const bd$ = v => (v < 0 ? "-$" : "$") + Math.abs(v).toLocaleString("en-US",
   { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const bdMaybe$ = v => (v == null || !Number.isFinite(Number(v))) ? "—" : bd$(Number(v));
+
+function bdUnpairedRow(row, fallbackReason = "capture_missing") {
+  return {
+    ...row,
+    _bucket: "unpaired",
+    status: row.status || "unpaired",
+    reason: row.reason || fallbackReason,
+    current_calculated: row.current_calculated != null
+      ? row.current_calculated : row.calculated,
+    latest_orestar: row.latest_orestar != null ? row.latest_orestar : row.orestar,
+    current_tran_count: row.current_tran_count != null
+      ? row.current_tran_count : row.tran_count,
+  };
+}
+
+// Fail closed across the schema rollout. Supabase may still hold the old
+// live-app-vs-old-summary blob after this UI deploys; those rows are useful as
+// leads, but they are not paired evidence and must never acquire the
+// "current discrepancy" label merely because they lived in `rows`.
+function bdNormalizeBlob(blob) {
+  const pairedPayload = blob.schema_version === BD_SCHEMA_VERSION
+    && blob.basis === BD_BASIS;
+  const rawActionable = blob.rows || [];
+  const actionable = pairedPayload
+    ? rawActionable.filter(r => r.comparison_status === "paired")
+    : [];
+  const rejectedActionable = rawActionable
+    .filter(r => !pairedPayload || r.comparison_status !== "paired")
+    .map(r => bdUnpairedRow(
+      r,
+      pairedPayload ? "invalid_actionable_row" : "legacy_live_summary_payload",
+    ));
+  const explicitUnpaired = (blob.unpaired_rows || []).map(r => bdUnpairedRow(r));
+  const unpairedRows = [...rejectedActionable, ...explicitUnpaired];
+
+  const rows = [
+    ...actionable.map(r => ({ ...r, _bucket: "actionable" })),
+    ...(pairedPayload ? (blob.refresh_rows || []) : [])
+      .map(r => ({ ...r, _bucket: "refresh" })),
+    ...(pairedPayload ? (blob.nonactionable_rows || []) : [])
+      .map(r => ({ ...r, _bucket: "nonactionable" })),
+    ...unpairedRows,
+  ];
+  const flagged = pairedPayload
+    ? (blob.flagged != null ? blob.flagged : actionable.length)
+    : 0;
+  const comparable = pairedPayload
+    ? (blob.comparable != null ? blob.comparable : (blob.checked || 0))
+    : 0;
+  const unpaired = pairedPayload
+    ? (blob.unpaired != null ? blob.unpaired : unpairedRows.length)
+    : Math.max(blob.checked || 0, unpairedRows.length);
+
+  return {
+    rows,
+    meta: {
+      population: pairedPayload
+        ? (blob.population != null ? blob.population : (blob.checked || 0))
+        : (blob.population != null ? blob.population : (blob.checked || 0)),
+      checked: blob.checked || 0,
+      unchecked: pairedPayload ? (blob.unchecked || 0) : (blob.checked || 0),
+      paired: pairedPayload
+        ? (blob.paired != null ? blob.paired : comparable) : 0,
+      comparable,
+      unpaired,
+      refreshNeeded: pairedPayload
+        ? (blob.refresh_needed != null
+          ? blob.refresh_needed : (blob.newer_app_data || 0)) : 0,
+      nonactionable: pairedPayload ? (blob.nonactionable || 0) : 0,
+      flagged,
+      newerAppData: pairedPayload ? (blob.newer_app_data || 0) : 0,
+      newerAppDataAmount: pairedPayload ? (blob.newer_app_data_amount || 0) : 0,
+      generated: blob.generated || "",
+      pairedPayload,
+    },
+  };
+}
 
 async function bdLoad() {
   if (bdRows) return;
@@ -1097,21 +1173,24 @@ async function bdLoad() {
       + "data refresh. (" + error.message + ")");
   }
   const blob = data.data;
-  bdRows = blob.rows || [];
-  bdMeta = { checked: blob.checked || 0, flagged: blob.flagged || bdRows.length,
-             snapshotStale: blob.snapshot_stale || 0,
-             snapshotStaleAmount: blob.snapshot_stale_amount || 0,
-             generated: blob.generated || "" };
+  const normalized = bdNormalizeBlob(blob);
+  bdRows = normalized.rows;
+  bdMeta = normalized.meta;
 }
 
 function bdRender() {
   const q    = (document.getElementById("bd-filter").value || "").trim().toLowerCase();
   const min  = parseFloat(document.getElementById("bd-min").value) || 0.01;
   const kind = document.getElementById("bd-kind").value;
+  const status = document.getElementById("bd-status").value;
 
   const rows = (bdRows || []).filter(r => {
-    const judged = (r.asof_delta != null) ? r.asof_delta : r.delta;
-    if (Math.abs(judged) < min) return false;
+    const unpaired = r._bucket === "unpaired";
+    const judged = Number(r.delta);
+    if (status !== "all" && r._bucket !== status) return false;
+    // There is intentionally no delta to threshold until both sides are
+    // paired. Keep every refusal visible so coverage problems can be measured.
+    if (!unpaired && Math.abs(judged) < min) return false;
     if (kind === "active"  && r.dormant) return false;
     if (kind === "dormant" && !r.dormant) return false;
     if (q && !(r.name || "").toLowerCase().includes(q)
@@ -1119,19 +1198,15 @@ function bdRender() {
     return true;
   });
 
-  const agree = bdMeta.checked - bdMeta.flagged;
-  // Name the stale share rather than folding it into one number. These
-  // comparisons are against a summary that predates the committee's own
-  // filings, so their dollars are not evidence of disagreement — but they are
-  // still listed, because the fix is to re-scrape them and a hidden row cannot
-  // be re-scraped.
-  const staleTxt = bdMeta.snapshotStale
-    ? ` · ${bdMeta.snapshotStale.toLocaleString()} against a stale snapshot`
-      + (bdMeta.snapshotStaleAmount ? ` (${bd$(bdMeta.snapshotStaleAmount)})` : "")
-    : "";
+  const agree = Math.max(0, bdMeta.comparable - bdMeta.flagged);
   document.getElementById("bd-count").textContent =
     `${rows.length.toLocaleString()} shown · ${bdMeta.flagged.toLocaleString()} flagged of `
-    + `${bdMeta.checked.toLocaleString()} checked · ${agree.toLocaleString()} agree${staleTxt}`;
+    + `${bdMeta.comparable.toLocaleString()} current pairs · ${agree.toLocaleString()} agree · `
+    + `${bdMeta.refreshNeeded.toLocaleString()} need refresh · `
+    + `${bdMeta.unpaired.toLocaleString()} unpaired`
+    + (bdMeta.unchecked ? ` (${bdMeta.unchecked.toLocaleString()} incomplete scopes)` : "")
+    + ` · `
+    + `${bdMeta.nonactionable.toLocaleString()} closed/non-actionable`;
 
   if (!rows.length) {
     document.getElementById("bd-list").innerHTML =
@@ -1144,38 +1219,47 @@ function bdRender() {
   const CAP = 300;
   const shown = rows.slice(0, CAP);
   const body = shown.map(r => {
-    // Judge on the AS-OF difference where there is one.
-    //
-    // `delta` compares everything we hold against a snapshot, so anything filed
-    // since the summary was captured shows up as disagreement belonging to
-    // neither side. Hours after a summary sweep, Cyrus for Oregon was listed
-    // for $45,771 that was precisely its 16 rows filed since.
-    //
-    // Both are shown, deliberately. Only the as-of figure would hide the
-    // window; only the live one buries real gaps inside it.
-    //
-    // Bring Balance to Salem PAC used to be cited here as a gap with no
-    // post-summary activity. That was wrong: its $180,040 is two rows filed
-    // 2026-08-24 against a summary captured 2026-08-24 12:37:45, and ORESTAR's
-    // live page now reports our figure to the cent. post_summary_activity cuts
-    // strictly after the capture DATE and filed_date carries no time, so a
-    // same-day filing is invisible to it. That is what the stale tag is for.
-    const judged = (r.asof_delta != null) ? r.asof_delta : r.delta;
-    const sev = Math.abs(judged) >= 100000 ? "red"
+    // `delta` is immutable across its bounded capture window. The current app
+    // change is context only and never rewrites that audit fact.
+    const unpaired = r._bucket === "unpaired";
+    const judged = Number(r.delta);
+    const sev = r._bucket !== "actionable" ? "gray"
+              : Math.abs(judged) >= 100000 ? "red"
               : Math.abs(judged) >= 10000  ? "yellow" : "gray";
-    const since = (r.post_summary_activity != null && Math.abs(r.post_summary_activity) > 0.01)
-      ? `<span class="bd-since" title="Filed after ORESTAR's summary was captured on ${esc(String(r.orestar_year || ""))}; not a disagreement, just activity ORESTAR has not published yet">`
-        + `${r.post_summary_activity > 0 ? "+" : ""}${bd$(r.post_summary_activity)} since</span>`
+    const since = (!unpaired && r.app_balance_change_since_capture != null
+                   && Math.abs(r.app_balance_change_since_capture) > 0.01)
+      ? `<span class="bd-since" title="Change in the app's calculated balance since the paired capture; shown for context and not included in the discrepancy">`
+        + `${r.app_balance_change_since_capture > 0 ? "+" : ""}${bd$(r.app_balance_change_since_capture)} since</span>`
       : "";
+    const appValue = unpaired ? r.current_calculated : r.calculated;
+    const orestarValue = unpaired ? r.latest_orestar : r.orestar;
+    let reason = {
+      legacy_live_summary_payload: "legacy data; awaiting paired refresh",
+      invalid_actionable_row: "invalid paired-row metadata",
+      capture_missing: "paired capture missing",
+      app_snapshot_scope_missing_or_ambiguous: "app snapshot scope missing or ambiguous",
+      app_snapshot_changed_before_capture: "app snapshot changed during capture",
+      app_snapshot_source_stale: "app snapshot source was stale",
+      calculation_version_mismatch: "calculation version mismatch",
+      capture_version_mismatch: "capture version mismatch",
+      summary_scope_incomplete: "ORESTAR summary scope incomplete",
+    }[r.reason] || String(r.reason || "unpaired capture").replaceAll("_", " ");
+    if (r.missing_filer_ids && r.missing_filer_ids.length) {
+      reason += `; missing filer ${r.missing_filer_ids.join(", ")}`;
+    }
     return `<tr>
       <td><a href="../index.html?filer=${encodeURIComponent(r.slug)}" target="_blank">${esc(r.name || r.slug)}</a>
+          ${r._bucket === "actionable" ? '<span class="bd-tag">current discrepancy</span>' : ""}
+          ${r._bucket === "refresh" ? '<span class="bd-tag bd-tag-stale" title="The app or ORESTAR side changed after the capture window; refresh before acting on this old difference">needs refresh</span>' : ""}
+          ${r._bucket === "nonactionable" ? '<span class="bd-tag" title="A trailing blank account summary suggests this committee closed; keep the captured difference for audit, but do not drive a transaction backfill from it">trailing blank / likely closed</span>' : ""}
+          ${unpaired ? `<span class="bd-tag bd-tag-unpaired" title="No trustworthy comparison exists until the ORESTAR value and exact app transaction snapshot are captured together">unpaired / unusable</span><span class="bd-reason">${esc(reason)}</span>` : ""}
           ${r.dormant ? '<span class="bd-tag" title="No transactions in the year ORESTAR reports">dormant</span>' : ""}
           ${r.closed ? '<span class="bd-tag" title="ORESTAR reports no activity and a $0.00 balance for this committee">closed</span>' : ""}
-          ${r.snapshot_stale ? `<span class="bd-tag bd-tag-stale" title="This committee last filed on ${esc(String(r.last_filed || ""))}, on or after the day ORESTAR's summary was captured — so that summary cannot contain everything we hold and the comparison is stale. Re-scrape the summary to resolve it. Four committees in this group were checked against ORESTAR's live page and every one matched our figure exactly.">stale snapshot</span>` : ""}</td>
-      <td class="bd-num">${bd$(r.calculated)}</td>
-      <td class="bd-num">${bd$(r.orestar)}</td>
-      <td class="bd-num bd-delta bd-${sev}">${judged > 0 ? "+" : ""}${bd$(judged)}${since}</td>
-      <td class="bd-num">${(r.tran_count || 0).toLocaleString()}</td>
+          ${r.newer_app_data ? `<span class="bd-tag bd-tag-stale" title="The app's calculated state has changed since this pair was captured. The discrepancy still compares the two frozen values; refresh the pair to make it current.">newer app data</span>` : ""}</td>
+      <td class="bd-num">${bdMaybe$(appValue)}</td>
+      <td class="bd-num">${bdMaybe$(orestarValue)}</td>
+      <td class="bd-num bd-delta bd-${sev}">${unpaired ? "—" : `${judged > 0 ? "+" : ""}${bd$(judged)}${since}`}</td>
+      <td class="bd-num">${(unpaired ? (r.current_tran_count || 0) : (r.tran_count || 0)).toLocaleString()}</td>
       <td>${r.orestar_year || "—"}</td>
     </tr>`;
   }).join("");
@@ -1183,8 +1267,8 @@ function bdRender() {
   document.getElementById("bd-list").innerHTML = `
     <table class="bd-table">
       <thead><tr>
-        <th>Committee</th><th class="bd-num">Calculated</th><th class="bd-num">ORESTAR</th>
-        <th class="bd-num" title="Our balance as of the moment ORESTAR's summary was captured, against that summary. Activity filed since is shown beneath and is not counted as a disagreement.">Difference</th><th class="bd-num">Txns</th><th>Yr</th>
+        <th>Committee</th><th class="bd-num">App snapshot</th><th class="bd-num">ORESTAR capture</th>
+        <th class="bd-num" title="The published app snapshot and ORESTAR read form one bounded capture window. Any later change moves the pair out of the active discrepancy list.">Difference</th><th class="bd-num">Txns</th><th>Yr</th>
       </tr></thead>
       <tbody>${body}</tbody>
     </table>
@@ -1193,7 +1277,7 @@ function bdRender() {
       : ""}`;
 }
 
-["bd-filter", "bd-min", "bd-kind"].forEach(id => {
+["bd-filter", "bd-min", "bd-kind", "bd-status"].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener(id === "bd-filter" ? "input" : "change", bdRender);
 });
