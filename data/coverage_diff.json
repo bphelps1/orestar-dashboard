@@ -1307,19 +1307,14 @@
   "filer_id": "20099",
   "name": "Campos for Oregon",
   "orestar": 1275,
-  "held": 1275,
+  "held": 1276,
   "complete": false,
   "surplus": [
    "5586163"
   ],
-  "missing": [
-   "5066926"
-  ],
+  "missing": [],
   "superseded": [],
-  "checked": "2026-09-03",
-  "last_attempt": "2026-09-04",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "51",
