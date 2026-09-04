@@ -175,7 +175,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "20136",
@@ -198,6 +198,51 @@
   ],
   "superseded": [],
   "checked": "2026-09-03"
+ },
+ {
+  "filer_id": "16291",
+  "name": "Friends of Micki Varney",
+  "orestar": 361,
+  "held": 345,
+  "complete": false,
+  "surplus": [
+   "5581688",
+   "5636302",
+   "5638267",
+   "5658993",
+   "5743767",
+   "5752661",
+   "5770539",
+   "5770542"
+  ],
+  "missing": [
+   "5770454",
+   "5770459",
+   "5790287",
+   "5790311",
+   "5790312",
+   "5790313",
+   "5790314",
+   "5790315",
+   "5790316",
+   "5790317",
+   "5790318",
+   "5790319",
+   "5790320",
+   "5790321",
+   "5790322",
+   "5790325",
+   "5790326",
+   "5790327",
+   "5790336",
+   "5790820",
+   "5790822",
+   "5790828",
+   "5790830",
+   "5790832"
+  ],
+  "superseded": [],
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "21770",
@@ -236,7 +281,7 @@
    "149900"
   ],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "24622",
@@ -254,7 +299,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "20709",
@@ -308,7 +353,7 @@
    "5673102"
   ],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "22134",
@@ -325,7 +370,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "24362",
@@ -374,7 +419,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "19768",
@@ -393,7 +438,7 @@
    "5528948"
   ],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "24775",
@@ -442,7 +487,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "24826",
@@ -502,7 +547,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "349",
@@ -609,7 +654,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "306",
@@ -639,7 +684,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "1471",
@@ -714,7 +759,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "16986",
@@ -832,33 +877,29 @@
   "filer_id": "24020",
   "name": "We The People",
   "orestar": 120,
-  "held": 121,
+  "held": 122,
   "complete": false,
   "surplus": [
    "5379122",
    "5767225"
   ],
-  "missing": [
-   "5788158"
-  ],
+  "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "24427",
   "name": "Let Us Paddle PAC",
   "orestar": 160,
-  "held": 161,
+  "held": 162,
   "complete": false,
   "surplus": [
    "5589183",
    "5589185"
   ],
-  "missing": [
-   "5789567"
-  ],
+  "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "21358",
@@ -886,21 +927,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
- },
- {
-  "filer_id": "16291",
-  "name": "Friends of Micki Varney",
-  "orestar": 343,
-  "held": 345,
-  "complete": false,
-  "surplus": [
-   "5581688",
-   "5638267"
-  ],
-  "missing": [],
-  "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "20790",
@@ -928,7 +955,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "24457",
@@ -970,23 +997,35 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "22066",
   "name": "Friends for Denise Krause",
-  "orestar": 1020,
-  "held": 1021,
+  "orestar": 1033,
+  "held": 1022,
   "complete": false,
   "surplus": [
    "5539691",
    "5600771"
   ],
   "missing": [
-   "5755196"
+   "5755197",
+   "5790763",
+   "5790766",
+   "5790770",
+   "5790777",
+   "5790779",
+   "5790783",
+   "5790784",
+   "5790789",
+   "5790791",
+   "5790794",
+   "5790797",
+   "5790798"
   ],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "21883",
@@ -1000,10 +1039,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02",
-  "last_attempt": "2026-09-03",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "23028",
@@ -1119,16 +1155,14 @@
   "filer_id": "24572",
   "name": "Friends of Rachel Philip",
   "orestar": 180,
-  "held": 180,
+  "held": 181,
   "complete": false,
   "surplus": [
    "5648743"
   ],
-  "missing": [
-   "5784777"
-  ],
+  "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "16508",
@@ -1193,7 +1227,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "5067",
@@ -1245,7 +1279,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "23277",
@@ -1312,7 +1346,10 @@
    "5066926"
   ],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-03",
+  "last_attempt": "2026-09-04",
+  "last_failure": "unusable_window",
+  "failure_count": 1
  },
  {
   "filer_id": "51",
@@ -1343,15 +1380,15 @@
  {
   "filer_id": "24948",
   "name": "Friends of Lyndi Reichenbach",
-  "orestar": 15,
-  "held": 16,
+  "orestar": 20,
+  "held": 21,
   "complete": false,
   "surplus": [
    "5716690"
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-30"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "24818",
@@ -1377,7 +1414,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "24241",
@@ -1448,16 +1485,14 @@
   "filer_id": "24822",
   "name": "Pencil PAC",
   "orestar": 66,
-  "held": 66,
+  "held": 67,
   "complete": false,
   "surplus": [
    "5561338"
   ],
-  "missing": [
-   "5788130"
-  ],
+  "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "24918",
@@ -1470,7 +1505,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "24692",
@@ -1496,7 +1531,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "24509",
@@ -1522,7 +1557,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "24621",
@@ -1535,7 +1570,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "24973",
@@ -1550,7 +1585,7 @@
    "5686840"
   ],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "24854",
@@ -1576,7 +1611,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "18748",
@@ -1615,7 +1650,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "18844",
@@ -1643,7 +1678,7 @@
    "5699127"
   ],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "24563",
@@ -1695,7 +1730,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "24679",
@@ -1710,7 +1745,7 @@
    "5596044"
   ],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "24446",
@@ -1728,15 +1763,17 @@
  {
   "filer_id": "24761",
   "name": "Myrna for Oregon",
-  "orestar": 412,
+  "orestar": 413,
   "held": 413,
   "complete": false,
   "surplus": [
    "5663327"
   ],
-  "missing": [],
+  "missing": [
+   "5766967"
+  ],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "5115",
@@ -1803,7 +1840,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "22133",
@@ -1842,7 +1879,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "23140",
@@ -1873,15 +1910,15 @@
  {
   "filer_id": "17995",
   "name": "Elect Zach Hudson",
-  "orestar": 1001,
-  "held": 1002,
+  "orestar": 1004,
+  "held": 1005,
   "complete": false,
   "surplus": [
    "5716529"
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "18462",
@@ -1907,10 +1944,7 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-02",
-  "last_attempt": "2026-09-03",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "21678",
@@ -1923,7 +1957,10 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-03",
+  "last_attempt": "2026-09-04",
+  "last_failure": "unusable_window",
+  "failure_count": 1
  },
  {
   "filer_id": "20217",
@@ -2218,15 +2255,15 @@
  {
   "filer_id": "21044",
   "name": "Deschutes Citizens for law and order",
-  "orestar": 77,
-  "held": 78,
+  "orestar": 82,
+  "held": 83,
   "complete": false,
   "surplus": [
    "5784525"
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-03"
+  "checked": "2026-09-04"
  },
  {
   "filer_id": "325",
@@ -8683,5 +8720,79 @@
   "missing": [],
   "superseded": [],
   "checked": "2026-09-03"
+ },
+ {
+  "filer_id": "315",
+  "name": "Jackson County Republican Central Committee",
+  "orestar": 6687,
+  "held": 6680,
+  "complete": false,
+  "surplus": [],
+  "missing": [
+   "5793534",
+   "5793535",
+   "5793537",
+   "5793551",
+   "5793553",
+   "5793554",
+   "5793555"
+  ],
+  "superseded": [],
+  "checked": "2026-09-04"
+ },
+ {
+  "filer_id": "25105",
+  "name": "O'Neil for Sheriff",
+  "orestar": 25,
+  "held": 25,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-09-04"
+ },
+ {
+  "filer_id": "25022",
+  "name": "Friends of Mallory Hiefield",
+  "orestar": 27,
+  "held": 27,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-09-04"
+ },
+ {
+  "filer_id": "25024",
+  "name": "Friends of Sally-Ann",
+  "orestar": 43,
+  "held": 43,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-09-04"
+ },
+ {
+  "filer_id": "24834",
+  "name": "Good Governance Corvallis",
+  "orestar": 46,
+  "held": 46,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-09-04"
+ },
+ {
+  "filer_id": "22194",
+  "name": "Citizens to Elect Yi-Kang Hu",
+  "orestar": 163,
+  "held": 163,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-09-04"
  }
 ]
