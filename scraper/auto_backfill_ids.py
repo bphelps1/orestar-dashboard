@@ -15,19 +15,17 @@ starts. A historical "done" marker never overrides newer exact evidence.
 Used by the backfill workflow in auto mode.
 """
 
-import csv
 import json
 import os
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 from balance_snapshot import (
-    COVERAGE_EVIDENCE_VERSION,
-    evidence_is_current,
-    exact_coverage_result_shape_is_valid,
     exact_evidence_identifier_is_valid,
-    transaction_filer_snapshots,
-    transaction_snapshot_id,
+)
+from exact_coverage_evidence import (
+    USABLE_HISTORY_KEY,
+    certify_exact_scope_rows,
 )
 
 FILERS_DIR = Path("data/aggregated/filers")
@@ -99,166 +97,6 @@ SURVEY_FILE = Path("data/coverage_survey.json")
 DIFF_FILE = Path("data/coverage_diff.json")
 IDENTITY_PROGRESS_FILE = Path("data/identity_remediation_windows.json")
 TRANSACTION_DIR = Path("data/transactions")
-FULL_HISTORY_START = "2006-01-01"
-USABLE_HISTORY_KEY = "usable_history"
-
-
-def _exact_row_shape_is_valid(row):
-    """Reject malformed/old identity rows before they can authorize writes."""
-    return exact_coverage_result_shape_is_valid(row)
-
-
-def _collection_started(row):
-    """Comparable precise UTC query start; invalid values sort nowhere."""
-    value = row.get("collection_started_at")
-    try:
-        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except (TypeError, ValueError):
-        return None
-    if parsed.tzinfo is None or parsed.utcoffset() != timezone.utc.utcoffset(parsed):
-        return None
-    return parsed.astimezone(timezone.utc)
-
-
-def _checked_at(row):
-    value = row.get("checked_at")
-    try:
-        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except (TypeError, ValueError):
-        return None
-    if parsed.tzinfo is None or parsed.utcoffset() != timezone.utc.utcoffset(parsed):
-        return None
-    return parsed.astimezone(timezone.utc)
-
-
-def _result_signature(row):
-    """ORESTAR verdict fields used to reject tied conflicting observations."""
-    return (
-        row.get("complete"),
-        tuple(row.get("missing") or []),
-        tuple(row.get("surplus") or []),
-        tuple(row.get("superseded") or []),
-        row.get("orestar"),
-        row.get("held"),
-    )
-
-
-def _observation_is_well_formed(row, filer_id):
-    started = _collection_started(row) if isinstance(row, dict) else None
-    completed = _checked_at(row) if isinstance(row, dict) else None
-    try:
-        range_start = date.fromisoformat(str(row.get("range_start") or ""))
-        range_end = date.fromisoformat(str(row.get("range_end") or ""))
-    except (AttributeError, ValueError):
-        return False
-    return (
-        isinstance(row, dict)
-        and _exact_row_shape_is_valid(row)
-        and str(row.get("filer_id") or "") == filer_id
-        and row.get("evidence_version") == COVERAGE_EVIDENCE_VERSION
-        and exact_evidence_identifier_is_valid(
-            row.get("transaction_snapshot_id")
-        )
-        and started is not None
-        and completed is not None
-        and started <= completed
-        and range_start == date(2006, 1, 1)
-        and range_end >= range_start
-    )
-
-
-def _usable_observation(row, requirement, filer_id):
-    return (
-        _observation_is_well_formed(row, filer_id)
-        and evidence_is_current(
-            row,
-            requirement["captured_at"],
-            require_precise=True,
-            require_collection_started=True,
-            strictly_after=True,
-            range_start=FULL_HISTORY_START,
-            minimum_range_end=requirement["capture_day"],
-        )
-    )
-
-
-def _anchored_observation_lanes(row, requirement, filer_id):
-    """Newest ORESTAR result in every capture-anchored range/digest lane.
-
-    The top-level row is the latest successful write, but out-of-order merges
-    can still leave a newer observation in history. The paired global hash is
-    required only on an anchor proving which per-filer digest/range belonged
-    to the summary capture. The verdict comes from the newest usable query for
-    that identical digest and range.
-    """
-    # Never fall back around a malformed or pre-summary top-level result. It is
-    # the last successful write and could otherwise hide a newer observation
-    # merely because its provenance is unsafe.
-    if not _usable_observation(row, requirement, filer_id):
-        return None
-    history = row.get(USABLE_HISTORY_KEY, [])
-    if not isinstance(history, list) or any(
-        not isinstance(item, dict) for item in history
-    ):
-        return None
-    if any(
-        (claimed_owner := str(item.get("filer_id") or "").strip())
-        and claimed_owner != filer_id
-        for item in history
-    ):
-        return None
-    # Legacy pre-history rows have no collection start and remain displayable.
-    # A malformed record claiming the structured schema could hide a newer
-    # ORESTAR verdict, so fail closed rather than silently stepping around it.
-    if any(
-        item.get("collection_started_at") is not None
-        and not _observation_is_well_formed(item, filer_id)
-        for item in history
-    ):
-        return None
-    usable = [
-        item for item in [row, *history]
-        if _usable_observation(item, requirement, filer_id)
-    ]
-    anchor_digests = {}
-    for item in usable:
-        if (item.get("transaction_snapshot_id")
-                != requirement["transaction_snapshot_id"]):
-            continue
-        bounds = (
-            str(item.get("range_start") or ""),
-            str(item.get("range_end") or ""),
-        )
-        anchor_digests.setdefault(bounds, set()).add(
-            item.get("filer_transaction_digest")
-        )
-    if any(len(digests) != 1 for digests in anchor_digests.values()):
-        return None
-
-    lanes = {}
-    for bounds, digests in anchor_digests.items():
-        digest = next(iter(digests))
-        observations = [
-            item for item in usable
-            if (
-                str(item.get("range_start") or ""),
-                str(item.get("range_end") or ""),
-            ) == bounds
-            and item.get("filer_transaction_digest") == digest
-        ]
-        newest_start = max(_collection_started(item) for item in observations)
-        newest = [
-            item for item in observations
-            if _collection_started(item) == newest_start
-        ]
-        if len({_result_signature(item) for item in newest}) != 1:
-            return None
-        # Completion time breaks a same-query-start tie only after we prove the
-        # verdict is identical; it cannot turn a pre-summary query into evidence.
-        lanes[bounds] = max(newest, key=_checked_at)
-    return lanes
-
-
 def _paired_requirements():
     """Return paired scope requirements, ambiguities, and dollar priorities."""
     scopes = {}
@@ -354,128 +192,15 @@ def _automation_exact_rows(diff_rows, candidate_ids=(), active_ranges=None):
     recomputing every member's deterministic per-filer digest.
     """
     requirements, ambiguous_members, balance_candidates = _paired_requirements()
-    active_ranges = active_ranges or {}
     candidates = {str(fid) for fid in candidate_ids if str(fid)} | balance_candidates
-    rows_by_id = {}
-    duplicate_ids = set()
-    for row in diff_rows:
-        fid = str(row.get("filer_id") or "").strip()
-        if not fid:
-            continue
-        if fid in rows_by_id:
-            duplicate_ids.add(fid)
-        else:
-            rows_by_id[fid] = row
-
-    relevant_scopes = {}
-    blocked = set()
-    for fid in candidates:
-        requirement = requirements.get(fid)
-        if requirement is None:
-            blocked.add(fid)
-            if fid in ambiguous_members:
-                blocked.update(ambiguous_members)
-            continue
-        relevant_scopes[tuple(requirement["scope_ids"])] = requirement
-
-    pending = []
-    for members, requirement in relevant_scopes.items():
-        if any(member in ambiguous_members for member in members):
-            blocked.update(members)
-            continue
-        member_lanes = {}
-        invalid = False
-        for member in members:
-            row = rows_by_id.get(member)
-            lanes = (
-                None if row is None or member in duplicate_ids
-                else _anchored_observation_lanes(row, requirement, member)
-            )
-            if not lanes:
-                invalid = True
-                break
-            member_lanes[member] = lanes
-        common_bounds = (
-            set.intersection(*(set(lanes) for lanes in member_lanes.values()))
-            if member_lanes else set()
-        )
-        if invalid or not common_bounds:
-            blocked.update(members)
-            continue
-        # Prefer the lane whose least-recent member observation is newest. This
-        # avoids a greedy per-member choice and keeps a multi-ID scope atomic.
-        active_ends = {
-            active_ranges[member] for member in members if member in active_ranges
-        }
-        if len(active_ends) > 1:
-            blocked.update(members)
-            continue
-        active_bounds = (
-            (FULL_HISTORY_START, next(iter(active_ends))) if active_ends else None
-        )
-        if active_bounds in common_bounds:
-            chosen_bounds = active_bounds
-        else:
-            chosen_bounds = max(
-                common_bounds,
-                key=lambda bounds: (
-                    min(
-                        _collection_started(member_lanes[member][bounds])
-                        for member in members
-                    ),
-                    bounds,
-                ),
-            )
-        rows = [
-            (member, member_lanes[member][chosen_bounds]) for member in members
-        ]
-        range_start, range_end = chosen_bounds
-        try:
-            start = date.fromisoformat(range_start)
-            end = date.fromisoformat(range_end)
-        except ValueError:
-            blocked.update(members)
-            continue
-        pending.append((members, rows, start, end))
-
-    # Usually every row in a rolling slice has one range. Grouping preserves
-    # correctness when old and new exact evidence use different frozen ends
-    # without scanning the 143 MB shard set once per committee.
-    grouped = {}
-    for members, rows, start, end in pending:
-        group = grouped.setdefault((start, end), {"ids": set(), "scopes": []})
-        group["ids"].update(members)
-        group["scopes"].append((members, rows))
-
-    valid = {}
-    schema_error = None
-    for (start, end), group in grouped.items():
-        snapshot_before = transaction_snapshot_id(TRANSACTION_DIR)
-        try:
-            current = transaction_filer_snapshots(
-                TRANSACTION_DIR, group["ids"], start, end,
-            )
-        except (OSError, EOFError, csv.Error, UnicodeError, ValueError) as exc:
-            schema_error = str(exc)
-            for members, _rows in group["scopes"]:
-                blocked.update(members)
-            continue
-        if (not snapshot_before
-                or transaction_snapshot_id(TRANSACTION_DIR) != snapshot_before):
-            schema_error = "transaction shards changed during certification"
-            for members, _rows in group["scopes"]:
-                blocked.update(members)
-            continue
-        for members, rows in group["scopes"]:
-            if all(
-                current.get(member, {}).get("filer_transaction_digest")
-                == row.get("filer_transaction_digest")
-                for member, row in rows
-            ):
-                valid.update(rows)
-            else:
-                blocked.update(members)
-    return valid, blocked, schema_error
+    return certify_exact_scope_rows(
+        diff_rows,
+        requirements,
+        candidates,
+        TRANSACTION_DIR,
+        active_ranges=active_ranges,
+        ambiguous_members=ambiguous_members,
+    )
 
 
 def _active_identity_roots():
@@ -572,7 +297,7 @@ for r in automation_rows.values():
         deferred_exact.append((missing, fid, r.get("name", "")))
         continue
     # Precise exact identity evidence overrides the historical done list. A
-    # count can say "done" while a withdrawn row cancels the missing row.
+    # count can say "done" while an ORESTAR-absent row cancels the missing row.
     filers.append((missing, fid, r.get("name", "")))
 
 # "Deferred" means after the other exact-missing committees, not abandoned.

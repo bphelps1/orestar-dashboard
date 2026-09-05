@@ -580,6 +580,12 @@ function filterMonthRows(rows) {
   return rows.filter(r => (!sm || r.month >= sm) && (!em || r.month <= em));
 }
 
+// Cash on hand is an as-of value. With an open-ended date filter the endpoint
+// is still the latest available month; otherwise use the selected end month.
+function activeCashThroughMonth() {
+  return state.dateEnd ? state.dateEnd.slice(0, 7) : null;
+}
+
 // Merge per-year {name, total} arrays for the given years (null = all).
 // Merges case-insensitively so e.g. "DaVita" and "Davita" don't become
 // two separate rows; the first-encountered capitalisation is used for display.
@@ -691,10 +697,60 @@ function mergeTypeByMonth(byMonth) {
   });
 }
 
-// Sum contributions/expenditures/count from a (possibly filtered) timeline array.
-// When beginningBalances is provided, cash on hand is calculated as:
-//   beginning_balance[earliest_year] + contributions + other_receipts - expenditures - other_disbursements
-function statsFromTimeline(rows, beginningBalances, fullTimeline) {
+// Cash movement is emitted independently from the visible historical totals.
+// New data carries the exact server-side movement after dated/ORESTAR-absence
+// filters and loan normalization.  Older generated data has no such field, so
+// retain the component equation as a backwards-compatible fallback.
+function timelineLegacyCashNet(row) {
+  return (row?.contributions || 0) + (row?.other_receipts || 0) + (row?.balance_adjustments || 0)
+       - (row?.expenditures || 0) - (row?.other_disbursements || 0);
+}
+
+function timelineCashNet(row) {
+  if (row && typeof row.cash_balance_net === "number" && Number.isFinite(row.cash_balance_net)) {
+    return row.cash_balance_net;
+  }
+  return timelineLegacyCashNet(row);
+}
+
+function timelineCashSchemaIsComplete(rows) {
+  return Array.isArray(rows) && rows.length > 0 && rows.every(row =>
+    row && typeof row.cash_balance_net === "number" && Number.isFinite(row.cash_balance_net));
+}
+
+// Return cash held at the end of throughMonth (or at the end of all data).
+// The first beginning-balance key is the month when the official opening
+// anchor becomes effective. Rows before a later anchor remain visible history
+// but do not roll into cash, and a range with no transaction rows still carries
+// the position established before its endpoint.
+function timelineCashPosition(rows, beginningBalances, throughMonth) {
+  // Never mix contracts within one trajectory. A partially cached new file
+  // may contain an embedded global anchor in cash_balance_net alongside legacy
+  // rows. In that case use legacy components for every row and the separate
+  // beginning balance exactly once.
+  const exactCashSchema = timelineCashSchemaIsComplete(rows);
+  const sortedYears = Object.keys(beginningBalances || {}).sort();
+  const firstYear = sortedYears[0] || "";
+  const anchorMonth = firstYear ? `${firstYear}-01` : "";
+  let position = (!anchorMonth || !throughMonth || anchorMonth <= throughMonth)
+    ? (firstYear ? (beginningBalances[firstYear] || 0) : 0)
+    : 0;
+
+  for (const row of rows || []) {
+    if (!row || !row.month) continue;
+    if (anchorMonth && row.month < anchorMonth) continue;
+    if (throughMonth && row.month > throughMonth) break;
+    position += exactCashSchema
+      ? timelineCashNet(row)
+      : timelineLegacyCashNet(row);
+  }
+  return Math.round(position * 100) / 100;
+}
+
+// Sum visible contributions/expenditures/count from a (possibly filtered)
+// timeline array. Cash on hand uses timelineCashNet so an ORESTAR-nonreturning
+// historical row remains visible without moving the current cash balance.
+function statsFromTimeline(rows, beginningBalances, fullTimeline, cashThroughMonth) {
   // ORESTAR methodology (empirically verified):
   // contributions = Cash Contribution + In-Kind (ORESTAR "Cash Contributions")
   // expenditures = Cash Expenditure + In-Kind mirrored (ORESTAR "Cash Expenditures")
@@ -703,73 +759,30 @@ function statsFromTimeline(rows, beginningBalances, fullTimeline) {
   //       - expenditures - loan_payments - other_disbursements
   const totalIn      = rows.reduce((s, r) => s + (r.contributions || 0), 0);
   const totalInKind  = rows.reduce((s, r) => s + (r.inkind || 0), 0);
-  const totalLoansIn = rows.reduce((s, r) => s + (r.loans_received || 0), 0);
   const totalOut     = rows.reduce((s, r) => s + (r.expenditures || 0), 0);
-  const totalLoansOut= rows.reduce((s, r) => s + (r.loan_payments || 0), 0);
-  const totalOR      = rows.reduce((s, r) => s + (r.other_receipts || 0), 0);
-  const totalOD      = rows.reduce((s, r) => s + (r.other_disbursements || 0), 0);
-  const totalBA      = rows.reduce((s, r) => s + (r.balance_adjustments || 0), 0);
   const count        = rows.reduce((s, r) => s + (r.count || 0), 0);
 
-  // Beginning balance: only the first year's ORESTAR-scraped value is trusted.
-  // For later years, roll forward from the first year through the timeline.
-  let beginBal = 0;
-  if (beginningBalances && rows.length > 0) {
-    const sortedYears = Object.keys(beginningBalances).sort();
-    const firstYear = sortedYears[0] || "";
-    const firstYearBal = firstYear ? (beginningBalances[firstYear] || 0) : 0;
-    const earliestMonth = rows[0].month || "";
-    const earliestYear = earliestMonth.slice(0, 4);
-    if (!earliestYear || earliestYear === firstYear) {
-      beginBal = firstYearBal;
-    } else {
-      // Roll forward from first year through timeline months before the filtered range
-      let running = firstYearBal;
-      const src = fullTimeline || rows;
-      for (const r of src) {
-        if (!r.month || r.month >= earliestMonth) break;
-        // Same terms as netFlow above — loans and payments are already inside
-        // contributions and expenditures, and adjustments must be included or
-        // the opening position for a filtered range drifts from the real one.
-        running += (r.contributions || 0) + (r.other_receipts || 0) + (r.balance_adjustments || 0)
-                 - (r.expenditures || 0) - (r.other_disbursements || 0);
-      }
-      beginBal = Math.round(running * 100) / 100;
-    }
-  }
-
-  // COH — the same arithmetic process.py does, term for term.
-  //
-  // contributions ALREADY contains loans received, and expenditures ALREADY
-  // contains loan payments: that is what _orestar_contrib and _EXPEND_TYPES
-  // hold on the server. Adding totalLoansIn and subtracting totalLoansOut on
-  // top counted both a second time — for Friends of Ted Wheeler, +$495,600 of
-  // loans and -$3,500 of payments — and balance adjustments were missing
-  // entirely, a further +$250. Together exactly the $492,350 by which this
-  // function overstated his balance: $493,880 against a stored $1,530.14 that
-  // matches ORESTAR to the cent.
-  //
-  // In-kind does cancel; it is mirrored into both sides deliberately.
-  //
-  // totalLoansIn / totalLoansOut are still returned because the account-summary
-  // tiles show them as ORESTAR's separate line items. They just are not added
-  // again here.
-  const netFlow = totalIn + totalOR + totalBA - totalOut - totalOD;
+  // Cash is intentionally independent of the visible component sums. The
+  // server has already applied exact-absence, date, loan and adjustment rules.
+  const cashSource = fullTimeline || rows;
+  const cashOnHand = timelineCashPosition(
+    cashSource, beginningBalances, cashThroughMonth,
+  );
 
   return {
     totalIn:     Math.round(totalIn    * 100) / 100,
     totalInKind: Math.round(totalInKind * 100) / 100,
     totalOut:    Math.round(totalOut   * 100) / 100,
-    cashOnHand:  Math.round((beginBal + netFlow) * 100) / 100,
+    cashOnHand,
     count,
   };
 }
 
 // ── Account summary tile definitions ─────────────────────────────────────────
-// Values are CALCULATED from our scraped transaction data, NOT taken from the
-// ORESTAR account summary page. ORESTAR account summary is used for validation
-// only (discrepancy checking). The only value taken from ORESTAR is the first
-// year's beginning balance, which anchors our running cash position.
+// Historical totals come from held transaction rows. The exact cash lane also
+// uses the first ORESTAR opening balance as its anchor and, when trustworthy,
+// ORESTAR's annual loan treatment. Those differences stay explicit rather than
+// rewriting or hiding the underlying transaction history.
 
 const CALC_TILE_META = {
   // ── Cash Balance tiles (COH-contributing) ─────────────────────────────────
@@ -781,57 +794,56 @@ const CALC_TILE_META = {
   },
   cash_contributions: {
     label: "Cash Contributions",
-    coh: true,
     orestar_field: "orestar_contributions",
-    tip: "<strong>Counted:</strong> Cash Contribution + In-Kind Contribution sub-types. Matches ORESTAR's Cash Contributions line.<br><strong>Note:</strong> In-kind appears on both the contribution and expenditure sides, netting to zero for cash balance purposes.",
+    tip: "<strong>Historical total:</strong> All held Cash Contribution, non-exempt loan, and In-Kind Contribution rows in this period. Rows remain visible even when current ORESTAR evidence says they should not move today's cash balance.<br><strong>Note:</strong> In-kind appears on both sides and loans are also broken out below; neither is counted twice in Net Cash Flow.",
   },
   other_receipts: {
     label: "Other Receipts",
-    coh: true,
     orestar_field: "orestar_other_receipts",
-    tip: "<strong>Counted:</strong> Type OR transactions only. Matches ORESTAR's Other Receipts line.<br><strong>Condition:</strong> Transactions with type 'OR' (Other Receipt).<br><strong>Meaning:</strong> Refunds, interest, and other miscellaneous income that is not a contribution.",
+    tip: "<strong>Historical total:</strong> All held type OR transactions in this period, including records retained for history but excluded from the current cash lane when exact evidence requires it.<br><strong>Meaning:</strong> Refunds, interest, loans classified as other receipts, and other miscellaneous income.",
   },
   loans_received: {
     label: "Loans Received",
-    coh: true,
-    tip: "<strong>Counted:</strong> Loan Received (Non-Exempt) sub-type.<br><strong>Meaning:</strong> Borrowed money received by the committee. Affects cash balance but is not a contribution.",
+    tip: "<strong>Historical breakout:</strong> Held Loan Received (Non-Exempt) rows. These rows are already included in the contribution total above. When ORESTAR's trustworthy annual loan line differs, Net Cash Flow uses that reported amount and Cash Treatment Adjustment exposes the difference.",
   },
   cash_expenditures: {
     label: "Cash Expenditures",
-    coh: true,
     orestar_field: "orestar_expenditures",
-    tip: "<strong>Counted:</strong> Cash Expenditure sub-type + In-Kind (mirrored from contributions). Matches ORESTAR's Cash Expenditures line.<br><strong>Excludes:</strong> Agent expenditures, Account Payable, Personal Expenditure for Reimbursement, Loan Payments.",
+    tip: "<strong>Historical total:</strong> All held Cash Expenditure and non-exempt loan-payment rows, plus in-kind mirrored from contributions. Rows remain visible even when they do not move the current cash lane.",
   },
   loan_payments: {
     label: "Loan Payments",
-    coh: true,
-    tip: "<strong>Counted:</strong> Loan Payment (Non-Exempt) sub-type.<br><strong>Meaning:</strong> Repayments on borrowed money. Affects cash balance but is not a standard expenditure.",
+    tip: "<strong>Historical breakout:</strong> Held Loan Payment (Non-Exempt) rows. These rows are already included in the expenditure total above and are not counted a second time.",
   },
   other_disbursements: {
     label: "Other Disbursements",
-    coh: true,
     orestar_field: "orestar_other_disbursements",
-    tip: "<strong>Counted:</strong> Type OD transactions only. Matches ORESTAR's Other Disbursements line.<br><strong>Meaning:</strong> Miscellaneous cash payments that are not standard campaign expenditures.",
+    tip: "<strong>Historical total:</strong> All held type OD transactions in this period, including retained records that exact current evidence excludes from the cash lane.<br><strong>Meaning:</strong> Miscellaneous payments that are not standard campaign expenditures.",
+  },
+  balance_adjustments: {
+    label: "Balance Adjustments",
+    tip: "<strong>Historical total:</strong> Held ORESTAR Cash Balance Adjustment rows. Their signed amounts are included in the raw historical movement before Cash Treatment Adjustment is applied.",
+  },
+  cash_treatment_adjustment: {
+    label: "Cash Treatment Adjustment",
+    coh: true,
+    compute: d => d.cash_treatment_adjustment,
+    tip: "<strong>Reconciliation bridge:</strong> The difference between arithmetic over the historical totals above and the exact cash lane. It captures retained rows ORESTAR no longer returns, undated or pre-anchor history, and trustworthy ORESTAR loan treatment.<br><strong>Identity:</strong> Historical movement + this adjustment = Net Cash Flow.",
   },
   net_cash_flow: {
     label: "Net Cash Flow",
     coh: true,
     subtotal: true,
-    // Loans and payments are NOT added here: cash_contributions already
-    // contains loans received and cash_expenditures already contains loan
-    // payments, because that is what the server puts in those fields. The
-    // tiles above display them as separate lines the way ORESTAR's page does,
-    // which is presentation, not arithmetic.
-    compute: d => d.cash_contributions + d.other_receipts + (d.balance_adjustments || 0) - d.cash_expenditures - d.other_disbursements,
-    tip: "<strong>Counted:</strong> (Contributions + other receipts + balance adjustments) minus (expenditures + other disbursements). Loans received and loan payments are already inside those figures and are shown separately above. In-kind nets to zero.<br><strong>Meaning:</strong> How much cash the committee gained or lost during this period.",
+    compute: d => d.net_cash_flow,
+    tip: "<strong>Counted:</strong> Exact cash movement after certified non-returning rows, undated or pre-anchor history, loan treatment, and balance adjustments are applied. All held rows remain visible in the historical component totals.<br><strong>Meaning:</strong> How much cash the committee gained or lost during this period.",
   },
   ending_cash_balance: {
     label: "Ending Cash Balance",
     coh: true,
     subtotal: true,
     orestar_field: "orestar_ending",
-    compute: d => d.beginning_balance + d.cash_contributions + d.other_receipts + (d.balance_adjustments || 0) - d.cash_expenditures - d.other_disbursements,
-    tip: "<strong>Counted:</strong> Beginning balance + net cash flow. Loans received are already inside contributions and loan payments inside expenditures.<br><strong>Meaning:</strong> Our calculated cash position at the end of the period. This should closely match the ORESTAR ending balance if our transaction data is complete.",
+    compute: d => d.ending_cash_balance,
+    tip: "<strong>Counted:</strong> Beginning balance + net cash flow.<br><strong>Meaning:</strong> Our calculated cash position at the end of the period. This should closely match the ORESTAR ending balance if our transaction data is complete.",
   },
   // ── Non-cash items ────────────────────────────────────────────────────────
   inkind_contributions: {
@@ -876,9 +888,10 @@ const CALC_TILE_META = {
 
 const CALC_GROUPS = [
   {
-    title: "Cash Balance (ORESTAR Methodology)",
+    title: "Historical Transaction Totals and Cash Position",
     fields: ["beginning_balance", "cash_contributions", "loans_received", "other_receipts",
-             "cash_expenditures", "loan_payments", "other_disbursements", "net_cash_flow", "ending_cash_balance"],
+             "cash_expenditures", "loan_payments", "other_disbursements", "balance_adjustments",
+             "cash_treatment_adjustment", "net_cash_flow", "ending_cash_balance"],
   },
   {
     title: "Non-Cash Items",
@@ -896,9 +909,9 @@ const CALC_GROUPS = [
 
 /**
  * Build a calculated account summary from the filer's transaction data.
- * All values come from our scraped row-by-row transaction data, NOT from
- * the ORESTAR account summary page. The only exception is the first-year
- * beginning balance (the anchor).
+ * Historical components come from held row-by-row transactions. Exact cash
+ * additionally uses the first ORESTAR beginning balance as its anchor and any
+ * trustworthy annual loan treatment, with the bridge exposed in the UI.
  */
 /**
  * Build a calculated account summary, optionally filtered to a single year.
@@ -907,7 +920,7 @@ const CALC_GROUPS = [
  */
 function buildCalcSummary(profile, year) {
   const timeline = profile.timeline || [];
-  if (!timeline.length) return null;
+  if (!timeline.length && !Object.keys(profile.beginning_balances || {}).length) return null;
 
   // Filter timeline rows if year is specified
   const rows = year
@@ -928,47 +941,25 @@ function buildCalcSummary(profile, year) {
     balanceAdj    += row.balance_adjustments || 0;
   }
 
-  // Beginning balance: only the first year's ORESTAR-scraped value is trusted.
-  // For later years, roll forward from the first year through the timeline.
+  // Beginning/ending positions are as-of calculations over the full cash
+  // trajectory. This handles years with no rows, partial-year filtering, and
+  // official anchors that begin after older retained history.
   const beginBalances = profile.beginning_balances || {};
   const sortedYears = Object.keys(beginBalances).sort();
   const firstYear = sortedYears[0] || "";
   const firstYearBal = firstYear ? (beginBalances[firstYear] || 0) : 0;
   let beginBal;
-  if (!year || year === firstYear) {
-    beginBal = firstYearBal;
+  let endingCalc;
+  if (year) {
+    const priorYearEnd = `${Number(year) - 1}-12`;
+    beginBal = year === firstYear
+      ? firstYearBal
+      : timelineCashPosition(timeline, beginBalances, priorYearEnd);
+    endingCalc = timelineCashPosition(timeline, beginBalances, `${year}-12`);
   } else {
-    // Roll forward from first year through timeline months before the target year
-    let running = firstYearBal;
-    for (const r of timeline) {
-      if (!r.month || r.month >= year) break;
-      // Same terms as endingCalc: loans and payments are already inside
-      // contributions and expenditures, and adjustments must be included.
-      running += (r.contributions || 0) + (r.other_receipts || 0) + (r.balance_adjustments || 0)
-               - (r.expenditures || 0) - (r.other_disbursements || 0);
-    }
-    beginBal = Math.round(running * 100) / 100;
+    beginBal = firstYearBal;
+    endingCalc = timelineCashPosition(timeline, beginBalances, null);
   }
-
-  // COH = begin + contributions + other_receipts + balance_adjustments
-  //       - expenditures - other_disbursements
-  //
-  // The tiles below display LOANS RECEIVED and LOAN PAYMENTS as their own
-  // lines, the way ORESTAR's page does — but contributions ALREADY contains
-  // the loans and expenditures already contains the payments. Adding them
-  // again here counted Friends of Ted Wheeler's $262,600 of loans twice and
-  // his $3,500 of payments twice, and balance adjustments were left out
-  // entirely: $262,600 - $3,500 + $250 = $259,350, exactly the discrepancy
-  // this panel then reported against ORESTAR.
-  //
-  // This is the third consumer of the same data to carry that error. The stat
-  // card and statsFromTimeline were fixed first, which left this panel showing
-  // $260,880 and a red warning directly above a Yearly Comparison table where
-  // every year reconciled — the contradiction visible on one screen.
-  //
-  // In-kind is in both contributions and expenditures and nets to zero.
-  const endingCalc = beginBal + cashContrib + otherReceipts + balanceAdj
-                   - cashExpend - otherDisburse;
 
   // ORESTAR-reported values (for comparison / validation)
   // If a specific year is selected, use the per-year ORESTAR data
@@ -1010,6 +1001,11 @@ function buildCalcSummary(profile, year) {
   const comparisonDelta = !year && currentPair
     ? comparison.delta_at_capture
     : null;
+  const netCashFlow = Math.round((endingCalc - beginBal) * 100) / 100;
+  const historicalNetFlow = Math.round((
+    cashContrib + otherReceipts + balanceAdj
+    - cashExpend - otherDisburse
+  ) * 100) / 100;
 
   return {
     cash_contributions: Math.round(cashContrib * 100) / 100,
@@ -1021,6 +1017,10 @@ function buildCalcSummary(profile, year) {
     beginning_balance: Math.round(beginBal * 100) / 100,
     other_receipts: Math.round(otherReceipts * 100) / 100,
     balance_adjustments: Math.round(balanceAdj * 100) / 100,
+    cash_treatment_adjustment: Math.round((
+      netCashFlow - historicalNetFlow
+    ) * 100) / 100,
+    net_cash_flow: netCashFlow,
     ending_cash_balance: Math.round(endingCalc * 100) / 100,
     // ORESTAR values for validation
     orestar_ending: orestarEnding,
@@ -1584,7 +1584,10 @@ async function showPreviewPopover(slug, anchorEl) {
     const hasDate = state.dateStart || state.dateEnd;
     const fullTl = profile.timeline || [];
     const popTlRows = hasDate ? filterMonthRows(fullTl) : fullTl;
-    const stats = statsFromTimeline(popTlRows, profile.beginning_balances, fullTl);
+    const stats = statsFromTimeline(
+      popTlRows, profile.beginning_balances, fullTl,
+      hasDate ? activeCashThroughMonth() : null,
+    );
 
     // Top 5 donors (respect date filter)
     const years = yearsInRange();
@@ -2184,12 +2187,20 @@ function renderFilerRaceHeader() {
 function renderOverviewGlobal() {
   // Always compute stat cards from timeline — ensures consistency with Account Summary
   const hasDate = state.dateStart || state.dateEnd;
-  const globalBeginBal = summaryData.global_beginning_balances || {};
-  const tlRows = hasDate
-    ? filterMonthRows(timelineData || [])
-    : (timelineData || []);
   const fullGlobalTl = timelineData || [];
-  const { totalIn, totalInKind, totalOut, cashOnHand, count } = statsFromTimeline(tlRows, globalBeginBal, fullGlobalTl);
+  // New global rows already include every committee's opening anchor in their
+  // cash_balance_net trajectory. Legacy data needs the old aggregate anchor.
+  const hasExactCashTimeline = timelineCashSchemaIsComplete(fullGlobalTl);
+  const globalBeginBal = hasExactCashTimeline
+    ? {}
+    : (summaryData.global_beginning_balances || {});
+  const tlRows = hasDate
+    ? filterMonthRows(fullGlobalTl)
+    : fullGlobalTl;
+  const { totalIn, totalInKind, totalOut, cashOnHand, count } = statsFromTimeline(
+    tlRows, globalBeginBal, fullGlobalTl,
+    hasDate ? activeCashThroughMonth() : null,
+  );
   document.getElementById("stat-contributions").textContent = fmt$(totalIn);
   document.getElementById("stat-inkind").textContent        = fmt$(totalInKind);
   document.getElementById("stat-expenditures").textContent  = fmt$(totalOut);
@@ -2301,6 +2312,7 @@ function updateCohIndicator(profile) {
   const appAtCapture = comparable ? comparison.app_cash_on_hand : null;
   const disc = comparable ? Math.round(comparison.delta_at_capture * 100) / 100 : 0;
   const absDisc = Math.abs(disc);
+  const treatmentText = cashTreatmentNoteText(profile);
 
   // A closed committee gets a plain label, not a warning triangle.
   //
@@ -2330,7 +2342,7 @@ function updateCohIndicator(profile) {
       (absDisc > 0.01
         ? ` The ${fmt$(absDisc)} shown here is what our transaction history still carries; a closed committee's records often omit the final disbursement.`
         : "") +
-      (exemptLoanNoteText(profile) ? ` ${exemptLoanNoteText(profile)}` : "")
+      (treatmentText ? ` ${treatmentText}` : "")
     );
     return;
   }
@@ -2353,35 +2365,6 @@ function updateCohIndicator(profile) {
     const popover = document.createElement("div");
     popover.className = "disc-popover";
     popover.setAttribute("role", "tooltip");
-    // Where ORESTAR's own summary disagrees with itself, say so.
-    //
-    // Our cash-balance formula is ORESTAR's, taken from their page: beginning
-    // balance, plus total contributions (which include non-exempt loans) and
-    // other receipts, less total expenditures and disbursements, plus balance
-    // adjustments. It reconciles to within tens of dollars across thousands of
-    // committee-years from 2007 on.
-    //
-    // For a small number of committees it cannot reconcile, because ORESTAR's
-    // summary contradicts itself: Ted Wheeler's 2006 page reports Loans
-    // Received $0.00 and Total Outstanding Loans $230,000.00 at the same time,
-    // against $233,000 of loan transactions ORESTAR itself lists. Attributing
-    // that to our arithmetic would be wrong, and silently absorbing it would be
-    // worse, so the reader is told where the difference actually lives.
-    const loanNote = (() => {
-      const yd = profile.orestar_yearly_comparisons || {};
-      const yrs = Object.keys(yd).filter(y => yd[y] && yd[y].orestar_omits_loans);
-      if (!yrs.length) return "";
-      yrs.sort();
-      const y = yd[yrs[0]];
-      const ours = fmt$(y.our_loans_received || 0);
-      const theirs = fmt$(y.orestar_loans_received || 0);
-      const many = yrs.length > 1 ? ` (also ${yrs.slice(1).join(", ")})` : "";
-      return `<div class="disc-note">ORESTAR's own ${yrs[0]} account summary reports ` +
-             `${theirs} of loans received while listing ${ours} in loan transactions` +
-             `${many}. The difference above follows ORESTAR's transaction record; ` +
-             `its summary page does not agree with itself for this committee.</div>`;
-    })();
-
     // ORESTAR's summary against ORESTAR's own itemised transactions.
     //
     // Only shown where the coverage survey has confirmed we hold every row
@@ -2438,25 +2421,9 @@ function updateCohIndicator(profile) {
              `The balance here is rolled forward from ORESTAR's own transaction record.</div>`;
     })();
 
-    // Rows ORESTAR has withdrawn since we collected them.
-    //
-    // A filer can withdraw or supersede a filing; ORESTAR stops returning it
-    // and stops counting it. We keep the row — it is real history and belongs
-    // in contributor totals — but the balance follows ORESTAR and leaves it
-    // out. Identified by diffing transaction IDs against ORESTAR, never by
-    // comparing counts, which cannot tell a withdrawn row from a superseded
-    // one we correctly dropped.
-    const withdrawnNote = (() => {
-      const w = profile.orestar_withdrawn;
-      if (!w || !w.count) return "";
-      return `<div class="disc-note">${w.count} transaction${w.count === 1 ? "" : "s"}` +
-             `${w.amount ? ` totalling ${fmt$(Math.abs(w.amount))}` : ""} ` +
-             `${w.count === 1 ? "is" : "are"} still listed here but no longer returned by ` +
-             `ORESTAR — withdrawn or superseded filings. ORESTAR does not count ` +
-             `${w.count === 1 ? "it" : "them"} toward this balance, so neither does the ` +
-             `figure above. The record${w.count === 1 ? " is" : "s are"} kept rather than ` +
-             `deleted.</div>`;
-    })();
+    const treatmentNote = treatmentText
+      ? `<div class="disc-note">${esc(treatmentText)}</div>`
+      : "";
 
     const appChange = comparison.app_balance_change_since_capture || 0;
     const changeRow = Math.abs(appChange) > 0.01
@@ -2468,11 +2435,9 @@ function updateCohIndicator(profile) {
       <div class="disc-row disc-diff"><span>Difference at capture:</span><span>${disc >= 0 ? "+" : ""}${fmt$(disc)}</span></div>
       <div class="disc-row"><span>App balance now:</span><span>${fmt$(calcCoh)}</span></div>
       ${changeRow}
-      ${loanNote}
       ${itemisedNote}
       ${chainNote}
-      ${withdrawnNote}
-      ${exemptLoanNoteText(profile) ? `<div class="disc-note">${esc(exemptLoanNoteText(profile))}</div>` : ""}
+      ${treatmentNote}
       <div class="disc-ts">App snapshot built: ${formatTimestamp(comparison.app_snapshot_created_at)}<br>ORESTAR summary read: ${formatTimestamp(scrapeTs)}</div>
     `;
     popover.hidden = true;
@@ -2499,7 +2464,8 @@ function updateCohIndicator(profile) {
     ind.className = "coh-indicator coh-estimated";
     ind.textContent = "EST";
     ind.setAttribute("tabindex", "0");
-    ind.title = "No ORESTAR account summary scraped yet, so this balance is unchecked.";
+    ind.title = "No ORESTAR account summary scraped yet, so this balance is unchecked." +
+      (treatmentText ? ` ${treatmentText}` : "");
   } else if (!comparable) {
     // Legacy summaries have a timestamp but no saved app-side snapshot.  Do
     // not turn their live difference into a warning while the new paired
@@ -2508,14 +2474,35 @@ function updateCohIndicator(profile) {
     ind.className = "coh-indicator coh-estimated";
     ind.textContent = "SYNC";
     ind.setAttribute("tabindex", "0");
-    ind.title = paired
+    const syncTitle = paired
       ? "The app or ORESTAR state has changed since this capture window. A fresh paired summary is required before treating the old difference as current."
       : "ORESTAR summary available, but it has not yet been paired with a matching app transaction snapshot.";
+    ind.title = syncTitle + (treatmentText ? ` ${treatmentText}` : "");
+  } else if (treatmentText) {
+    // A successful evidence-backed adjustment deserves disclosure even when it
+    // makes the two balances agree. Silence here left a retained transaction
+    // apparently missing from the arithmetic with no explanation.
+    ind.hidden = false;
+    ind.className = "coh-indicator coh-adjusted";
+    ind.textContent = "ADJ";
+    ind.setAttribute("tabindex", "0");
+    ind.title = treatmentText;
   } else {
     // ORESTAR agrees with the calculation. That is the good case, and it earns
     // silence — same as the multi-filer cards, and what .coh-ok intends.
     ind.hidden = true;
   }
+}
+
+function orestarAbsentNoteText(profile) {
+  const w = (profile && (profile.orestar_absent || profile.orestar_withdrawn)) || {};
+  if (!w.count) return "";
+  return `${w.count} transaction${w.count === 1 ? "" : "s"}` +
+         `${w.amount ? ` totalling ${fmt$(Math.abs(w.amount))}` : ""} ` +
+         `${w.count === 1 ? "is" : "are"} still listed here but no longer returned by ` +
+         `ORESTAR's exact transaction search. ORESTAR does not count ` +
+         `${w.count === 1 ? "it" : "them"} toward this balance, so neither does the ` +
+         `figure shown. The record${w.count === 1 ? " is" : "s are"} kept rather than deleted.`;
 }
 
 // Why a balance can leave out a transaction the committee plainly filed.
@@ -2540,6 +2527,31 @@ function exemptLoanNoteText(profile) {
          `2014 on it records them and this balance counts them.`;
 }
 
+function nonexemptLoanNoteText(profile) {
+  const treatment = (profile && profile.nonexempt_loan_cash_treatment) || {};
+  const years = Object.keys(treatment).sort().reverse();
+  if (!years.length) return "";
+  const parts = years.slice(0, 3).map(year => {
+    const item = treatment[year] || {};
+    return `${year}: ${fmt$(item.orestar_counted || 0)} counted versus ` +
+           `${fmt$(item.transaction_total || 0)} in eligible held rows`;
+  });
+  const more = years.length > 3
+    ? `; plus ${years.length - 3} earlier year${years.length - 3 === 1 ? "" : "s"}`
+    : "";
+  return `Non-exempt loan cash treatment follows ORESTAR's trustworthy annual ` +
+         `summary (${parts.join("; ")}${more}). The filed loan rows remain visible ` +
+         `in historical totals.`;
+}
+
+function cashTreatmentNoteText(profile) {
+  return [
+    orestarAbsentNoteText(profile),
+    nonexemptLoanNoteText(profile),
+    exemptLoanNoteText(profile),
+  ].filter(Boolean).join(" ");
+}
+
 // Build discrepancy indicator HTML for multi-filer cards (inline)
 function cohIndicatorHTML(profile) {
   const acct = profile.orestar_account_summary || {};
@@ -2549,31 +2561,38 @@ function cohIndicatorHTML(profile) {
   const comparable = paired && comparison.actionable === true;
   const disc = comparable ? Math.round(comparison.delta_at_capture * 100) / 100 : 0;
   const absDisc = Math.abs(disc);
+  const treatmentText = cashTreatmentNoteText(profile);
   // Same rule as updateCohIndicator: a finished committee is labelled, not
   // warned about. Kept in step with that function deliberately — two badges
   // describing the same balance differently is worse than either alone.
   if (profile.closed) {
     const since = profile.closed_since ? ` since ${profile.closed_since}` : "";
-    const exNote = exemptLoanNoteText(profile);
     const tip = `ORESTAR reports no activity and a $0.00 balance for this committee${since}.` +
-                (exNote ? ` ${exNote}` : "");
+                (treatmentText ? ` ${treatmentText}` : "");
     return `<span class="coh-indicator coh-closed" tabindex="0" title="${esc(tip)}">Closed</span>`;
   }
   if (latestOrestar == null) {
-    return '<span class="coh-indicator coh-estimated" tabindex="0" title="No ORESTAR account summary scraped yet, so this balance is unchecked">EST</span>';
+    const tip = "No ORESTAR account summary scraped yet, so this balance is unchecked" +
+      (treatmentText ? ` | ${treatmentText}` : "");
+    return `<span class="coh-indicator coh-estimated" tabindex="0" title="${esc(tip)}">EST</span>`;
   }
   if (!comparable) {
-    const tip = paired
+    const syncTip = paired
       ? "The app or ORESTAR state has changed since this capture window; refresh the pair before treating its old difference as current"
       : "ORESTAR summary available, but it has not yet been paired with a matching app transaction snapshot";
+    const tip = syncTip + (treatmentText ? ` | ${treatmentText}` : "");
     return `<span class="coh-indicator coh-estimated" tabindex="0" title="${esc(tip)}">SYNC</span>`;
   }
   if (absDisc > 0.01) {
     const severity = discrepancySeverity(absDisc);
     const tsText = formatTimestamp(comparison.captured_at || acct.scrape_ts || 0);
     const appTs = formatTimestamp(comparison.app_snapshot_created_at);
-    const tip = `ORESTAR capture: ${fmt$(comparison.orestar_cash_on_hand || 0)} | App snapshot: ${fmt$(comparison.app_cash_on_hand || 0)} | Difference: ${fmt$(disc)} | App built: ${appTs} | ORESTAR read: ${tsText}`;
+    const tip = `ORESTAR capture: ${fmt$(comparison.orestar_cash_on_hand || 0)} | App snapshot: ${fmt$(comparison.app_cash_on_hand || 0)} | Difference: ${fmt$(disc)} | App built: ${appTs} | ORESTAR read: ${tsText}` +
+                (treatmentText ? ` | ${treatmentText}` : "");
     return `<span class="coh-indicator coh-warn-${severity}" tabindex="0" title="${esc(tip)}">\u26a0</span>`;
+  }
+  if (treatmentText) {
+    return `<span class="coh-indicator coh-adjusted" tabindex="0" title="${esc(treatmentText)}">ADJ</span>`;
   }
   return '';
 }
@@ -2626,7 +2645,10 @@ function renderOverviewSingleFiler(profile) {
     : (profile.timeline || []);
   const fullFilerTl = profile.timeline || [];
   const { totalIn, totalInKind, totalOut, cashOnHand, count } =
-    statsFromTimeline(tlRows, profile.beginning_balances, fullFilerTl);
+    statsFromTimeline(
+      tlRows, profile.beginning_balances, fullFilerTl,
+      hasDate ? activeCashThroughMonth() : null,
+    );
 
   document.getElementById("stat-contributions").textContent = fmt$(totalIn);
   document.getElementById("stat-inkind").textContent        = fmt$(totalInKind);
@@ -2969,7 +2991,10 @@ function renderOverviewMultiFiler(profiles) {
   document.getElementById("filer-comparison-grid").innerHTML = profiles.map(p => {
     const hasDate = state.dateStart || state.dateEnd;
     const s = hasDate
-      ? statsFromTimeline(filterMonthRows(p.timeline || []), p.beginning_balances, p.timeline || [])
+      ? statsFromTimeline(
+          filterMonthRows(p.timeline || []), p.beginning_balances,
+          p.timeline || [], activeCashThroughMonth(),
+        )
       : statsFromTimeline(p.timeline || [], p.beginning_balances);
     const tranCount = s.count ? fmtNum(s.count) : "—";
     const cohInd = cohIndicatorHTML(p);

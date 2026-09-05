@@ -170,6 +170,23 @@ def test_per_filer_coh_with_orestar(tmp_path):
     # transaction calculation and is never silently replaced by ORESTAR.
     assert filer_data["cash_on_hand_source"] == "calculated"
     assert filer_data["orestar_account_summary"]["scrape_ts"] == 1711500000
+    assert filer_data["beginning_balances"] == {"2026": 50000.0}
+    timeline_by_month = {
+        row["month"]: row for row in filer_data["timeline"]
+    }
+    # The 2025 history remains visible, but the official 2026 opening replaces
+    # it as the start of the cash trajectory.
+    assert timeline_by_month["2025-03"]["contributions"] == 10000.0
+    assert timeline_by_month["2025-03"]["cash_balance_net"] == 0.0
+    assert timeline_by_month["2025-06"]["cash_balance_net"] == 0.0
+    assert timeline_by_month["2026-02"]["cash_balance_net"] == 3000.0
+
+    global_by_month = {
+        row["month"]: row for row in result["timeline.json"]
+    }
+    assert global_by_month.get("2025-01", {}).get("cash_balance_net", 0) == 0.0
+    assert global_by_month["2026-01"]["cash_balance_net"] == 50000.0
+    assert sum(row["cash_balance_net"] for row in result["timeline.json"]) == 53000.0
 
 
 def test_per_filer_coh_without_orestar(tmp_path):
@@ -221,6 +238,7 @@ def test_global_coh_is_sum_of_filers(tmp_path):
     # Global COH = 500 + 1200 = 1700
     assert summary["global_cash_on_hand"] == 1700.0
     assert "global_beginning_balances" in summary
+    assert sum(row["cash_balance_net"] for row in result["timeline.json"]) == 1700.0
 
 
 # ---------------------------------------------------------------------------
@@ -372,3 +390,8 @@ def test_global_beginning_balances_aggregated(tmp_path):
     global_bb = summary["global_beginning_balances"]
     # Both filers have 2025 beginning balances: 5000 + 3000 = 8000
     assert global_bb["2025"] == 8000.0
+    # Global timeline cash includes both opening anchors, so the browser can
+    # roll forward correctly without pretending every committee began in the
+    # first global year.
+    assert sum(row["cash_balance_net"] for row in result["timeline.json"]) == 11000.0
+    assert summary["global_cash_on_hand"] == 11000.0
