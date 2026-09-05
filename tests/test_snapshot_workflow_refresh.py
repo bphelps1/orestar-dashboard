@@ -77,6 +77,34 @@ def test_account_summary_job_budget_contains_wait_install_and_soft_stop() -> Non
     assert job_minutes >= wait_minutes + install_minutes + scrape_minutes + 20
 
 
+def test_account_summary_breaker_cannot_finalize_the_sweep() -> None:
+    workflow = (ROOT / ".github/workflows/earliest-balances.yml").read_text()
+    scraper = (ROOT / "scraper/fetch_earliest_balances.py").read_text()
+
+    scrape = _step_section(workflow, "Scrape account summaries")
+    aggregate = _step_section(
+        workflow, "Re-aggregate with updated beginning balances (final batch only)"
+    )
+    retrigger = _step_section(workflow, "Retrigger for next batch")
+    breaker = scraper[scraper.index("if batch_blocked:"):]
+
+    # The scraper's failure outcome stops chaining. The remaining-count file
+    # keeps its literal progress value and cannot double as a stop sentinel.
+    assert "id: scrape" in scrape
+    assert "if: success()" in retrigger
+    assert 'remaining_path.write_text("0")' not in breaker
+    assert 'remaining_path.write_text(str(still_remaining))' in scraper
+    assert "sys.exit(1)" in breaker
+    assert breaker.index("sys.exit(1)") < breaker.index(
+        "sweep_state.pop(sweep_mode, None)"
+    )
+
+    # A zero count alone is insufficient: finalization also requires the
+    # account-summary scrape itself to have completed successfully.
+    assert "steps.scrape.outcome == 'success'" in aggregate
+    assert "steps.remaining.outputs.remaining == '0'" in aggregate
+
+
 def test_admin_balance_payload_fails_closed_across_schema_rollout() -> None:
     script = (ROOT / "docs/admin/donors.js").read_text()
     html = (ROOT / "docs/admin/donors.html").read_text()

@@ -1012,13 +1012,11 @@ def main():
     if args.max_filers > 0 and still_remaining > 0:
         log.info("REMAINING: %d filers still need scraping", still_remaining)
 
+    batch_blocked = bool(done and failed / done >= BATCH_FAILURE_ABORT)
+
     # Write remaining count to a file for the workflow to read
     remaining_path = DATA_DIR / "earliest_balances_remaining.txt"
     remaining_path.write_text(str(still_remaining))
-
-    if still_remaining == 0 and not args.filer_ids:
-        sweep_state.pop(sweep_mode, None)
-        _save_sweep_state(sweep_state)
 
     # A batch where nearly everything failed is not a batch that ran.
     #
@@ -1031,12 +1029,19 @@ def main():
     # Failing loudly here stops the chain instead of feeding it into a wall,
     # and the failure rate is the signal: a handful of bad filers is normal,
     # almost none succeeding is a blocked scraper.
-    if done and failed / done >= BATCH_FAILURE_ABORT:
-        remaining_path.write_text("0")          # do not retrigger into a wall
+    if batch_blocked:
+        # The nonzero exit is the chain-stop signal: the workflow's retrigger
+        # uses success(). Keep ``still_remaining`` truthful so a downstream
+        # step cannot mistake an aborted batch for a completed sweep. Exit
+        # before clearing sweep state, even if completion arithmetic changes.
         log.error("%d of %d filers failed (%.0f%%). ORESTAR is refusing this "
                   "scraper — stopping rather than retriggering.",
                   failed, done, 100 * failed / done)
         sys.exit(1)
+
+    if still_remaining == 0 and not args.filer_ids:
+        sweep_state.pop(sweep_mode, None)
+        _save_sweep_state(sweep_state)
 
 
 if __name__ == "__main__":
