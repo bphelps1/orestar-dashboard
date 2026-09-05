@@ -548,6 +548,12 @@ main {
 .coh-indicator.coh-estimated {
   background: #e2e8f0; color: #4a5568; border: 1px solid #cbd5e0;
 }
+/* Neutral disclosure: the displayed balance intentionally omits one or more
+   rows backed by current exact ORESTAR evidence. This is not a warning. */
+.coh-indicator.coh-adjusted {
+  background: #ebf8ff; color: #2c5282; border: 1px solid #90cdf4;
+  font-weight: 600;
+}
 /* Closed: a statement of fact, not a warning. Deliberately neutral — the
    amber and red above mean "something may be wrong here", and a finished
    committee is not wrong. */

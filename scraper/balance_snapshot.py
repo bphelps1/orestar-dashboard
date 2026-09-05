@@ -226,13 +226,20 @@ def exact_coverage_result_shape_is_valid(row: Any) -> bool:
         return False
     sets = []
     for values in (missing, surplus, superseded):
-        if any(not isinstance(value, str) or not value.strip() for value in values):
+        if any(not exact_evidence_identifier_is_valid(value) for value in values):
             return False
         value_set = set(values)
         if len(values) != len(value_set):
             return False
         sets.append(value_set)
     if sets[0] & sets[1] or sets[0] & sets[2] or sets[1] & sets[2]:
+        return False
+    orestar = row.get("orestar")
+    held = row.get("held")
+    if (type(orestar) is not int or type(held) is not int
+            or orestar < 0 or held < 0):
+        return False
+    if orestar != held - len(surplus) + len(missing) + len(superseded):
         return False
     digest = row.get("filer_transaction_digest")
     if not exact_evidence_identifier_is_valid(digest):

@@ -314,6 +314,14 @@ def _run_selector(
             row.setdefault("missing", [])
             row.setdefault("surplus", [])
             row.setdefault("superseded", [])
+            row.setdefault("held", len(snapshots[fid]["held_ids"]))
+            row.setdefault(
+                "orestar",
+                row["held"]
+                - len(row["surplus"])
+                + len(row["missing"])
+                + len(row["superseded"]),
+            )
             row.setdefault("evidence_version", 2)
             row.setdefault("collection_started_at", "2026-09-02T00:00:00Z")
             row.setdefault("checked_at", "2026-09-02T00:00:00.000001Z")
@@ -614,6 +622,9 @@ def _exact_observation(
         "missing": list(missing),
         "surplus": list(surplus),
         "superseded": [],
+        "orestar": (
+            int(result.get("held") or 0) - len(surplus) + len(missing)
+        ),
         "collection_started_at": started,
         "checked": completed[:10],
         "checked_at": completed,

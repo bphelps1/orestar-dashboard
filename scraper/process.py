@@ -19,6 +19,8 @@ import re
 import shutil
 from collections import defaultdict
 from datetime import date, datetime, timezone
+from decimal import Decimal, ROUND_HALF_UP
+from fractions import Fraction
 from pathlib import Path
 
 import pandas as pd
@@ -222,10 +224,26 @@ def _paired_evidence_requirements(
     """
     scopes: dict[tuple[str, ...], dict] = {}
     ownership: dict[str, set[tuple[str, ...]]] = defaultdict(set)
+    scope_owners: dict[tuple[str, ...], list[str]] = defaultdict(list)
+    normalized_scopes: dict[str, list[str]] = {}
     invalid_members: set[str] = set()
 
+    # Ownership is a property of the current canonical mapping, not of whether
+    # a particular aggregate happened to receive a usable paired capture.  If
+    # an unpaired/invalid aggregate overlaps a paired one, registering only the
+    # paired side lets its certified omissions leak into both balances through
+    # _orestar_absent_for_filers().  Inventory every current scope first so any
+    # overlap or duplicate owner fails closed before evidence is considered.
     for name, raw_ids in name_to_fids.items():
         ids = sorted({str(fid).strip() for fid in raw_ids if str(fid).strip()})
+        normalized_scopes[name] = ids
+        if ids:
+            key = tuple(ids)
+            scope_owners[key].append(name)
+            for fid in ids:
+                ownership[fid].add(key)
+
+    for name, ids in normalized_scopes.items():
         comparison = comparisons.get(name) or {}
         if comparison.get("status") != "paired":
             continue
@@ -262,20 +280,25 @@ def _paired_evidence_requirements(
         if key in scopes:
             requirement["ambiguous"] = True
         scopes[key] = requirement
-        for fid in ids:
-            ownership[fid].add(key)
 
     ambiguous_members = set(invalid_members)
+    for key, owners in scope_owners.items():
+        if len(owners) > 1:
+            ambiguous_members.update(key)
     for fid, keys in ownership.items():
-        if len(keys) > 1 or any(scopes[key].get("ambiguous") for key in keys):
+        if len(keys) > 1 or any(
+            key in scopes and scopes[key].get("ambiguous") for key in keys
+        ):
             for key in keys:
                 ambiguous_members.update(key)
 
-    requirements = {
-        fid: scopes[next(iter(keys))]
-        for fid, keys in ownership.items()
-        if len(keys) == 1 and fid not in ambiguous_members
-    }
+    requirements = {}
+    for fid, keys in ownership.items():
+        if len(keys) != 1 or fid in ambiguous_members:
+            continue
+        key = next(iter(keys))
+        if key in scopes:
+            requirements[fid] = scopes[key]
     return requirements, ambiguous_members
 
 
@@ -1400,7 +1423,6 @@ def aggregate(df: pd.DataFrame) -> None:
     timeline["inkind"]        = timeline["inkind"].round(2)
     timeline["expenditures"]  = timeline["expenditures"].round(2)
     timeline["count"]         = timeline["count"].astype(int)
-    _write_json("timeline.json", timeline.to_dict(orient="records"))
 
     # ── by_contributor_type.json ──────────────────────────────────────────────
     def _type_rows(frame):
@@ -1473,6 +1495,26 @@ def aggregate(df: pd.DataFrame) -> None:
     global_coh_data = aggregate_filers(df, contributions, inkind_contribs, expenditures,
                                        other_receipts, other_disburse, balance_adjust,
                                        filer_col, contrib_col)
+
+    # Add the exact, per-filer-derived cash trajectory to the visible global
+    # component timeline. Synthetic January rows are possible when a committee
+    # has an opening anchor but no transaction that month; their display totals
+    # and count remain zero while the cash position starts at the right point.
+    global_cash_rows = pd.DataFrame([
+        {"month": month, "cash_balance_net": amount}
+        for month, amount in global_coh_data["global_cash_timeline"].items()
+    ])
+    if not global_cash_rows.empty:
+        timeline = timeline.merge(global_cash_rows, on="month", how="outer")
+    else:
+        timeline["cash_balance_net"] = 0.0
+    timeline = timeline.fillna(0).sort_values("month")
+    timeline["contributions"] = timeline["contributions"].round(2)
+    timeline["inkind"] = timeline["inkind"].round(2)
+    timeline["expenditures"] = timeline["expenditures"].round(2)
+    timeline["cash_balance_net"] = timeline["cash_balance_net"].round(2)
+    timeline["count"] = timeline["count"].astype(int)
+    _write_json("timeline.json", timeline.to_dict(orient="records"))
 
     # Update summary.json with correct global cash-on-hand (sum of per-filer COH)
     summary["global_cash_on_hand"] = global_coh_data["global_cash_on_hand"]
@@ -2068,6 +2110,10 @@ def aggregate_filers(
     index_rows = []
     _filer_detail_rows: list[dict] = []  # accumulated for one bulk upsert to Supabase
     _global_beginning_balances: dict[str, float] = {}  # year → sum of per-filer beginning balances
+    # Browser-global cash trajectory. Unlike the visible global component
+    # timeline, this is built from each filer's fully corrected cash path and
+    # includes that filer's opening anchor in the month it becomes effective.
+    _global_cash_timeline: dict[str, float] = defaultdict(float)
     log.info("Generating per-filer detail files for %d filers…", len(all_filer_names))
 
     for name in all_filer_names:
@@ -2290,8 +2336,8 @@ def aggregate_filers(
         # reports a partial amount — it is all or nothing.
         _or_for_coh = _dated(filer_or)  # All type OR, minus anything undated
         _exempt_dropped: dict[str, float] = {}
-        if (not filer_or.empty and "year" in filer_or.columns
-                and "sub_type" in filer_or.columns):
+        if (not _or_for_coh.empty and "year" in _or_for_coh.columns
+                and "sub_type" in _or_for_coh.columns):
             _uncounted_years: set[int] = set()
             for _yr_s, _ty in (_name_to_yearly.get(name, {}) or {}).items():
                 if not str(_yr_s).isdigit() or not isinstance(_ty, dict):
@@ -2322,15 +2368,16 @@ def aggregate_filers(
                     continue                      # cannot tell a parsed record from a blank one
                 _uncounted_years.add(int(_yr_s))
             if _uncounted_years:
-                _mask = ((filer_or["sub_type"] == "Loan Received (Exempt)")
-                         & (filer_or["year"].isin(_uncounted_years)))
+                _mask = (
+                    (_or_for_coh["sub_type"] == "Loan Received (Exempt)")
+                    & (_or_for_coh["year"].isin(_uncounted_years))
+                )
                 if bool(_mask.any()):
-                    for _y, _a in filer_or[_mask].groupby("year")["amount"].sum().items():
+                    for _y, _a in (
+                        _or_for_coh[_mask].groupby("year")["amount"].sum().items()
+                    ):
                         _exempt_dropped[str(int(_y))] = round(float(_a), 2)
-                    _or_for_coh = filer_or[~_mask]
-                    # Recomputed so the stored lifetime figure describes the same
-                    # money the timeline and the balance do.
-                    total_or = round(float(_or_for_coh["amount"].sum()), 2)
+                    _or_for_coh = _or_for_coh[~_mask]
                     log.info(
                         "%s: excluding %s of exempt loans from cash (%s) — "
                         "ORESTAR's own summary reports none for those years",
@@ -2472,8 +2519,10 @@ def aggregate_filers(
         # predates the fix, our own figure stands.
         _sum_ts = float((orestar_info or {}).get("ts") or 0)
         _our_loans_by_year = {}
-        if not filer_contrib.empty and "year" in filer_contrib.columns:
-            _lr = filer_contrib[filer_contrib["sub_type"] == "Loan Received (Non-Exempt)"]
+        if not _c_for_coh.empty and "year" in _c_for_coh.columns:
+            _lr = _c_for_coh[
+                _c_for_coh["sub_type"] == "Loan Received (Non-Exempt)"
+            ]
             if not _lr.empty:
                 _our_loans_by_year = _lr.groupby("year")["amount"].sum().to_dict()
         _their_years = _name_to_yearly.get(name, {})
@@ -2488,8 +2537,15 @@ def aggregate_filers(
                 _ours = float(_our_loans_by_year.get(int(_yr_s), 0.0))
             except (TypeError, ValueError):
                 continue
-            _adj = round(float(_theirs) - _ours, 2)
-            if abs(_adj) > 0.01:
+            _theirs = float(_theirs)
+            # ORESTAR may report a loan in a year for which we hold no loan
+            # row. That is evidence of a missing transaction, not permission to
+            # synthesize undated cash. Normalize only principal represented by
+            # held rows; exact remediation can add a genuinely missing row.
+            if abs(_ours) <= 1e-9:
+                continue
+            _adj = round(_theirs - _ours, 2)
+            if abs(_adj) > 0.0:
                 yearly_nets[_yr_s] = round(yearly_nets[_yr_s] + _adj, 2)
 
         beginning_balances: dict[str, float] = {}
@@ -2520,10 +2576,12 @@ def aggregate_filers(
         earliest_info = _name_to_earliest.get(name)
         first_txn_year = int(sorted_years[0]) if sorted_years else 9999
         first_year_begin = 0.0
+        _first_balance_year: int | None = None
         # Whether our pre-statement transactions agree with the opening balance
         # ORESTAR states. None when the question does not arise.
         opening_reconciles = None
         opening_our_prior_net = None
+        _balance_excluded_years: set[int] = set()
         if earliest_info:
             scraped_year = earliest_info.get("earliest_year", 9999)
             # Older cache entries predate the flag; fall back to the year test,
@@ -2531,6 +2589,7 @@ def aggregate_filers(
             complete = earliest_info.get("reached_earliest", scraped_year <= first_txn_year)
             if complete and scraped_year <= first_txn_year:
                 first_year_begin = earliest_info["beginning_balance"]
+                _first_balance_year = int(scraped_year)
             elif (complete and scraped_year > first_txn_year
                   and earliest_info.get("beginning_balance") is not None):
                 # ORESTAR's first statement postdates our first transaction.
@@ -2557,10 +2616,12 @@ def aggregate_filers(
                 _pre = round(sum(yearly_nets.get(str(y), 0.0)
                                  for y in range(first_txn_year, scraped_year)), 2)
                 first_year_begin = earliest_info["beginning_balance"]
+                _first_balance_year = int(scraped_year)
                 opening_reconciles = abs(_pre - first_year_begin) <= 0.01
                 opening_our_prior_net = _pre
                 for _y in range(first_txn_year, scraped_year):
                     yearly_nets.pop(str(_y), None)
+                    _balance_excluded_years.add(_y)
                 log.info(
                     "%s: anchoring on ORESTAR's %d opening $%.2f; our %d-%d rows "
                     "net $%.2f (%s) and are superseded by it",
@@ -2574,6 +2635,18 @@ def aggregate_filers(
                     "transactions start %d — not the first statement",
                     earliest_info["beginning_balance"], name, scraped_year, first_txn_year,
                 )
+
+        # The late-anchor branch can remove years from yearly_nets. Rebuild the
+        # iteration list after that mutation; retaining the old list attached a
+        # 2026 official opening balance to 2025 merely because a superseded row
+        # was still visible there.
+        sorted_years = sorted(yearly_nets.keys())
+        if (_first_balance_year is not None
+                and (not sorted_years
+                     or _first_balance_year < int(sorted_years[0]))):
+            beginning_balances[str(_first_balance_year)] = round(
+                first_year_begin, 2
+            )
 
         # Roll forward: beginning balance for each year, then cash on hand
         running = first_year_begin
@@ -2741,14 +2814,20 @@ def aggregate_filers(
                 return {}
             return frame.groupby("year")["amount"].sum().to_dict()
 
-        # For ORESTAR comparison: Cash Contribution + In-Kind, Cash Expenditure + In-Kind
-        _yearly_orestar_c = _yearly_sums(_orestar_contrib)
-        _yearly_cash_exp  = _yearly_sums(_cash_expend_only)
-        _yearly_inkind    = _yearly_sums(filer_inkind)
+        # For ORESTAR comparison: Cash Contribution + In-Kind, Cash
+        # Expenditure + In-Kind. These are reconciliation consumers, so use the
+        # same dated/certified-absence filters as the balance rather than
+        # publishing line items that contradict the corrected cash figure.
+        _yearly_orestar_c = _yearly_sums(_dated(_orestar_contrib))
+        _yearly_cash_exp = _yearly_sums(_dated(_cash_expend_only))
+        _yearly_inkind = _yearly_sums(_dated(filer_inkind))
         # Loan receipts per year, so a committee-year can be checked against
         # ORESTAR's own reported loans line.
-        _loans_recv = (filer_contrib[filer_contrib["sub_type"] == "Loan Received (Non-Exempt)"]
-                       if not filer_contrib.empty else filer_contrib)
+        _loans_recv = (
+            _c_for_coh[
+                _c_for_coh["sub_type"] == "Loan Received (Non-Exempt)"
+            ] if not _c_for_coh.empty else _c_for_coh
+        )
         _yearly_loans = _yearly_sums(_loans_recv)
 
         # Per-year loan scaling, shared by the balance, the timeline and this
@@ -2761,7 +2840,7 @@ def aggregate_filers(
                     or not _loan_fields_trustworthy(_ty, _sum_ts)):
                 continue
             _amt = float(_amt)
-            if abs(_amt) <= 0.01:
+            if abs(_amt) <= 1e-9:
                 continue
             _coh_loan_scale[int(_y)] = float(_ty["loans_received"]) / _amt
 
@@ -2772,7 +2851,7 @@ def aggregate_filers(
                 return 1.0
 
         _yearly_or = _yearly_sums(_or_for_coh)
-        _yearly_od = _yearly_sums(filer_od)
+        _yearly_od = _yearly_sums(_od_for_coh)
 
         if orestar_yearly:
             for yr_s in sorted_years:
@@ -3087,30 +3166,76 @@ def aggregate_filers(
         # COH = begin + contributions + loans_received + other_receipts
         #       - expenditures - loan_payments - other_disbursements
         #   (in-kind is in both contributions and expenditures, nets to zero)
-        _loans_in  = filer_contrib[filer_contrib["sub_type"] == "Loan Received (Non-Exempt)"] if not filer_contrib.empty else filer_contrib
-        _loans_out = filer_expend[filer_expend["sub_type"] == "Loan Payment (Non-Exempt)"] if not filer_expend.empty else filer_expend
+        # Keep the raw component series for history/totals, while deriving a
+        # separate cash series from the certified/dated frames.  A row ORESTAR
+        # no longer returns is still part of the public filing history; exact
+        # absence only says it must not move the current ORESTAR cash balance.
+        _raw_loans_in = (
+            filer_contrib[
+                filer_contrib["sub_type"] == "Loan Received (Non-Exempt)"
+            ] if not filer_contrib.empty else filer_contrib
+        )
+        _raw_loans_out = (
+            filer_expend[
+                filer_expend["sub_type"] == "Loan Payment (Non-Exempt)"
+            ] if not filer_expend.empty else filer_expend
+        )
+        _loans_in = (
+            _c_for_coh[
+                _c_for_coh["sub_type"] == "Loan Received (Non-Exempt)"
+            ] if not _c_for_coh.empty else _c_for_coh
+        )
+        _loans_out = (
+            _e_for_coh[
+                _e_for_coh["sub_type"] == "Loan Payment (Non-Exempt)"
+            ] if not _e_for_coh.empty else _e_for_coh
+        )
 
-        c_monthly  = monthly_sum(_orestar_contrib,   "contributions")
-        i_monthly  = monthly_sum(filer_inkind,        "inkind")
-        li_monthly = monthly_sum(_loans_in,           "loans_received")
-        # Expenditures = Cash Expenditure + In-Kind (mirrored)
-        ce_monthly = monthly_sum(_cash_expend_only,   "cash_exp")
-        ik_monthly = monthly_sum(filer_inkind,        "inkind_exp")
-        lo_monthly = monthly_sum(_loans_out,          "loan_payments")
-        # _or_for_coh, not filer_or. The client recomputes cash on hand from this
-        # timeline, so a frame that still carries the excluded exempt principal
-        # re-adds on render exactly what the server just took out — #99, which
-        # showed Ted Wheeler $726,880 against a stored $1,530.14.
-        or_monthly = monthly_sum(_or_for_coh,         "other_receipts")
-        od_monthly = monthly_sum(_od_for_coh,         "other_disbursements")
-        # Balance adjustments were missing from the timeline entirely, so any
-        # balance recomputed from it could not match ours no matter what else
-        # was corrected — the information simply was not there.
-        ba_monthly = monthly_sum(_ba_for_coh,         "balance_adjustments")
+        # The named component fields remain historical/display values.  Cash
+        # consumers use cash_balance_net below instead of reconstructing cash
+        # from these raw series.
+        c_monthly = monthly_sum(_orestar_contrib, "contributions")
+        i_monthly = monthly_sum(filer_inkind, "inkind")
+        raw_li_monthly = monthly_sum(_raw_loans_in, "raw_loans_received")
+        li_monthly = monthly_sum(_loans_in, "loans_received")
+        # Expenditures = Cash Expenditure + In-Kind (mirrored).
+        ce_monthly = monthly_sum(_cash_expend_only, "cash_exp")
+        ik_monthly = monthly_sum(filer_inkind, "inkind_exp")
+        raw_lo_monthly = monthly_sum(_raw_loans_out, "raw_loan_payments")
+        lo_monthly = monthly_sum(_loans_out, "loan_payments")
+
+        # These two series are deliberately separate from the display fields:
+        # they contain only rows allowed to affect the stored cash balance.
+        coh_c_monthly = monthly_sum(
+            _c_for_coh, "cash_balance_contributions",
+        )
+        coh_e_monthly = monthly_sum(
+            _e_for_coh, "cash_balance_expenditures",
+        )
+        # Other-receipt/disbursement/adjustment display fields follow the same
+        # history-preserving rule as C/E. Their filtered counterparts feed only
+        # cash_balance_net, so an exact-absent row never silently disappears.
+        or_monthly = monthly_sum(filer_or, "other_receipts")
+        od_monthly = monthly_sum(filer_od, "other_disbursements")
+        ba_monthly = monthly_sum(filer_ba, "balance_adjustments")
+        coh_or_monthly = monthly_sum(
+            _or_for_coh, "cash_balance_other_receipts",
+        )
+        coh_od_monthly = monthly_sum(
+            _od_for_coh, "cash_balance_other_disbursements",
+        )
+        coh_ba_monthly = monthly_sum(
+            _ba_for_coh, "cash_balance_adjustments",
+        )
         count_monthly_filer = filer_all.groupby("month").size().rename("count")
-        tl_df = pd.concat([c_monthly, i_monthly, li_monthly, ce_monthly, ik_monthly,
-                           lo_monthly, or_monthly, od_monthly, ba_monthly,
-                           count_monthly_filer], axis=1).fillna(0).sort_index()
+        tl_df = pd.concat([
+            c_monthly, i_monthly, raw_li_monthly, li_monthly,
+            ce_monthly, ik_monthly, raw_lo_monthly, lo_monthly,
+            coh_c_monthly, coh_e_monthly,
+            or_monthly, od_monthly, ba_monthly,
+            coh_or_monthly, coh_od_monthly, coh_ba_monthly,
+            count_monthly_filer,
+        ], axis=1).fillna(0).sort_index()
         # The timeline must carry the SAME loan figures the balance was built
         # from, because the browser recomputes cash on hand from these rows:
         #
@@ -3127,10 +3252,13 @@ def aggregate_filers(
         # whatever ORESTAR reports for that year. Where ORESTAR reports nothing
         # (2006 for 65 committees) every month goes to zero, which is the point.
         _loan_scale: dict[int, float] = {}
+        _nonexempt_loan_cash_treatment: dict[str, dict[str, float]] = {}
         _their_years_tl = _name_to_yearly.get(name, {})
         _ours_tl = {}
-        if not filer_contrib.empty and "year" in filer_contrib.columns:
-            _lr_tl = filer_contrib[filer_contrib["sub_type"] == "Loan Received (Non-Exempt)"]
+        if not _c_for_coh.empty and "year" in _c_for_coh.columns:
+            _lr_tl = _c_for_coh[
+                _c_for_coh["sub_type"] == "Loan Received (Non-Exempt)"
+            ]
             if not _lr_tl.empty:
                 _ours_tl = _lr_tl.groupby("year")["amount"].sum().to_dict()
         for _y, _ours_amt in _ours_tl.items():
@@ -3139,40 +3267,194 @@ def aggregate_filers(
                     or not _loan_fields_trustworthy(_ty, _sum_ts)):
                 continue
             _ours_amt = float(_ours_amt)
-            if abs(_ours_amt) <= 0.01:
+            if abs(_ours_amt) <= 1e-9:
                 continue
-            _loan_scale[int(_y)] = float(_ty["loans_received"]) / _ours_amt
+            _reported_amt = float(_ty["loans_received"])
+            _loan_scale[int(_y)] = _reported_amt / _ours_amt
+            if round(_reported_amt - _ours_amt, 2):
+                _nonexempt_loan_cash_treatment[str(int(_y))] = {
+                    "transaction_total": round(_ours_amt, 2),
+                    "orestar_counted": round(_reported_amt, 2),
+                }
+
+        # Allocate trustworthy annual loan totals to their held transaction
+        # months in whole cents. Rounding each proportional share independently
+        # can miss the annual figure by several cents; putting that remainder
+        # into one month can make a tiny positive receipt negative. Hamilton
+        # (largest-remainder) apportionment is exact, deterministic and cannot
+        # reverse a monthly sign when the source and annual total agree in sign.
+        _loan_allocated: dict[str, float] = {}
+        _loan_rounding_adjustments: dict[str, float] = {}
+        _cent = Decimal("0.01")
+
+        def _money_cents(value) -> int:
+            return int(
+                Decimal(str(value)).quantize(
+                    _cent, rounding=ROUND_HALF_UP,
+                ) * 100
+            )
+
+        for _year_int, _scale in _loan_scale.items():
+            _year_key = str(_year_int)
+            _summary_row = _their_years_tl.get(_year_key) or {}
+            _target_cents = _money_cents(_summary_row["loans_received"])
+            _weights = []
+            for _month, _source_row in tl_df.iterrows():
+                if not str(_month).startswith(f"{_year_key}-"):
+                    continue
+                _weight_cents = _money_cents(
+                    _source_row.get("loans_received", 0)
+                )
+                if _weight_cents:
+                    _weights.append((str(_month), _weight_cents))
+            _denominator = sum(weight for _, weight in _weights)
+            if not _weights or not _denominator:
+                # No dated transaction basis means there is nowhere honest to
+                # put a summary-only amount. The discrepancy remains visible
+                # until exact remediation supplies the missing transaction.
+                continue
+
+            _shares = []
+            _base_total = 0
+            for _month, _weight_cents in _weights:
+                _quota = Fraction(
+                    _target_cents * _weight_cents, _denominator,
+                )
+                _base_cents = _quota.numerator // _quota.denominator
+                _remainder = _quota - _base_cents
+                _shares.append([
+                    _month, _weight_cents, _base_cents, _remainder,
+                ])
+                _base_total += _base_cents
+            _cents_left = _target_cents - _base_total
+            if not 0 <= _cents_left <= len(_shares):
+                raise ValueError(
+                    f"{name}: invalid loan apportionment for {_year_key}"
+                )
+            _ranked = sorted(
+                range(len(_shares)),
+                key=lambda index: (-_shares[index][3], _shares[index][0]),
+            )
+            for _index in _ranked[:_cents_left]:
+                _shares[_index][2] += 1
+
+            for _month, _weight_cents, _allocated_cents, _remainder in _shares:
+                if ((_weight_cents > 0 and _allocated_cents < 0)
+                        or (_weight_cents < 0 and _allocated_cents > 0)):
+                    raise ValueError(
+                        f"{name}: loan apportionment reverses sign in {_month}"
+                    )
+                _allocated = _allocated_cents / 100
+                _loan_allocated[_month] = _allocated
+                _naively_rounded = round(
+                    (_weight_cents / 100) * _scale, 2
+                )
+                _adjustment = round(_allocated - _naively_rounded, 2)
+                if _adjustment:
+                    _loan_rounding_adjustments[_month] = _adjustment
 
         def _scaled_loans(month_key, raw):
+            _month_key = str(month_key)
+            if _month_key in _loan_allocated:
+                return _loan_allocated[_month_key]
             try:
-                _y = int(str(month_key)[:4])
+                _y = int(_month_key[:4])
             except (TypeError, ValueError):
                 return raw
             return raw * _loan_scale.get(_y, 1.0)
 
+        def _timeline_cash_net(month_key, row):
+            try:
+                _year = int(str(month_key)[:4])
+            except (TypeError, ValueError):
+                _year = None
+            # When an ORESTAR opening statement supersedes incomplete earlier
+            # transaction history, those rows stay visible but cannot also be
+            # rolled into the balance anchored by that statement.
+            if _year in _balance_excluded_years:
+                return 0.0
+            return (
+                float(row.get("cash_balance_contributions", 0))
+                - float(row.get("loans_received", 0))
+                + _scaled_loans(
+                    month_key, float(row.get("loans_received", 0)),
+                )
+                + float(row.get("cash_balance_other_receipts", 0))
+                + float(row.get("cash_balance_adjustments", 0))
+                - float(row.get("cash_balance_expenditures", 0))
+                - float(row.get("cash_balance_other_disbursements", 0))
+            )
+
         timeline = [
             {
                 "month": m,
-                # contributions ALREADY includes loans (and in-kind), and
-                # expenditures already includes loan payments — that is what
-                # _orestar_contrib and _EXPEND_TYPES contain. The loan portion
-                # here is swapped for ORESTAR's reported figure so this field
-                # carries the same loans the balance is built from.
+                # Preserve every held historical component for charts and
+                # totals, including loan rows that ORESTAR no longer returns.
+                # Loan normalization and certified absence affect only the
+                # separate cash_balance_net path below.
                 "contributions":       round(
-                    float(row.get("contributions", 0))
-                    - float(row.get("loans_received", 0))
-                    + _scaled_loans(m, float(row.get("loans_received", 0))), 2),
+                    float(row.get("contributions", 0)), 2),
                 "inkind":              round(float(row.get("inkind",              0)), 2),
-                "loans_received":      round(_scaled_loans(m, float(row.get("loans_received", 0))), 2),
-                "expenditures":        round(float(row.get("cash_exp", 0)) + float(row.get("inkind_exp", 0)), 2),
-                "loan_payments":       round(float(row.get("loan_payments",       0)), 2),
+                "loans_received":      round(
+                    float(row.get("raw_loans_received", 0)), 2),
+                "expenditures":        round(
+                    float(row.get("cash_exp", 0))
+                    + float(row.get("inkind_exp", 0)), 2),
+                "loan_payments":       round(
+                    float(row.get("raw_loan_payments", 0)), 2),
                 "other_receipts":      round(float(row.get("other_receipts",      0)), 2),
                 "other_disbursements": round(float(row.get("other_disbursements", 0)), 2),
                 "balance_adjustments": round(float(row.get("balance_adjustments", 0)), 2),
+                # Authoritative per-month cash movement.  Browser consumers
+                # use this when present and fall back to the legacy component
+                # equation for older generated data.
+                "cash_balance_net": round(_timeline_cash_net(m, row), 2),
+                **({"cash_balance_rounding_adjustment":
+                    _loan_rounding_adjustments[str(m)]}
+                   if str(m) in _loan_rounding_adjustments else {}),
                 "count":               int(row.get("count", 0)),
             }
             for m, row in tl_df.iterrows()
         ]
+
+        # Every year's emitted path must reproduce the exact cash calculation.
+        # Check by year as well as all-time so opposite errors cannot cancel.
+        _timeline_rows_by_year: dict[str, list[dict]] = defaultdict(list)
+        for _timeline_row in timeline:
+            _month = str(_timeline_row.get("month") or "")
+            if len(_month) >= 4 and _month[:4].isdigit():
+                _timeline_rows_by_year[_month[:4]].append(_timeline_row)
+        for _year, _expected_net in yearly_nets.items():
+            _year_rows = _timeline_rows_by_year.get(str(_year), [])
+            _emitted_net = round(sum(
+                float(item.get("cash_balance_net", 0)) for item in _year_rows
+            ), 2)
+            if _emitted_net != round(float(_expected_net), 2):
+                raise ValueError(
+                    f"{name}: timeline cash net for {_year} differs from "
+                    f"yearly net by "
+                    f"{round(float(_expected_net) - _emitted_net, 2):.2f}"
+                )
+
+        if round(sum(
+            float(item.get("cash_balance_net", 0)) for item in timeline
+        ), 2) != round(sum(float(value) for value in yearly_nets.values()), 2):
+            raise ValueError(f"{name}: timeline cash path does not reconcile")
+
+        # Global cash cannot be reconstructed from the raw global component
+        # timeline: each committee has its own opening anchor and its own
+        # evidence-gated exclusions. Aggregate the already-correct per-filer
+        # movement instead, injecting each opening balance at its first
+        # effective year so date-filtered roll-forwards remain meaningful.
+        for _timeline_row in timeline:
+            _global_cash_timeline[str(_timeline_row["month"])] += float(
+                _timeline_row.get("cash_balance_net", 0)
+            )
+        if (abs(float(first_year_begin)) > 0.0
+                and _first_balance_year is not None):
+            _global_cash_timeline[
+                f"{_first_balance_year}-01"
+            ] += float(first_year_begin)
 
         # Top donors (who gave TO this filer) — all-time and by year
         if not filer_contrib.empty and contrib_col in filer_contrib.columns:
@@ -3350,6 +3632,12 @@ def aggregate_filers(
             # committee plainly filed, rather than silently differing from a
             # number the reader can look up.
             "exempt_loans_excluded": _exempt_dropped,
+            # Annual non-exempt loan totals used for the cash lane when a
+            # trustworthy ORESTAR statement differs from the eligible held
+            # transaction total. Raw loan rows remain visible in the timeline;
+            # this record lets the UI explain the resulting cash adjustment.
+            "nonexempt_loan_cash_treatment":
+                _nonexempt_loan_cash_treatment,
             "yearly_discrepancies": yearly_discrepancies,
             # Candidate 2006 bases, on the pipeline's own definition, so the
             # rule ORESTAR actually applied can be identified by measurement
@@ -3901,6 +4189,10 @@ def aggregate_filers(
     return {
         "global_cash_on_hand": round(sum(r["cash_on_hand"] for r in index_rows), 2),
         "global_beginning_balances": _global_beginning_balances,
+        "global_cash_timeline": {
+            month: round(amount, 2)
+            for month, amount in sorted(_global_cash_timeline.items())
+        },
     }
 
 

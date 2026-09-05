@@ -21,11 +21,33 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import sys
 from pathlib import Path
 
 DATA_DIR = Path(__file__).parent.parent / "data" / "aggregated"
 FILERS_DIR = DATA_DIR / "filers"
+
+
+def _timeline_has_exact_cash(timeline: list[dict]) -> bool:
+    """Whether one whole timeline can use the new authoritative cash lane."""
+    return bool(timeline) and all(
+        isinstance(row.get("cash_balance_net"), (int, float))
+        and not isinstance(row.get("cash_balance_net"), bool)
+        and math.isfinite(row["cash_balance_net"])
+        for row in timeline
+    )
+
+
+def _legacy_cash_net(row: dict) -> float:
+    """Cash movement encoded by pre-cash_balance_net timeline rows."""
+    return (
+        row.get("contributions", 0)
+        + row.get("other_receipts", 0)
+        + row.get("balance_adjustments", 0)
+        - row.get("expenditures", 0)
+        - row.get("other_disbursements", 0)
+    )
 
 
 def audit_filer(slug: str, detail: dict, threshold: float = 0.01) -> list[dict]:
@@ -67,9 +89,12 @@ def audit_filer(slug: str, detail: dict, threshold: float = 0.01) -> list[dict]:
     beginning_balances = detail.get("beginning_balances", {})
     first_year = sorted(beginning_balances.keys())[0] if beginning_balances else None
     begin_bal = beginning_balances.get(first_year, 0) if first_year else 0
-    tl_or = round(sum(r.get("other_receipts", 0) for r in timeline), 2)
-    tl_od = round(sum(r.get("other_disbursements", 0) for r in timeline), 2)
-    expected_coh = round(begin_bal + tl_contributions + tl_or - tl_expenditures - tl_od, 2)
+    exact_cash = _timeline_has_exact_cash(timeline)
+    timeline_net = round(sum(
+        r["cash_balance_net"] if exact_cash else _legacy_cash_net(r)
+        for r in timeline
+    ), 2)
+    expected_coh = round(begin_bal + timeline_net, 2)
     delta = round(coh - expected_coh, 2)
     if abs(delta) > threshold:
         findings.append({
@@ -90,9 +115,10 @@ def audit_filer(slug: str, detail: dict, threshold: float = 0.01) -> list[dict]:
         begin_next = beginning_balances[next_yr]
         # Compute year's net from timeline
         yr_months = [r for r in timeline if r["month"].startswith(yr)]
-        yr_net = sum(r.get("contributions", 0) + r.get("other_receipts", 0)
-                     - r.get("expenditures", 0) - r.get("other_disbursements", 0)
-                     for r in yr_months)
+        yr_net = sum(
+            r["cash_balance_net"] if exact_cash else _legacy_cash_net(r)
+            for r in yr_months
+        )
         expected_next = round(begin_this + yr_net, 2)
         delta = round(begin_next - expected_next, 2)
         if abs(delta) > threshold:

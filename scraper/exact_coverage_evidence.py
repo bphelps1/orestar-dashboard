@@ -179,6 +179,30 @@ def _anchored_observation_lanes(
     if any(len(digests) != 1 for digests in anchor_digests.values()):
         return None
 
+    anchored_lanes = {
+        (bounds, next(iter(digests)))
+        for bounds, digests in anchor_digests.items()
+        if len(digests) == 1
+    }
+    newest_any_start = max(_collection_started(item) for item in usable)
+    newest_any = [
+        item for item in usable
+        if _collection_started(item) == newest_any_start
+    ]
+    # A later full-history observation on different bounds/local state is a
+    # revocation signal, not ignorable history.  It is not tied to the paired
+    # capture, so it cannot authorize a replacement verdict, but neither may an
+    # older anchored lane continue authorizing action underneath it.  A fresh
+    # paired capture must anchor the new lane first.
+    if any((
+        (
+            str(item.get("range_start") or ""),
+            str(item.get("range_end") or ""),
+        ),
+        item.get("filer_transaction_digest"),
+    ) not in anchored_lanes for item in newest_any):
+        return None
+
     lanes: dict[tuple[str, str], dict] = {}
     for bounds, digests in anchor_digests.items():
         digest = next(iter(digests))
@@ -395,17 +419,26 @@ def certify_exact_scope_rows(
                 == row.get("filer_transaction_digest")
                 for member, row in rows
             )
-            surplus_is_held = all(
-                set(row.get("surplus") or []).issubset(
-                    current.get(member, {}).get("held_ids") or set()
-                )
-                for member, row in rows
-            )
+            identity_sets_match = True
+            for member, row in rows:
+                snapshot = current.get(member, {})
+                held_ids = snapshot.get("held_ids") or set()
+                superseded_ids = snapshot.get("superseded_ids") or set()
+                missing = set(row.get("missing") or [])
+                surplus = set(row.get("surplus") or [])
+                superseded = set(row.get("superseded") or [])
+                if (row.get("held") != len(held_ids)
+                        or not surplus.issubset(held_ids)
+                        or not missing.isdisjoint(held_ids | superseded_ids)
+                        or not superseded.issubset(superseded_ids)
+                        or not superseded.isdisjoint(held_ids)):
+                    identity_sets_match = False
+                    break
             scope_has_no_missing = (
                 not require_no_missing
                 or all(not row.get("missing") for _member, row in rows)
             )
-            if digest_matches and surplus_is_held and scope_has_no_missing:
+            if digest_matches and identity_sets_match and scope_has_no_missing:
                 valid.update(rows)
             else:
                 blocked.update(members)
