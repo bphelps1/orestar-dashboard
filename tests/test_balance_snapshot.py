@@ -12,6 +12,7 @@ sys.path.insert(0, str(SCRAPER))
 
 from balance_snapshot import (  # noqa: E402
     CAPTURE_KEY,
+    COVERAGE_EVIDENCE_VERSION,
     build_source,
     evidence_is_current,
     make_summary_capture,
@@ -509,3 +510,104 @@ def test_supporting_count_must_postdate_summary_capture():
     assert evidence_is_current(
         {"checked_at": "2026-09-01T02:00:00+00:00"}, captured + 3600
     ) is True
+
+
+def test_automation_rejects_legacy_or_ambiguous_coverage_evidence():
+    captured = 1_788_220_800  # 2026-09-01T00:00:00Z
+    base = {
+        "evidence_version": COVERAGE_EVIDENCE_VERSION,
+        "collection_started_at": "2026-09-01T01:59:59.123456Z",
+        "checked_at": "2026-09-01T02:00:00.123456Z",
+        "transaction_snapshot_id": "sha256:one",
+        "filer_transaction_digest": "sha256:filer-one",
+        "range_start": "2006-01-01",
+        "range_end": "2026-09-01",
+    }
+    constraints = {
+        "require_precise": True,
+        "require_collection_started": True,
+        "strictly_after": True,
+        "transaction_snapshot_id": "sha256:one",
+        "filer_transaction_digest": "sha256:filer-one",
+        "range_start": "2006-01-01",
+        "range_end": "2026-09-01",
+    }
+
+    assert evidence_is_current(base, captured, **constraints) is True
+    assert evidence_is_current({**base, "checked_at": "2026-09-01"}, captured,
+                               **constraints) is False
+    assert evidence_is_current({**base, "checked_at": "2026-09-01T02:00:00"},
+                               captured, **constraints) is False
+    assert evidence_is_current({**base, "checked_at": "2026-09-01T03:00:00+01:00"},
+                               captured, **constraints) is False
+    assert evidence_is_current({**base, "evidence_version": 1}, captured,
+                               **constraints) is False
+    without_filer_digest = dict(base)
+    without_filer_digest.pop("filer_transaction_digest")
+    assert evidence_is_current(without_filer_digest, captured,
+                               **constraints) is False
+
+
+def test_automation_requires_exact_snapshot_and_intended_range():
+    captured = 1_788_220_800
+    evidence = {
+        "evidence_version": COVERAGE_EVIDENCE_VERSION,
+        "collection_started_at": "2026-09-01T23:59:59.999999Z",
+        "checked_at": "2026-09-02T00:00:00.000001Z",
+        "transaction_snapshot_id": "sha256:one",
+        "range_start": "2006-01-01",
+        "range_end": "2026-09-02",
+    }
+
+    assert evidence_is_current(
+        evidence, captured, require_precise=True,
+        require_collection_started=True, strictly_after=True,
+        transaction_snapshot_id="sha256:one", range_start="2006-01-01",
+        minimum_range_end="2026-09-01",
+    ) is True
+    assert evidence_is_current(
+        evidence, captured, require_precise=True,
+        require_collection_started=True, strictly_after=True,
+        transaction_snapshot_id="sha256:two", range_start="2006-01-01",
+        minimum_range_end="2026-09-01",
+    ) is False
+    assert evidence_is_current(
+        evidence, captured, require_precise=True,
+        require_collection_started=True, strictly_after=True,
+        transaction_snapshot_id="sha256:one", range_start="2007-01-01",
+        minimum_range_end="2026-09-01",
+    ) is False
+    assert evidence_is_current(
+        evidence, captured, require_precise=True,
+        require_collection_started=True, strictly_after=True,
+        transaction_snapshot_id="sha256:one", range_start="2006-01-01",
+        range_end="2026-09-01",
+    ) is False
+
+
+def test_automation_requires_query_to_start_after_capture_and_before_completion():
+    captured = 1_788_220_800  # 2026-09-01T00:00:00Z
+    evidence = {
+        "evidence_version": COVERAGE_EVIDENCE_VERSION,
+        "collection_started_at": "2026-09-01T00:00:00.000001Z",
+        "checked_at": "2026-09-01T00:00:01Z",
+    }
+    kwargs = {
+        "require_precise": True,
+        "require_collection_started": True,
+        "strictly_after": True,
+    }
+
+    assert evidence_is_current(evidence, captured, **kwargs) is True
+    for invalid_start in (
+        "2026-08-31T23:59:59.999999Z",  # straddles the capture
+        "2026-09-01T00:00:00Z",         # equality is not ordering proof
+        "2026-09-01T00:00:02Z",         # starts after completion
+        "2026-09-01T00:00:00.000001",   # timezone is ambiguous
+        "2026-09-01T01:00:00.000001+01:00",  # non-UTC representation
+    ):
+        assert evidence_is_current(
+            {**evidence, "collection_started_at": invalid_start},
+            captured,
+            **kwargs,
+        ) is False

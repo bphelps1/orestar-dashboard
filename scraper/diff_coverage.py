@@ -55,13 +55,14 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import csv
 import io
 import json
 import logging
 import re
 import sys
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urljoin
 
@@ -73,9 +74,37 @@ from playwright.sync_api import sync_playwright
 import fetch as F
 import survey_coverage as SC
 import supabase_sync
+from balance_snapshot import (
+    COVERAGE_EVIDENCE_VERSION,
+    SOURCE_FILENAME,
+    evidence_is_current,
+    exact_coverage_result_shape_is_valid,
+    exact_evidence_identifier_is_valid,
+    transaction_filer_snapshots,
+    transaction_snapshot_id,
+    utc_timestamp,
+)
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 DIFF_PATH = DATA_DIR / "coverage_diff.json"
+TRANSACTION_DIR = DATA_DIR / "transactions"
+SNAPSHOT_SOURCE_PATH = DATA_DIR / "aggregated" / SOURCE_FILENAME
+FILERS_DIR = DATA_DIR / "aggregated" / "filers"
+IDENTITY_PROGRESS_PATH = DATA_DIR / "identity_remediation_windows.json"
+
+# Keep a small lineage behind the current usable result. Slots are reserved
+# for the active paired-summary anchor and its newest same-state verdict (or
+# every conflicting anchor needed to remain fail-closed); the remaining newest
+# observations let operators audit changes without unbounded generated JSON.
+# Current + history together retain at most this many usable observations.
+USABLE_OBSERVATION_LIMIT = 8
+USABLE_HISTORY_KEY = "usable_history"
+USABLE_RESULT_FIELDS = (
+    "filer_id", "name", "orestar", "held", "complete", "surplus", "missing",
+    "superseded", "evidence_version", "checked", "collection_started_at",
+    "checked_at", "transaction_snapshot_id", "filer_transaction_digest",
+    "range_start", "range_end",
+)
 
 # Two re-checks of committees whose withdrawn rows are moving a balance for
 # every one committee measured for the first time. Any finite ratio prevents
@@ -124,6 +153,57 @@ class PartitionMismatchError(RuntimeError):
     """Disjoint child searches did not reproduce their parent's true count."""
 
 
+def _current_transaction_snapshot_id() -> str | None:
+    """Return the immutable fingerprint of the shards this diff will read.
+
+    A targeted merge intentionally updates shards before the slower aggregate
+    source is rebuilt. That state is valid for a post-fetch identity gate, so
+    a stale source is diagnostic here rather than fatal. The automatic
+    *selector* separately requires source/current equality before a balance
+    discrepancy can authorize a new remediation.
+    """
+    local_id = transaction_snapshot_id(TRANSACTION_DIR)
+    if not local_id:
+        log.error("No local transaction shards are available to fingerprint.")
+        return None
+    try:
+        source = json.loads(SNAPSHOT_SOURCE_PATH.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        log.warning("Cannot read aggregate transaction snapshot source %s: %s",
+                    SNAPSHOT_SOURCE_PATH, exc)
+        return local_id
+    source_id = source.get("transaction_snapshot_id")
+    if source_id != local_id:
+        log.warning(
+            "Aggregate snapshot source trails the local shards: source %s, local %s",
+            source_id or "(missing)", local_id,
+        )
+    return local_id
+
+
+def _evidence_fields(
+    transaction_id: str,
+    filer_digest: str,
+    start: date,
+    end: date,
+    *,
+    collection_started_at: str,
+    checked_at: str | None = None,
+) -> dict:
+    """The provenance shared by usable and unusable exact-diff attempts."""
+    instant = checked_at or utc_timestamp()
+    return {
+        "evidence_version": COVERAGE_EVIDENCE_VERSION,
+        "checked": instant[:10],              # legacy display compatibility
+        "collection_started_at": collection_started_at,
+        "checked_at": instant,
+        "transaction_snapshot_id": transaction_id,
+        "filer_transaction_digest": filer_digest,
+        "range_start": start.isoformat(),
+        "range_end": end.isoformat(),
+    }
+
+
 def _check_deadline(deadline: float | None) -> None:
     if deadline is not None and time.monotonic() >= deadline:
         raise CollectionDeadlineExceeded("coverage-diff time budget reached")
@@ -143,38 +223,17 @@ def _remaining_timeout_ms(deadline: float | None, ceiling_ms: int) -> int:
 # Local side
 # ---------------------------------------------------------------------------
 
-def _held_ids(filer_id: str, start: date, end: date) -> tuple[set[str], set[str]]:
-    """(ids we hold, ids we deliberately dropped as superseded).
-
-    The second set is what makes this tool worth its cost. ORESTAR's search
-    still returns an original after an amendment replaces it; we drop that
-    original on purpose. A plain identity diff would therefore report it as
-    MISSING — the same false signal the count comparison gives, just with an id
-    attached to it.
-
-    An original we correctly dropped is recognisable: some amendment we DO hold
-    names it in original_id. Anything ORESTAR returns that we lack and that no
-    amendment of ours points at is genuinely absent.
-    """
-    conn = supabase_sync._connect()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                """select tran_id from transactions
-                   where filer_id = %s and tran_date >= %s and tran_date <= %s""",
-                (filer_id, start, end),
-            )
-            held = {str(r[0]) for r in cur.fetchall()}
-            cur.execute(
-                """select distinct original_id from transactions
-                   where filer_id = %s and tran_date >= %s and tran_date <= %s
-                     and original_id is not null and original_id <> tran_id""",
-                (filer_id, start, end),
-            )
-            superseded = {str(r[0]) for r in cur.fetchall()}
-    finally:
-        conn.close()
-    return held, superseded
+def _local_held_ids(
+    filer_ids,
+    start: date,
+    end: date,
+) -> dict[str, tuple[set[str], set[str]]]:
+    """Compatibility view over the shared per-filer snapshot reader."""
+    snapshots = transaction_filer_snapshots(TRANSACTION_DIR, filer_ids, start, end)
+    return {
+        fid: (row["held_ids"], row["superseded_ids"])
+        for fid, row in snapshots.items()
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1059,6 +1118,463 @@ def _prioritise(targets: list[dict], entries: dict) -> list[dict]:
     return (big[:1] + small + big[1:]) if big else out
 
 
+def _strict_utc_timestamp(value) -> float | None:
+    """Parse a precise UTC instant without promoting legacy dates."""
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if (parsed.tzinfo is None
+                or parsed.utcoffset() != timezone.utc.utcoffset(parsed)):
+            return None
+        return parsed.timestamp()
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def _history_timestamp(row: dict) -> float:
+    """Sortable query-start instant for a structured observation."""
+    timestamp = _strict_utc_timestamp(row.get("collection_started_at"))
+    return timestamp if timestamp is not None else float("-inf")
+
+
+def _history_order_key(row: dict) -> tuple[int, float, float]:
+    """Query start is authoritative; completion only breaks safe ties.
+
+    Legacy date-only observations remain retained for UI/history, but never
+    outrank a structured query merely because their display date is newer.
+    """
+    started = _strict_utc_timestamp(row.get("collection_started_at"))
+    completed = _strict_utc_timestamp(row.get("checked_at"))
+    if started is not None:
+        return 1, started, completed if completed is not None else float("-inf")
+    legacy = _strict_utc_timestamp(row.get("checked_at"))
+    if legacy is None:
+        try:
+            legacy = datetime.fromisoformat(str(row.get("checked"))).replace(
+                tzinfo=timezone.utc,
+            ).timestamp()
+        except (TypeError, ValueError, OverflowError):
+            legacy = float("-inf")
+    return 0, legacy, legacy
+
+
+def _structured_usable_record_is_valid(row: dict, filer_id: str) -> bool:
+    """Validate persisted successful evidence independently of a capture."""
+    started = _strict_utc_timestamp(row.get("collection_started_at"))
+    completed = _strict_utc_timestamp(row.get("checked_at"))
+    try:
+        range_start = date.fromisoformat(str(row.get("range_start") or ""))
+        range_end = date.fromisoformat(str(row.get("range_end") or ""))
+    except (TypeError, ValueError):
+        return False
+    return (
+        exact_coverage_result_shape_is_valid(row)
+        and str(row.get("filer_id") or "") == filer_id
+        and row.get("evidence_version") == COVERAGE_EVIDENCE_VERSION
+        and exact_evidence_identifier_is_valid(
+            row.get("transaction_snapshot_id")
+        )
+        and started is not None
+        and completed is not None
+        and started <= completed
+        and range_start <= range_end
+    )
+
+
+def _active_identity_range_ends() -> dict[str, str]:
+    """Physical filer -> frozen range end for live merge-only repairs."""
+    try:
+        rows = json.loads(IDENTITY_PROGRESS_PATH.read_text()) \
+            if IDENTITY_PROGRESS_PATH.exists() else []
+    except (OSError, json.JSONDecodeError):
+        rows = []
+    roots: dict[str, str] = {}
+    for row in rows:
+        key = row.get("key") if isinstance(row, dict) else None
+        if (not isinstance(key, list) or len(key) != 7 or key[0] != "ALL"
+                or key[3:6] != ["None", "None", "None"]):
+            continue
+        fid = str(key[-1]).strip()
+        try:
+            end = date.fromisoformat(str(key[2])).isoformat()
+        except (TypeError, ValueError):
+            continue
+        if fid and end > roots.get(fid, ""):
+            roots[fid] = end
+    return roots
+
+
+def _usable_history_record(row: dict | None) -> dict | None:
+    """Copy one usable result without recursive or attempt-only metadata."""
+    if not isinstance(row, dict) or type(row.get("complete")) is not bool:
+        return None
+    record = {}
+    for key in USABLE_RESULT_FIELDS:
+        if key not in row:
+            continue
+        value = row[key]
+        record[key] = list(value) if isinstance(value, list) else value
+    return record
+
+
+def _usable_record_identity(record: dict) -> str:
+    """Deduplicate observations without letting a rename consume a slot."""
+    stable = {key: value for key, value in record.items() if key != "name"}
+    return json.dumps(stable, sort_keys=True, separators=(",", ":"))
+
+
+def _entry_observations(entry: dict | None, filer_id: str) -> list[dict]:
+    """Flatten current/history records and enforce their physical owner."""
+    if not isinstance(entry, dict):
+        return []
+    raw = [entry]
+    history = entry.get(USABLE_HISTORY_KEY) or []
+    if isinstance(history, list):
+        raw.extend(history)
+    out = []
+    for row in raw:
+        record = _usable_history_record(row)
+        if record is not None and str(record.get("filer_id") or "") == filer_id:
+            out.append(record)
+    return out
+
+
+def _active_paired_requirements() -> dict[str, dict]:
+    """Unique automatic scope owner -> paired capture provenance.
+
+    A physical filer claimed by more than one generated detail is ambiguous
+    and cannot drive automation, so it has no anchor to pin here. This keeps
+    the history hard-bounded while preserving the one active fingerprint for
+    every scope that the selector could actually authorize.
+    """
+    claims: dict[str, list[tuple[str, tuple[str, ...], str, float]]] = {}
+    active_ends = _active_identity_range_ends()
+    for path in FILERS_DIR.glob("*.json"):
+        try:
+            detail = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(detail, dict):
+            continue
+        comparison = detail.get("orestar_comparison") or {}
+        detail_id_values = detail.get("filer_ids")
+        captured_id_values = comparison.get("filer_ids")
+        ids = tuple(sorted({
+            text for fid in detail_id_values
+            if (text := str(fid or "").strip())
+        })) if isinstance(detail_id_values, list) else ()
+        captured_ids = tuple(sorted({
+            text for fid in captured_id_values
+            if (text := str(fid or "").strip())
+        })) if isinstance(captured_id_values, list) else ()
+        fingerprint = comparison.get("app_transaction_snapshot_id")
+        captured_at = comparison.get("captured_at")
+        try:
+            captured_at = float(captured_at)
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if (comparison.get("status") != "paired" or not ids
+                or captured_ids != ids
+                or not exact_evidence_identifier_is_valid(fingerprint)):
+            continue
+        claim = (path.name, ids, fingerprint, captured_at)
+        for fid in ids:
+            claims.setdefault(fid, []).append(claim)
+    requirements = {
+        fid: {
+            "transaction_snapshot_id": filer_claims[0][2],
+            "captured_at": filer_claims[0][3],
+            "scope_ids": list(filer_claims[0][1]),
+        }
+        for fid, filer_claims in claims.items()
+        if len(filer_claims) == 1
+    }
+    for fid, requirement in requirements.items():
+        members = requirement["scope_ids"]
+        if any(requirements.get(member, {}).get("scope_ids") != members
+               for member in members):
+            continue
+        ends = {active_ends[member] for member in members if member in active_ends}
+        # Every member receives the identical scope-level preference. One live
+        # member is enough to keep its frozen range; conflicting roots are
+        # explicitly marked so pruning cannot pretend there is one safe lane.
+        requirement["active_range_end"] = next(iter(ends)) if len(ends) == 1 else None
+        requirement["active_range_conflict"] = len(ends) > 1
+    return requirements
+
+
+def _precise_usable_history_record(
+    row: dict,
+    requirement: dict,
+    *,
+    filer_id: str | None = None,
+) -> bool:
+    """Whether a stored result can participate in an automation lineage."""
+    if not exact_coverage_result_shape_is_valid(row):
+        return False
+    if (filer_id is not None and str(row.get("filer_id") or "") != filer_id):
+        return False
+    fingerprint = row.get("transaction_snapshot_id")
+    if not exact_evidence_identifier_is_valid(fingerprint):
+        return False
+    try:
+        capture_day = datetime.fromtimestamp(
+            requirement["captured_at"], tz=timezone.utc,
+        ).date()
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return False
+    return evidence_is_current(
+        row,
+        requirement["captured_at"],
+        require_precise=True,
+        require_collection_started=True,
+        strictly_after=True,
+        range_start=date(2006, 1, 1),
+        minimum_range_end=capture_day,
+    )
+
+
+def _bounded_usable_history(
+    rows,
+    *,
+    active_requirement: dict | None = None,
+    filer_id: str | None = None,
+    anchor_bounds: tuple[str, str] | None = None,
+) -> list[dict]:
+    """Newest results plus the active anchor and its newest ORESTAR verdict."""
+    unique = {}
+    for row in rows:
+        record = _usable_history_record(row)
+        if record is None:
+            continue
+        identity = _usable_record_identity(record)
+        unique.setdefault(identity, record)
+    ordered = sorted(unique.values(), key=_history_order_key, reverse=True)
+    pinned = []
+    if active_requirement:
+        fingerprint = active_requirement.get("transaction_snapshot_id")
+        valid_anchors = [
+            row for row in ordered
+            if row.get("transaction_snapshot_id") == fingerprint
+            and _precise_usable_history_record(
+                row, active_requirement, filer_id=filer_id,
+            )
+            and (anchor_bounds is None or (
+                row.get("range_start"), row.get("range_end")
+            ) == anchor_bounds)
+        ]
+        if valid_anchors and anchor_bounds is None:
+            # No common multi-ID range exists yet. Pin the newest anchor bound
+            # for this member; ordinary recency slots retain other candidates
+            # until a common lane forms on a later member write.
+            selected_bounds = max(
+                {
+                    (row.get("range_start"), row.get("range_end"))
+                    for row in valid_anchors
+                },
+                key=lambda bounds: max(
+                    _history_order_key(row) for row in valid_anchors
+                    if (row.get("range_start"), row.get("range_end")) == bounds
+                ),
+            )
+            valid_anchors = [
+                row for row in valid_anchors
+                if (row.get("range_start"), row.get("range_end"))
+                == selected_bounds
+            ]
+        # Preserve the referenced record for UI/history even during rollout
+        # when no old record has the new collection-start field. It cannot
+        # authorize anything until a valid anchor exists.
+        if valid_anchors:
+            # A global fingerprint and exact range deterministically imply one
+            # per-filer digest. If corrupt history claims more than one, retain
+            # every conflicting lane so the selector continues to see and
+            # reject the ambiguity instead of aging it out.
+            anchor_lanes = {
+                (
+                    row.get("filer_transaction_digest"),
+                    row.get("range_start"),
+                    row.get("range_end"),
+                )
+                for row in valid_anchors
+            }
+            for lane in sorted(anchor_lanes):
+                lane_anchors = [
+                    row for row in valid_anchors
+                    if (
+                        row.get("filer_transaction_digest"),
+                        row.get("range_start"),
+                        row.get("range_end"),
+                    ) == lane
+                ]
+                anchor = max(lane_anchors, key=_history_order_key)
+                if all(anchor is not item for item in pinned):
+                    pinned.append(anchor)
+                lineage_candidates = [
+                    row for row in ordered
+                    if _precise_usable_history_record(
+                        row, active_requirement, filer_id=filer_id,
+                    )
+                    and (
+                        row.get("filer_transaction_digest"),
+                        row.get("range_start"),
+                        row.get("range_end"),
+                    ) == lane
+                ]
+                newest_started = max(
+                    _history_timestamp(row) for row in lineage_candidates
+                )
+                for lineage in lineage_candidates:
+                    if (_history_timestamp(lineage) == newest_started
+                            and all(lineage is not item for item in pinned)):
+                        pinned.append(lineage)
+        else:
+            legacy_anchor = next((
+                row for row in ordered
+                if row.get("transaction_snapshot_id") == fingerprint
+                and (anchor_bounds is None or (
+                    row.get("range_start"), row.get("range_end")
+                ) == anchor_bounds)
+            ), None)
+            if legacy_anchor is not None:
+                pinned.append(legacy_anchor)
+    if len(pinned) > USABLE_OBSERVATION_LIMIT:
+        raise ValueError("too many tied active-lineage observations to bound safely")
+    selected = pinned + [
+        row for row in ordered if all(row is not item for item in pinned)
+    ][:USABLE_OBSERVATION_LIMIT - len(pinned)]
+    return sorted(selected, key=_history_order_key, reverse=True)
+
+
+def _common_scope_anchor_bounds(
+    entries: dict,
+    result: dict,
+    active_requirements: dict[str, dict],
+) -> tuple[str, str] | None:
+    """Newest exact range anchored for every member of one canonical scope."""
+    fid = str(result["filer_id"])
+    requirement = active_requirements.get(fid)
+    if not requirement:
+        return None
+    members = [str(member) for member in requirement.get("scope_ids") or []]
+    if not members:
+        return None
+    by_member = {}
+    for member in members:
+        member_requirement = active_requirements.get(member)
+        if member_requirement != requirement:
+            return None
+        observations = _entry_observations(entries.get(member), member)
+        if member == fid:
+            incoming = _usable_history_record(result)
+            if incoming is not None:
+                observations.append(incoming)
+        anchors = [
+            row for row in observations
+            if row.get("transaction_snapshot_id")
+            == requirement["transaction_snapshot_id"]
+            and _precise_usable_history_record(
+                row, requirement, filer_id=member,
+            )
+        ]
+        by_member[member] = anchors
+    common = set.intersection(*(
+        {(row.get("range_start"), row.get("range_end")) for row in anchors}
+        for anchors in by_member.values()
+    ))
+    if not common:
+        return None
+    active_end = requirement.get("active_range_end")
+    active_bounds = (date(2006, 1, 1).isoformat(), active_end) \
+        if active_end else None
+    if active_bounds in common:
+        return active_bounds
+    return max(
+        common,
+        key=lambda bounds: (
+            min(max(
+                _history_order_key(row)
+                for row in by_member[member]
+                if (row.get("range_start"), row.get("range_end")) == bounds
+            ) for member in members),
+            bounds,
+        ),
+    )
+
+
+def _store_usable_result(
+    entries: dict,
+    result: dict,
+    *,
+    active_requirements: dict[str, dict] | None = None,
+) -> dict:
+    """Replace the current result without losing its paired-capture lineage."""
+    fid = str(result["filer_id"])
+    active_requirements = active_requirements or {}
+    active_requirement = active_requirements.get(fid)
+    prior = entries.get(fid) or {}
+    history = prior.get(USABLE_HISTORY_KEY) or []
+    if not isinstance(history, list):
+        history = []
+    prior_record = _usable_history_record(prior)
+    current_record = _usable_history_record(result)
+    if (current_record is None
+            or not _structured_usable_record_is_valid(current_record, fid)):
+        raise ValueError(f"usable result for filer {fid} has invalid provenance")
+    candidates = [
+        *history,
+        *([prior_record] if prior_record else []),
+        *([current_record] if current_record else []),
+    ]
+    candidates = [
+        row for row in candidates if str(row.get("filer_id") or "") == fid
+    ]
+    if not candidates:
+        raise ValueError(f"usable result for filer {fid} has no owned record")
+    projected_current = max(candidates, key=_history_order_key)
+    anchor_bounds = _common_scope_anchor_bounds(
+        entries, result, active_requirements,
+    )
+    # While a multi-ID scope is being repaired one member may acquire the
+    # active-range anchor before the rest. Keep that seed rather than evicting
+    # it before the later member is re-diffed and the common lane can form.
+    preferred_end = (active_requirement or {}).get("active_range_end")
+    preferred_bounds = (date(2006, 1, 1).isoformat(), preferred_end) \
+        if preferred_end else None
+    if preferred_bounds is not None and any(
+        row.get("transaction_snapshot_id")
+        == active_requirement.get("transaction_snapshot_id")
+        and (row.get("range_start"), row.get("range_end")) == preferred_bounds
+        and _precise_usable_history_record(
+            row, active_requirement, filer_id=fid,
+        )
+        for row in candidates
+    ):
+        anchor_bounds = preferred_bounds
+    kept = _bounded_usable_history(
+        candidates,
+        active_requirement=active_requirement,
+        filer_id=fid,
+        anchor_bounds=anchor_bounds,
+    )
+    current_identity = _usable_record_identity(projected_current)
+    kept = [
+        row for row in kept
+        if _usable_record_identity(row) != current_identity
+    ]
+    if len(kept) >= USABLE_OBSERVATION_LIMIT:
+        # All bounded slots were needed for fail-closed pins and did not
+        # include the projected current observation. Never exceed the bound or
+        # discard an ambiguity merely to make room for a newer unrelated lane.
+        raise ValueError(
+            "active evidence pins leave no bounded slot for current result"
+        )
+    stored = dict(projected_current)
+    if kept:
+        stored[USABLE_HISTORY_KEY] = kept
+    entries[fid] = stored
+    return stored
+
+
 def _load() -> dict:
     if not DIFF_PATH.exists():
         return {}
@@ -1080,21 +1596,56 @@ def _target_name(entries: dict, target: dict) -> str:
     return target.get("name") or (entries.get(fid) or {}).get("name", "")
 
 
-def _record_failure(entries: dict, target: dict, reason: str) -> dict:
+def _record_failure(
+    entries: dict,
+    target: dict,
+    reason: str,
+    *,
+    transaction_id: str | None = None,
+    filer_digest: str | None = None,
+    start: date | None = None,
+    end: date | None = None,
+    collection_started_at: str | None = None,
+    attempted_at: str | None = None,
+) -> dict:
     """Record an unusable attempt without destroying earlier usable evidence."""
     fid = str(target["filer_id"])
     prior = entries.get(fid) or {}
     entry = dict(prior)
+    instant = attempted_at or utc_timestamp()
+    attempt_fields = {
+        "last_attempt": instant[:10],
+        "last_attempt_collection_started_at": collection_started_at,
+        "last_attempt_at": instant,
+        "last_attempt_transaction_snapshot_id": transaction_id,
+        "last_attempt_filer_transaction_digest": filer_digest,
+        "last_attempt_range_start": start.isoformat() if start else None,
+        "last_attempt_range_end": end.isoformat() if end else None,
+    }
     if prior.get("complete") is None:
-        # Legacy failures wrote checked even though nothing was checked. Keep
-        # attempt timing separate so downstream freshness cannot mistake this
-        # refusal for a measurement.
-        entry.pop("checked", None)
+        # A refusal is explicitly unknown, so its timestamp cannot certify
+        # completeness even though it records when the attempt occurred. New
+        # unknown rows carry the same exact provenance as usable measurements;
+        # ``complete: null`` remains the fail-closed discriminator.
         entry.update({"filer_id": fid, "complete": None})
+        if (transaction_id and filer_digest and start and end
+                and collection_started_at):
+            entry.update(_evidence_fields(
+                transaction_id,
+                filer_digest,
+                start,
+                end,
+                collection_started_at=collection_started_at,
+                checked_at=instant,
+            ))
+        else:
+            # Compatibility for direct callers/tests that do not supply a
+            # snapshot. Production refuses to start without one.
+            entry["checked_at"] = instant
     else:
         entry.setdefault("filer_id", fid)
     entry["name"] = _target_name(entries, target)
-    entry["last_attempt"] = date.today().isoformat()
+    entry.update(attempt_fields)
     entry["last_failure"] = reason
     entry["failure_count"] = int(entry.get("failure_count") or 0) + 1
     entries[fid] = entry
@@ -1161,6 +1712,12 @@ def _remediation_verification_failures(
     entries: dict,
     requested_ids,
     successful_ids: set[str],
+    *,
+    verification_started_at: float | None = None,
+    transaction_id: str | None = None,
+    filer_digests: dict[str, str] | None = None,
+    start: date | None = None,
+    end: date | None = None,
 ) -> list[str]:
     """Explain why a targeted missing-ID remediation cannot be certified."""
     failures = []
@@ -1169,6 +1726,21 @@ def _remediation_verification_failures(
         missing = row.get("missing") or []
         if fid not in successful_ids:
             failures.append(f"{fid}: no fresh usable diff")
+        elif verification_started_at is not None and (
+            not (filer_digests or {}).get(fid)
+            or not evidence_is_current(
+                row,
+                verification_started_at,
+                require_precise=True,
+                require_collection_started=True,
+                strictly_after=True,
+                transaction_snapshot_id=transaction_id,
+                filer_transaction_digest=(filer_digests or {}).get(fid),
+                range_start=start,
+                range_end=end,
+            )
+        ):
+            failures.append(f"{fid}: fresh diff provenance does not match verification")
         elif missing:
             failures.append(f"{fid}: {len(missing)} missing IDs remain")
     return failures
@@ -1214,6 +1786,13 @@ def main() -> int:
                     help="diff every currently-flagged committee")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--start-year", type=int, default=2006)
+    ap.add_argument(
+        "--end-date",
+        type=date.fromisoformat,
+        default=None,
+        help=("inclusive UTC query end (required and frozen for an exact "
+              "remediation verification)"),
+    )
     ap.add_argument("--max-minutes", type=int, default=70,
                     help="stop on our own terms, before the job timeout does it for us")
     ap.add_argument("--recheck", action="store_true",
@@ -1242,6 +1821,8 @@ def main() -> int:
         ap.error("--limit must be zero or positive")
     if args.require_no_missing and args.limit:
         ap.error("--require-no-missing cannot be combined with --limit")
+    if args.require_no_missing and args.end_date is None:
+        ap.error("--require-no-missing requires a frozen --end-date")
 
     if args.filer_ids:
         targets = [{"filer_id": f, "name": ""} for f in args.filer_ids]
@@ -1252,6 +1833,7 @@ def main() -> int:
         return 2
 
     entries = _load()
+    active_requirements = _active_paired_requirements()
     if not args.recheck:
         # A refusal is not a measurement. Retry first-attempt failures rather
         # than treating the mere presence of a JSON object as completed work.
@@ -1269,7 +1851,30 @@ def main() -> int:
         log.info("Nothing to diff.")
         return 0
 
-    start, end = date(args.start_year, 1, 1), date.today()
+    start = date(args.start_year, 1, 1)
+    end = args.end_date or datetime.now(timezone.utc).date()
+    if end < start:
+        ap.error("--end-date must not precede --start-year")
+    verification_started_at = time.time()
+    transaction_id = _current_transaction_snapshot_id()
+    if transaction_id is None:
+        log.error("Refusing to write coverage evidence without an exact local snapshot.")
+        return 1
+    try:
+        local_snapshots = transaction_filer_snapshots(
+            TRANSACTION_DIR,
+            [str(target["filer_id"]) for target in targets], start, end
+        )
+    except (OSError, EOFError, csv.Error, UnicodeError, ValueError) as exc:
+        log.error("Cannot read exact local transaction identities: %s", exc)
+        return 1
+    if transaction_snapshot_id(TRANSACTION_DIR) != transaction_id:
+        log.error("Local transaction shards changed while identities were loaded.")
+        return 1
+    local_digests = {
+        fid: row["filer_transaction_digest"]
+        for fid, row in local_snapshots.items()
+    }
     deadline = time.monotonic() + args.max_minutes * 60 if args.max_minutes else None
     done = 0
     attempted = 0
@@ -1290,6 +1895,7 @@ def main() -> int:
                 fid = str(t["filer_id"])
                 log.info("=== Diffing filer %s %s ===", fid, t.get("name", ""))
                 attempted += 1
+                collection_started_at = utc_timestamp()
                 failure_reason = "unusable_window"
                 deterministic_refusal = False
                 try:
@@ -1321,7 +1927,16 @@ def main() -> int:
                     # checked date remains the date of the evidence, while this
                     # attempt is recorded separately. First attempts remain an
                     # explicit unknown and override unsafe count-only evidence.
-                    _record_failure(entries, t, failure_reason)
+                    _record_failure(
+                        entries,
+                        t,
+                        failure_reason,
+                        transaction_id=transaction_id,
+                        filer_digest=local_digests.get(fid),
+                        start=start,
+                        end=end,
+                        collection_started_at=collection_started_at,
+                    )
                     _save(entries)
                     unusable += 1
                     # Session/refusal failures may clear after an F5 cooldown.
@@ -1356,14 +1971,16 @@ def main() -> int:
                     browser, _ctx, page = F.setup_browser_retrying(p)
                     continue
                 consecutive_failures = 0
-                ours, superseded_by_us = _held_ids(fid, start, end)
+                local = local_snapshots.get(fid) or {}
+                ours = local.get("held_ids") or set()
+                superseded_by_us = local.get("superseded_ids") or set()
                 surplus = sorted(ours - set(theirs))
                 absent = set(theirs) - ours
                 # Split what ORESTAR has and we do not into the two cases that
                 # look identical to a count and mean opposite things.
                 superseded = sorted(absent & superseded_by_us)
                 missing = sorted(absent - superseded_by_us)
-                entries[fid] = {
+                result = {
                     "filer_id": fid,
                     "name": _target_name(entries, t),
                     "orestar": len(theirs),
@@ -1380,8 +1997,19 @@ def main() -> int:
                     # Recorded so the count is explainable rather than merely
                     # excused: held + superseded should equal ORESTAR's total.
                     "superseded": superseded,
-                    "checked": date.today().isoformat(),
+                    **_evidence_fields(
+                        transaction_id,
+                        local_digests[fid],
+                        start,
+                        end,
+                        collection_started_at=collection_started_at,
+                    ),
                 }
+                _store_usable_result(
+                    entries,
+                    result,
+                    active_requirements=active_requirements,
+                )
                 log.info("Filer %s: ORESTAR %d, held %d, surplus %d, missing %d, "
                          "superseded %d", fid, len(theirs), len(ours),
                          len(surplus), len(missing), len(superseded))
@@ -1395,8 +2023,22 @@ def main() -> int:
     log.info("Attempted %d committees; usable %d; unusable %d; blocked %s",
              attempted, done, unusable, "yes" if blocked else "no")
     # Stable machine-readable line for the workflow's chain guard.
+    certified_ids = {
+        fid for fid in successful_ids
+        if evidence_is_current(
+            entries.get(fid),
+            verification_started_at,
+            require_precise=True,
+            require_collection_started=True,
+            strictly_after=True,
+            transaction_snapshot_id=transaction_id,
+            filer_transaction_digest=local_digests.get(fid),
+            range_start=start,
+            range_end=end,
+        )
+    }
     retry_ids = _retryable_gate_targets(
-        args.filer_ids, entries, successful_ids, unusable_reasons,
+        args.filer_ids, entries, certified_ids, unusable_reasons,
     )
     print(f"RUN_RESULT attempted={attempted} usable={done} "
           f"unusable={unusable} blocked={1 if blocked else 0} "
@@ -1404,7 +2046,14 @@ def main() -> int:
           f"retry_ids={','.join(retry_ids)}")
     if args.require_no_missing:
         failures = _remediation_verification_failures(
-            entries, args.filer_ids, successful_ids,
+            entries,
+            args.filer_ids,
+            successful_ids,
+            verification_started_at=verification_started_at,
+            transaction_id=transaction_id,
+            filer_digests=local_digests,
+            start=start,
+            end=end,
         )
         if failures:
             # A fresh usable diff settles the fate of that fetch tree even
@@ -1412,8 +2061,8 @@ def main() -> int:
             # filers still missing IDs must be fetched from scratch next time.
             # Preserve progress only for targets whose verification itself was
             # unusable, so a later run can retry the check without re-fetching.
-            if successful_ids:
-                F.clear_identity_progress(sorted(successful_ids))
+            if certified_ids:
+                F.clear_identity_progress(sorted(certified_ids))
             for failure in failures:
                 log.error("Identity remediation verification failed — %s", failure)
             print(f"REMEDIATION_VERIFY passed=0 failed={len(failures)}")
