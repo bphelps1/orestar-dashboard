@@ -1239,15 +1239,22 @@
  {
   "filer_id": "23238",
   "name": "Evergreen PAC",
-  "orestar": 1008,
+  "orestar": 1014,
   "held": 1009,
   "complete": false,
   "surplus": [
    "5610563"
   ],
-  "missing": [],
+  "missing": [
+   "5794036",
+   "5794037",
+   "5794038",
+   "5794069",
+   "5794073",
+   "5794074"
+  ],
   "superseded": [],
-  "checked": "2026-09-04"
+  "checked": "2026-09-05"
  },
  {
   "filer_id": "23277",
@@ -8709,5 +8716,60 @@
   "missing": [],
   "superseded": [],
   "checked": "2026-09-04"
+ },
+ {
+  "filer_id": "19794",
+  "name": "",
+  "orestar": 132,
+  "held": 132,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-09-05"
+ },
+ {
+  "filer_id": "18555",
+  "name": "",
+  "orestar": 1705,
+  "held": 1695,
+  "complete": false,
+  "surplus": [],
+  "missing": [
+   "5794156",
+   "5794159",
+   "5794162",
+   "5794165",
+   "5794172",
+   "5794176",
+   "5794177",
+   "5794280",
+   "5794281",
+   "5794283"
+  ],
+  "superseded": [],
+  "checked": "2026-09-05"
+ },
+ {
+  "filer_id": "18404",
+  "name": "",
+  "orestar": 2000,
+  "held": 2000,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-09-05"
+ },
+ {
+  "filer_id": "5744",
+  "name": "",
+  "orestar": 589,
+  "held": 589,
+  "complete": true,
+  "surplus": [],
+  "missing": [],
+  "superseded": [],
+  "checked": "2026-09-05"
  }
 ]
