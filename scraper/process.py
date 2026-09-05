@@ -97,8 +97,13 @@ def _withdrawn_for_filers(filer_ids, evidence: dict | None = None) -> set[str]:
     return out
 
 
-def _aggregate_row_verdict(filer_ids, summary_ts,
-                           evidence: dict | None = None) -> bool | None:
+def _aggregate_row_verdict(
+    filer_ids,
+    summary_ts,
+    evidence: dict | None = None,
+    *,
+    transaction_id: str | None = None,
+) -> bool | None:
     """Completeness for an aggregate, requiring current evidence for every filer."""
     source = _ROW_COMPLETE if evidence is None else evidence
     rows = [source.get(str(fid)) for fid in (filer_ids or [])]
@@ -113,7 +118,30 @@ def _aggregate_row_verdict(filer_ids, summary_ts,
     current = []
     for item in evidence_rows:
         if isinstance(item, dict):
-            current.append(evidence_is_current(item, summary_ts))
+            if "complete" in item and transaction_id:
+                # Exact identity evidence can support a paired-summary claim
+                # only when it describes these exact local bytes and covers
+                # the summary's inclusive date horizon. Historical date-only
+                # rows remain visible but cannot certify this attribution.
+                try:
+                    summary_day = datetime.fromtimestamp(
+                        float(summary_ts), tz=timezone.utc
+                    ).date()
+                except (TypeError, ValueError, OverflowError):
+                    current.append(False)
+                    continue
+                current.append(evidence_is_current(
+                    item,
+                    summary_ts,
+                    require_precise=True,
+                    require_collection_started=True,
+                    strictly_after=True,
+                    transaction_snapshot_id=transaction_id,
+                    range_start=date(2006, 1, 1),
+                    minimum_range_end=summary_day,
+                ))
+            else:
+                current.append(evidence_is_current(item, summary_ts))
         elif item is not None:
             # Compatibility for tests/callers passing a bare legacy date. A
             # date-only value means midnight UTC and is conservatively stale
@@ -2794,7 +2822,10 @@ def aggregate_filers(
                 # aggregate containing several committees.
                 _year_summary_ts = float(yr_orestar.get("scrape_ts") or _sum_ts)
                 _rows_complete_here = _aggregate_row_verdict(
-                    _name_to_fids.get(name, []), _year_summary_ts)
+                    _name_to_fids.get(name, []),
+                    _year_summary_ts,
+                    transaction_id=_transaction_snapshot_id,
+                )
                 # A line-item claim also needs a matched app/summary snapshot.
                 # Filing dates cannot prove that match (same-day and backdated
                 # collection are both common), so withdraw the attribution if

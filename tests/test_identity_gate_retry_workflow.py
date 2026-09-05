@@ -116,6 +116,7 @@ def test_diff_step_publishes_evidence_before_returning_failure(
             "inputs.limit": "0",
             "inputs.recheck": "true",
             "inputs.start_year": "2006",
+            "inputs.end_date": "2026-09-05",
             "inputs.require_no_missing": "true",
         },
     ).replace("/tmp/diff.log", str(log_path))
@@ -137,6 +138,7 @@ def test_diff_step_publishes_evidence_before_returning_failure(
 
     assert result.returncode == collector_status
     values = _output_values(output_path)
+    assert values["end_date"] == "2026-09-05"
     assert {key: values[key] for key in expected} == expected
 
 
@@ -170,7 +172,7 @@ def test_retry_script_holds_lane_and_preserves_exact_gate_inputs(tmp_path) -> No
     result = subprocess.run(
         [
             "bash", str(RETRY_SCRIPT), "0", "main", "21770 22", "2006",
-            "true", "123456",
+            "2026-09-05", "true", "123456",
         ],
         cwd=ROOT,
         env=env,
@@ -190,6 +192,8 @@ def test_retry_script_holds_lane_and_preserves_exact_gate_inputs(tmp_path) -> No
         "filer_ids=21770 22",
         "-f",
         "start_year=2006",
+        "-f",
+        "end_date=2026-09-05",
         "-f",
         "recheck=true",
         "-f",
@@ -214,7 +218,7 @@ def test_retry_script_stops_at_the_bound_without_sleep_or_dispatch(tmp_path) -> 
     result = subprocess.run(
         [
             "bash", str(RETRY_SCRIPT), "2", "main", "21770", "2006",
-            "true", "123456",
+            "2026-09-05", "true", "123456",
         ],
         cwd=ROOT,
         env=env,
@@ -260,6 +264,7 @@ def test_failed_diff_retries_only_a_saved_retryable_exact_gate(
             "inputs.verification_retry || '0'": "0",
             "github.ref_name": "main",
             "inputs.start_year": "2006",
+            "steps.diff.outputs.end_date": "2026-09-05",
             "inputs.resume_auto_backfill": "true",
             "github.run_id": "123456",
             "steps.cleanup.outcome": "skipped",
@@ -283,7 +288,8 @@ def test_failed_diff_retries_only_a_saved_retryable_exact_gate(
     assert len(calls) == expected_calls
     if calls:
         assert calls[0].split("\t") == [
-            "retry", "0", "main", "21770", "2006", "true", "123456"
+            "retry", "0", "main", "21770", "2006", "2026-09-05",
+            "true", "123456"
         ]
 
 

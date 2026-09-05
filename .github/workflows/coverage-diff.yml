@@ -49,6 +49,11 @@ on:
         required: false
         default: "2006"
         type: string
+      end_date:
+        description: "Inclusive UTC end date; frozen across remediation verification retries"
+        required: false
+        default: ""
+        type: string
       limit:
         description: "Stop after this many committees (0 = until the time budget)"
         required: false
@@ -228,6 +233,12 @@ jobs:
           if [ -n "${{ inputs.start_year }}" ]; then
             ARGS="$ARGS --start-year ${{ inputs.start_year }}"
           fi
+          END_DATE="${{ inputs.end_date }}"
+          if [ -z "$END_DATE" ]; then
+            END_DATE=$(date -u +%F)
+          fi
+          ARGS="$ARGS --end-date $END_DATE"
+          echo "end_date=$END_DATE" >> "$GITHUB_OUTPUT"
           if [ "${{ inputs.require_no_missing }}" = "true" ]; then
             ARGS="$ARGS --require-no-missing"
           fi
@@ -371,6 +382,7 @@ jobs:
                 "${{ github.ref_name }}" \
                 "${{ steps.diff.outputs.retry_ids }}" \
                 "${{ inputs.start_year }}" \
+                "${{ steps.diff.outputs.end_date }}" \
                 "${{ inputs.resume_auto_backfill }}" \
                 "${{ github.run_id }}"
               exit 0
@@ -445,4 +457,5 @@ jobs:
             -f limit="${{ inputs.limit }}" \
             -f filer_ids="${{ inputs.filer_ids }}" \
             -f start_year="${{ inputs.start_year }}" \
+            -f end_date="${{ steps.diff.outputs.end_date }}" \
             -f recheck="$RECHECK"

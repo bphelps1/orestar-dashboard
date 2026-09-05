@@ -268,6 +268,7 @@ jobs:
           CHAIN="${{ inputs.chain_index || '1' }}"
           STARTUP_RETRY="${{ steps.startup_handoff.outputs.retry_index || '0' }}"
           STARTUP_PARENT="${{ steps.startup_handoff.outputs.parent_run }}"
+          AUTO_STATUS=manual
           case "$CHAIN" in
             ''|*[!0-9]*) echo "Invalid backfill chain index: $CHAIN"; exit 1 ;;
           esac
@@ -293,16 +294,21 @@ jobs:
           if [ "$FILER_IDS" = "auto" ]; then
             echo "Auto mode: finding filers with discrepancies..."
             python3 scraper/auto_backfill_ids.py
-            AUTO_MODE=$(cat /tmp/auto_backfill_mode.txt 2>/dev/null || echo count)
-            if [ "$AUTO_MODE" = "identity" ]; then
-              IDENTITY_MODE=true
-              IDENTITY_RESUME=$(cat /tmp/auto_backfill_resume.txt 2>/dev/null || echo false)
-              AUTO_END_DATE=$(cat /tmp/auto_backfill_end_date.txt 2>/dev/null || true)
-              if [ -n "$AUTO_END_DATE" ]; then
-                IDENTITY_END_DATE="$AUTO_END_DATE"
-              fi
-            else
-              IDENTITY_MODE=false
+            AUTO_MODE=$(cat /tmp/auto_backfill_mode.txt 2>/dev/null || echo identity)
+            AUTO_STATUS=$(cat /tmp/auto_backfill_status.txt 2>/dev/null || echo blocked)
+            if [ "$AUTO_MODE" != "identity" ]; then
+              echo "Automatic remediation requires exact-identity mode; refusing $AUTO_MODE."
+              exit 1
+            fi
+            case "$AUTO_STATUS" in
+              selected|idle|blocked) ;;
+              *) echo "Invalid automatic-remediation status: $AUTO_STATUS"; exit 1 ;;
+            esac
+            IDENTITY_MODE=true
+            IDENTITY_RESUME=$(cat /tmp/auto_backfill_resume.txt 2>/dev/null || echo false)
+            AUTO_END_DATE=$(cat /tmp/auto_backfill_end_date.txt 2>/dev/null || true)
+            if [ -n "$AUTO_END_DATE" ]; then
+              IDENTITY_END_DATE="$AUTO_END_DATE"
             fi
             IS_AUTO=true
             if [ -f /tmp/auto_backfill_ids.txt ]; then
@@ -311,9 +317,18 @@ jobs:
               FILER_IDS=""
             fi
             if [ -z "$FILER_IDS" ]; then
-              echo "All discrepancies backfilled."
+              if [ "$AUTO_STATUS" = "selected" ]; then
+                echo "Selector reported selected without filer IDs."
+                exit 1
+              fi
+              if [ "$AUTO_STATUS" = "blocked" ]; then
+                echo "Automatic remediation is provenance-blocked; no completion is being reported."
+              else
+                echo "No exact-identity repair is currently authorized."
+              fi
               echo "resolved=" >> "$GITHUB_OUTPUT"
               echo "is_auto=true" >> "$GITHUB_OUTPUT"
+              echo "auto_status=$AUTO_STATUS" >> "$GITHUB_OUTPUT"
               echo "identity_mode=$IDENTITY_MODE" >> "$GITHUB_OUTPUT"
               echo "identity_resume=$IDENTITY_RESUME" >> "$GITHUB_OUTPUT"
               echo "identity_end_date=$IDENTITY_END_DATE" >> "$GITHUB_OUTPUT"
@@ -322,6 +337,10 @@ jobs:
               echo "startup_retry=$STARTUP_RETRY" >> "$GITHUB_OUTPUT"
               echo "startup_parent=$STARTUP_PARENT" >> "$GITHUB_OUTPUT"
               exit 0
+            fi
+            if [ "$AUTO_STATUS" != "selected" ]; then
+              echo "Selector produced filer IDs without exact authorization."
+              exit 1
             fi
             echo "Auto-resolved filer IDs: $FILER_IDS"
             echo "resolved=$FILER_IDS" >> "$GITHUB_OUTPUT"
@@ -333,6 +352,10 @@ jobs:
                [ "$CHAIN" -gt 1 ] 2>/dev/null; then
               IDENTITY_RESUME=true
             fi
+          fi
+          if [ "$IS_AUTO" = "true" ] && [ "$IDENTITY_MODE" != "true" ]; then
+            echo "Automatic remediation is exact-identity only."
+            exit 1
           fi
           if [ -z "$VERIFICATION_IDS" ] && [ "$IDENTITY_MODE" = "true" ]; then
             VERIFICATION_IDS="$FILER_IDS"
@@ -352,6 +375,7 @@ jobs:
           echo "chain=$CHAIN" >> "$GITHUB_OUTPUT"
           echo "startup_retry=$STARTUP_RETRY" >> "$GITHUB_OUTPUT"
           echo "startup_parent=$STARTUP_PARENT" >> "$GITHUB_OUTPUT"
+          echo "auto_status=$AUTO_STATUS" >> "$GITHUB_OUTPUT"
 
       - name: Hold identity-backfill startup retry cooldown
         if: steps.resolve.outputs.startup_parent != ''
@@ -603,9 +627,14 @@ jobs:
           IS_AUTO="${{ steps.resolve.outputs.is_auto }}"
           FILER_IDS="${{ steps.resolve.outputs.resolved }}"
           IDENTITY_MODE="${{ steps.resolve.outputs.identity_mode }}"
+          AUTO_STATUS="${{ steps.resolve.outputs.auto_status }}"
 
           if [ "$IS_AUTO" = "true" ] && [ -z "$FILER_IDS" ]; then
-            echo "Auto backfill complete — all discrepancies addressed."
+            if [ "$AUTO_STATUS" = "blocked" ]; then
+              echo "Automatic remediation remains provenance-blocked; no completion is being reported."
+            else
+              echo "No exact-identity repair is currently authorized; stopping without a completion claim."
+            fi
             exit 0
           fi
 
@@ -630,6 +659,7 @@ jobs:
                 bash scripts/dispatch_retry.sh coverage-diff.yml --ref "${{ github.ref_name }}" \
                   -f filer_ids="${{ steps.resolve.outputs.verification_ids }}" \
                   -f start_year="${{ inputs.start_year }}" \
+                  -f end_date="${{ steps.fetch.outputs.end_date }}" \
                   -f recheck=true \
                   -f require_no_missing=true \
                   -f resume_auto_backfill="$IS_AUTO"
@@ -657,16 +687,6 @@ jobs:
                 -f end_date="${{ steps.fetch.outputs.end_date }}" \
                 -f verification_filer_ids="${{ steps.resolve.outputs.verification_ids }}" \
                 -f chain_index="$NEXT"
-              exit 0
-            fi
-
-            # Count-based auto mode keeps its historical batch chain. Exact
-            # auto mode never reaches this branch; it alternates fresh fetches
-            # with targeted identity diffs instead.
-            if [ "$IS_AUTO" = "true" ]; then
-              echo "Re-triggering count-based auto backfill for next batch..."
-              bash scripts/dispatch_retry.sh backfill.yml --ref "${{ github.ref_name }}" \
-                -f filer_ids=auto
               exit 0
             fi
 

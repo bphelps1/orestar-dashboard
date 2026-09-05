@@ -6,6 +6,8 @@ ORESTAR requests and do not require a database.
 
 from __future__ import annotations
 
+import csv
+import gzip
 import io
 import json
 import sys
@@ -36,6 +38,536 @@ def test_split_can_divide_a_two_day_window() -> None:
     end = start + timedelta(days=1)
 
     assert DC._split(start, end) == [(start, start), (end, end)]
+
+
+def test_current_snapshot_fingerprints_local_shards_even_if_source_trails(
+    tmp_path, monkeypatch,
+) -> None:
+    transactions = tmp_path / "transactions"
+    transactions.mkdir()
+    (transactions / "txn_2026.csv.gz").write_bytes(b"exact shard bytes")
+    source = tmp_path / "balance_snapshot_source.json"
+    monkeypatch.setattr(DC, "TRANSACTION_DIR", transactions)
+    monkeypatch.setattr(DC, "SNAPSHOT_SOURCE_PATH", source)
+
+    expected = DC.transaction_snapshot_id(transactions)
+    assert DC._current_transaction_snapshot_id() == expected
+    source.write_text(json.dumps({"transaction_snapshot_id": "sha256:stale"}))
+    assert DC._current_transaction_snapshot_id() == expected
+    source.write_text(json.dumps({"transaction_snapshot_id": expected}))
+    assert DC._current_transaction_snapshot_id() == expected
+
+
+def test_usable_evidence_fields_are_precise_and_range_bound() -> None:
+    fields = DC._evidence_fields(
+        "sha256:exact",
+        "sha256:filer-exact",
+        date(2006, 1, 1),
+        date(2026, 9, 5),
+        collection_started_at="2026-09-05T12:34:55.123456Z",
+        checked_at="2026-09-05T12:34:56.123456Z",
+    )
+
+    assert fields == {
+        "evidence_version": 2,
+        "checked": "2026-09-05",
+        "collection_started_at": "2026-09-05T12:34:55.123456Z",
+        "checked_at": "2026-09-05T12:34:56.123456Z",
+        "transaction_snapshot_id": "sha256:exact",
+        "filer_transaction_digest": "sha256:filer-exact",
+        "range_start": "2006-01-01",
+        "range_end": "2026-09-05",
+    }
+
+
+def _usable_result(
+    filer_id: str,
+    started: str,
+    fingerprint: str,
+    *,
+    digest: str = "sha256:filer-state",
+    range_end: str = "2026-09-02",
+    missing=None,
+    surplus=None,
+    name: str = "Committee",
+) -> dict:
+    missing = list(missing or [])
+    surplus = list(surplus or [])
+    completed = started.replace("00Z", "01Z")
+    return {
+        "filer_id": filer_id,
+        "name": name,
+        "orestar": 1 + len(missing),
+        "held": 1 + len(surplus),
+        "complete": not missing and not surplus,
+        "missing": missing,
+        "surplus": surplus,
+        "superseded": [],
+        "evidence_version": 2,
+        "collection_started_at": started,
+        "checked": completed[:10],
+        "checked_at": completed,
+        "transaction_snapshot_id": fingerprint,
+        "filer_transaction_digest": digest,
+        "range_start": "2006-01-01",
+        "range_end": range_end,
+    }
+
+
+def _active_requirement(
+    *filer_ids: str,
+    active_range_end: str | None = None,
+) -> dict[str, dict]:
+    requirement = {
+        "transaction_snapshot_id": "sha256:G1",
+        "captured_at": datetime.fromisoformat(
+            "2026-09-01T00:00:00+00:00"
+        ).timestamp(),
+        "scope_ids": list(filer_ids),
+        "active_range_end": active_range_end,
+        "active_range_conflict": False,
+    }
+    return {filer_id: requirement for filer_id in filer_ids}
+
+
+@pytest.mark.parametrize(
+    ("detail_ids", "captured_ids"),
+    [
+        (["1"], ["1", "2"]),
+        (["1", "2"], ["1"]),
+        (["1"], None),
+        (["1"], "1"),
+    ],
+)
+def test_history_pinning_rejects_drifted_or_legacy_capture_scope(
+    tmp_path, monkeypatch, detail_ids, captured_ids,
+) -> None:
+    filers = tmp_path / "filers"
+    filers.mkdir()
+    (filers / "scope.json").write_text(json.dumps({
+        "filer_ids": detail_ids,
+        "orestar_comparison": {
+            "status": "paired",
+            "captured_at": datetime.fromisoformat(
+                "2026-09-01T00:00:00+00:00"
+            ).timestamp(),
+            "filer_ids": captured_ids,
+            "app_transaction_snapshot_id": "sha256:G1",
+        },
+    }))
+    monkeypatch.setattr(DC, "FILERS_DIR", filers)
+    monkeypatch.setattr(DC, "IDENTITY_PROGRESS_PATH", tmp_path / "none.json")
+
+    assert DC._active_paired_requirements() == {}
+
+
+def test_successful_rediff_archives_the_paired_anchor() -> None:
+    anchor = _usable_result(
+        "1", "2026-09-02T00:00:00Z", "sha256:G1", missing=["old"],
+    )
+    newer = _usable_result(
+        "1", "2026-09-03T00:00:00Z", "sha256:G2", missing=["new"],
+    )
+    entries = {"1": anchor}
+
+    stored = DC._store_usable_result(
+        entries, newer, active_requirements=_active_requirement("1"),
+    )
+
+    assert stored["transaction_snapshot_id"] == "sha256:G2"
+    assert stored["missing"] == ["new"]
+    assert stored[DC.USABLE_HISTORY_KEY] == [anchor]
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["transaction_snapshot_id", "filer_transaction_digest"],
+)
+def test_usable_history_rejects_blank_provenance_identifiers(field) -> None:
+    result = _usable_result(
+        "1", "2026-09-02T00:00:00Z", "sha256:G1", missing=["one"],
+    )
+    result[field] = "   "
+
+    with pytest.raises(ValueError, match="invalid provenance"):
+        DC._store_usable_result(
+            {}, result, active_requirements=_active_requirement("1"),
+        )
+
+
+def test_out_of_order_rediff_cannot_replace_a_newer_orestar_result() -> None:
+    newest = _usable_result(
+        "1", "2026-09-04T00:00:00Z", "sha256:G2", missing=["newest"],
+    )
+    older = _usable_result(
+        "1", "2026-09-03T00:00:00Z", "sha256:G1", missing=["older"],
+    )
+    entries = {"1": newest}
+
+    stored = DC._store_usable_result(
+        entries, older, active_requirements=_active_requirement("1"),
+    )
+
+    assert stored["collection_started_at"] == newest["collection_started_at"]
+    assert stored["missing"] == ["newest"]
+    assert older in stored[DC.USABLE_HISTORY_KEY]
+
+
+def test_history_is_bounded_while_anchor_and_lineage_head_survive() -> None:
+    anchor = _usable_result(
+        "1", "2026-09-02T00:00:00Z", "sha256:G1", missing=["anchor"],
+    )
+    lineage_head = _usable_result(
+        "1", "2026-09-03T00:00:00Z", "sha256:G2", missing=["head"],
+    )
+    entries = {"1": anchor}
+    requirements = _active_requirement("1")
+    DC._store_usable_result(
+        entries, lineage_head, active_requirements=requirements,
+    )
+    for day in range(4, 16):
+        DC._store_usable_result(
+            entries,
+            _usable_result(
+                "1", f"2026-09-{day:02d}T00:00:00Z", f"sha256:G{day}",
+                digest=f"sha256:state-{day}", range_end=f"2026-09-{day:02d}",
+            ),
+            active_requirements=requirements,
+        )
+
+    observations = [entries["1"], *entries["1"][DC.USABLE_HISTORY_KEY]]
+    assert len(observations) <= DC.USABLE_OBSERVATION_LIMIT
+    assert any(row["transaction_snapshot_id"] == "sha256:G1"
+               for row in observations)
+    assert any(row["missing"] == ["head"] for row in observations)
+
+
+def test_scope_aware_pruning_preserves_a_common_multi_id_anchor_range() -> None:
+    requirements = _active_requirement("1", "2")
+    first = _usable_result("1", "2026-09-02T00:00:00Z", "sha256:G1")
+    second = _usable_result("2", "2026-09-02T00:00:00Z", "sha256:G1")
+    entries = {"1": first, "2": second}
+
+    for day in range(3, 15):
+        DC._store_usable_result(
+            entries,
+            _usable_result(
+                "1", f"2026-09-{day:02d}T00:00:00Z", "sha256:G1",
+                digest=f"sha256:state-{day}", range_end=f"2026-09-{day:02d}",
+            ),
+            active_requirements=requirements,
+        )
+
+    observations = [entries["1"], *entries["1"][DC.USABLE_HISTORY_KEY]]
+    assert len(observations) <= DC.USABLE_OBSERVATION_LIMIT
+    assert any(
+        row["transaction_snapshot_id"] == "sha256:G1"
+        and row["range_end"] == "2026-09-02"
+        for row in observations
+    )
+
+
+def test_history_pruning_prefers_the_live_remediation_range() -> None:
+    requirements = _active_requirement("1", active_range_end="2026-09-02")
+    active_anchor = _usable_result(
+        "1", "2026-09-02T00:00:00Z", "sha256:G1",
+        missing=["active"],
+    )
+    entries = {"1": active_anchor}
+
+    for day in range(3, 15):
+        DC._store_usable_result(
+            entries,
+            _usable_result(
+                "1", f"2026-09-{day:02d}T00:00:00Z", "sha256:G1",
+                digest=f"sha256:state-{day}", range_end=f"2026-09-{day:02d}",
+            ),
+            active_requirements=requirements,
+        )
+
+    observations = [entries["1"], *entries["1"][DC.USABLE_HISTORY_KEY]]
+    assert len(observations) <= DC.USABLE_OBSERVATION_LIMIT
+    assert any(
+        row["range_end"] == "2026-09-02"
+        and row["missing"] == ["active"]
+        for row in observations
+    )
+
+
+def test_equal_start_conflicts_are_both_retained_for_fail_closed_selection() -> None:
+    anchor = _usable_result(
+        "1", "2026-09-02T00:00:00Z", "sha256:G1", missing=["one"],
+    )
+    conflict = _usable_result(
+        "1", "2026-09-02T00:00:00Z", "sha256:G1", missing=[],
+    )
+    # Give the second completion a later instant while keeping the same query
+    # start. Completion ordering must not silently resolve a verdict conflict.
+    conflict["checked_at"] = "2026-09-02T00:00:02Z"
+    entries = {"1": anchor}
+
+    DC._store_usable_result(
+        entries, conflict, active_requirements=_active_requirement("1"),
+    )
+
+    observations = [entries["1"], *entries["1"][DC.USABLE_HISTORY_KEY]]
+    tied = [
+        row for row in observations
+        if row["collection_started_at"] == "2026-09-02T00:00:00Z"
+    ]
+    assert len(tied) == 2
+    assert {tuple(row["missing"]) for row in tied} == {(), ("one",)}
+
+
+def test_conflicting_paired_digest_anchors_cannot_age_out() -> None:
+    first_anchor = _usable_result(
+        "1", "2026-09-02T00:00:00Z", "sha256:G1",
+        digest="sha256:D1", missing=["one"],
+    )
+    conflicting_anchor = _usable_result(
+        "1", "2026-09-02T00:00:01Z", "sha256:G1",
+        digest="sha256:D2", missing=["two"],
+    )
+    first_anchor[DC.USABLE_HISTORY_KEY] = [conflicting_anchor]
+    entries = {"1": first_anchor}
+    requirements = _active_requirement("1")
+
+    for day in range(3, 15):
+        DC._store_usable_result(
+            entries,
+            _usable_result(
+                "1", f"2026-09-{day:02d}T00:00:00Z", f"sha256:G{day}",
+                digest=f"sha256:other-{day}",
+                range_end=f"2026-09-{day:02d}",
+            ),
+            active_requirements=requirements,
+        )
+
+    observations = [entries["1"], *entries["1"][DC.USABLE_HISTORY_KEY]]
+    anchors = [
+        row for row in observations
+        if row["transaction_snapshot_id"] == "sha256:G1"
+        and row["range_end"] == "2026-09-02"
+    ]
+    assert len(observations) <= DC.USABLE_OBSERVATION_LIMIT
+    assert {row["filer_transaction_digest"] for row in anchors} == {
+        "sha256:D1", "sha256:D2",
+    }
+
+
+def test_history_bound_refuses_when_all_slots_are_required_pins() -> None:
+    observations = []
+    for index in range(4):
+        digest = f"sha256:D{index}"
+        observations.extend([
+            _usable_result(
+                "1", f"2026-09-02T00:00:0{index}Z", "sha256:G1",
+                digest=digest, missing=[f"anchor-{index}"],
+            ),
+            _usable_result(
+                "1", f"2026-09-03T00:00:0{index}Z", "sha256:G2",
+                digest=digest, missing=[f"head-{index}"],
+            ),
+        ])
+    entries = {"1": {**observations[0], DC.USABLE_HISTORY_KEY: observations[1:]}}
+    incoming = _usable_result(
+        "1", "2026-09-04T00:00:00Z", "sha256:G3",
+        digest="sha256:unrelated-lane", range_end="2026-09-04",
+    )
+
+    with pytest.raises(ValueError, match="no bounded slot"):
+        DC._store_usable_result(
+            entries, incoming, active_requirements=_active_requirement("1"),
+        )
+
+    # Refusal happens before assignment, so the already-bounded record remains.
+    assert len([entries["1"], *entries["1"][DC.USABLE_HISTORY_KEY]]) == 8
+
+
+def test_failed_rediff_preserves_current_and_bounded_usable_history() -> None:
+    anchor = _usable_result(
+        "1", "2026-09-02T00:00:00Z", "sha256:G1", missing=["old"],
+    )
+    current = _usable_result(
+        "1", "2026-09-03T00:00:00Z", "sha256:G2", missing=["current"],
+    )
+    current[DC.USABLE_HISTORY_KEY] = [anchor]
+    entries = {"1": current}
+
+    DC._record_failure(
+        entries,
+        {"filer_id": "1", "name": "Committee"},
+        "session_expired",
+        transaction_id="sha256:G3",
+        filer_digest="sha256:filer-state",
+        start=date(2006, 1, 1),
+        end=date(2026, 9, 2),
+        collection_started_at="2026-09-04T00:00:00Z",
+        attempted_at="2026-09-04T00:00:01Z",
+    )
+
+    assert entries["1"]["missing"] == ["current"]
+    assert entries["1"][DC.USABLE_HISTORY_KEY] == [anchor]
+    assert entries["1"]["last_failure"] == "session_expired"
+
+
+def test_exact_local_ids_are_read_from_the_fingerprinted_shards(
+    tmp_path, monkeypatch,
+) -> None:
+    transactions = tmp_path / "transactions"
+    transactions.mkdir()
+    shard = transactions / "txn_2026.csv.gz"
+    with gzip.open(shard, "wt", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=[
+            "tran_id", "original id", "tran_date", "filer id",
+        ])
+        writer.writeheader()
+        writer.writerows([
+            {"tran_id": "10", "original id": "10", "tran_date": "09/01/2026",
+             "filer id": "1"},
+            {"tran_id": "11", "original id": "10", "tran_date": "09/02/2026",
+             "filer id": "1"},
+            {"tran_id": "12", "original id": "12", "tran_date": "09/03/2026",
+             "filer id": "1"},
+            {"tran_id": "20", "original id": "20", "tran_date": "09/02/2026",
+             "filer id": "2"},
+        ])
+    monkeypatch.setattr(DC, "TRANSACTION_DIR", transactions)
+
+    rows = DC._local_held_ids(
+        ["1", "2", "3"], date(2026, 9, 1), date(2026, 9, 2)
+    )
+
+    assert rows == {
+        "1": ({"10", "11"}, {"10"}),
+        "2": ({"20"}, set()),
+        "3": (set(), set()),
+    }
+
+
+def test_exact_local_ids_refuse_an_unparseable_target_date(
+    tmp_path, monkeypatch,
+) -> None:
+    transactions = tmp_path / "transactions"
+    transactions.mkdir()
+    shard = transactions / "txn_2026.csv.gz"
+    with gzip.open(shard, "wt", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["tran_id", "original id", "tran_date", "filer id"],
+        )
+        writer.writeheader()
+        writer.writerow({
+            "tran_id": "10", "original id": "10",
+            "tran_date": "not-a-date", "filer id": "1",
+        })
+    monkeypatch.setattr(DC, "TRANSACTION_DIR", transactions)
+
+    with pytest.raises(ValueError, match="unparseable transaction date"):
+        DC._local_held_ids(["1"], date(2006, 1, 1), date(2026, 9, 5))
+
+
+def test_exact_local_ids_refuse_a_blank_target_date(
+    tmp_path, monkeypatch,
+) -> None:
+    transactions = tmp_path / "transactions"
+    transactions.mkdir()
+    shard = transactions / "txn_2026.csv.gz"
+    with gzip.open(shard, "wt", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["tran_id", "original id", "tran_date", "filer id"],
+        )
+        writer.writeheader()
+        writer.writerow({
+            "tran_id": "10", "original id": "10",
+            "tran_date": "", "filer id": "1",
+        })
+    monkeypatch.setattr(DC, "TRANSACTION_DIR", transactions)
+
+    with pytest.raises(ValueError, match="target transaction has no date"):
+        DC._local_held_ids(["1"], date(2006, 1, 1), date(2026, 9, 5))
+
+
+@pytest.mark.parametrize(
+    ("omitted", "message"),
+    [
+        ("filer id", "filer id/filer_id"),
+        ("original id", "original id/original_id"),
+    ],
+)
+def test_every_transaction_shard_requires_identity_columns(
+    tmp_path, omitted, message,
+) -> None:
+    transactions = tmp_path / "transactions"
+    transactions.mkdir()
+    fields = ["tran_id", "original id", "tran_date", "filer id"]
+    with gzip.open(transactions / "txn_2025.csv.gz", "wt", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerow({
+            "tran_id": "10", "original id": "10",
+            "tran_date": "09/01/2025", "filer id": "1",
+        })
+    bad_fields = [field for field in fields if field != omitted]
+    with gzip.open(transactions / "txn_2026.csv.gz", "wt", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=bad_fields)
+        writer.writeheader()
+        # This is deliberately an unrelated filer. Schema omissions still
+        # fail the whole certified snapshot rather than looking like no rows.
+        writer.writerow({
+            key: value for key, value in {
+                "tran_id": "20", "original id": "20",
+                "tran_date": "09/01/2026", "filer id": "2",
+            }.items() if key in bad_fields
+        })
+
+    with pytest.raises(ValueError, match=message):
+        DC.transaction_filer_snapshots(
+            transactions, ["1"], date(2006, 1, 1), date(2026, 9, 5)
+        )
+
+
+def test_per_filer_digest_changes_only_for_that_filers_range_content(
+    tmp_path,
+) -> None:
+    transactions = tmp_path / "transactions"
+    transactions.mkdir()
+    shard = transactions / "txn_2026.csv.gz"
+    fields = ["tran_id", "original id", "tran_date", "filer id", "amount"]
+
+    def write(rows):
+        with gzip.open(shard, "wt", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fields)
+            writer.writeheader()
+            writer.writerows(rows)
+
+    rows = [
+        {"tran_id": "10", "original id": "10", "tran_date": "09/01/2026",
+         "filer id": "1", "amount": "1.00"},
+        {"tran_id": "20", "original id": "20", "tran_date": "09/01/2026",
+         "filer id": "2", "amount": "2.00"},
+    ]
+    write(rows)
+    before = DC.transaction_filer_snapshots(
+        transactions, ["1", "2"], date(2006, 1, 1), date(2026, 9, 5)
+    )
+    write([*rows, {
+        "tran_id": "21", "original id": "21", "tran_date": "09/02/2026",
+        "filer id": "2", "amount": "3.00",
+    }])
+    after = DC.transaction_filer_snapshots(
+        transactions, ["1", "2"], date(2006, 1, 1), date(2026, 9, 5)
+    )
+
+    assert (
+        before["1"]["filer_transaction_digest"]
+        == after["1"]["filer_transaction_digest"]
+    )
+    assert (
+        before["2"]["filer_transaction_digest"]
+        != after["2"]["filer_transaction_digest"]
+    )
 
 
 def test_narrowing_ladder_reaches_type_date_amount_and_prefix() -> None:
@@ -454,9 +986,42 @@ def test_record_failure_creates_an_unchecked_null_for_first_failure() -> None:
     assert saved["name"] == "New committee"
     assert saved["complete"] is None
     assert "checked" not in saved
+    assert saved["checked_at"].endswith("Z")
     assert saved["last_failure"] == reason
     assert saved["failure_count"] == 1
     _assert_attempt_is_today(saved["last_attempt"])
+
+
+def test_record_failure_persists_exact_attempt_provenance() -> None:
+    entries: dict[str, dict] = {}
+    DC._record_failure(
+        entries,
+        {"filer_id": "24173", "name": "New committee"},
+        "unusable_window",
+        transaction_id="sha256:exact",
+        filer_digest="sha256:filer-exact",
+        start=date(2006, 1, 1),
+        end=date(2026, 9, 5),
+        collection_started_at="2026-09-05T12:34:55.123456Z",
+        attempted_at="2026-09-05T12:34:56.123456Z",
+    )
+
+    saved = entries["24173"]
+    assert saved["complete"] is None
+    assert saved["evidence_version"] == 2
+    assert saved["checked"] == "2026-09-05"
+    assert saved["collection_started_at"] == "2026-09-05T12:34:55.123456Z"
+    assert saved["checked_at"] == "2026-09-05T12:34:56.123456Z"
+    assert saved["transaction_snapshot_id"] == "sha256:exact"
+    assert saved["filer_transaction_digest"] == "sha256:filer-exact"
+    assert saved["range_start"] == "2006-01-01"
+    assert saved["range_end"] == "2026-09-05"
+    assert saved["last_attempt_at"] == saved["checked_at"]
+    assert saved["last_attempt_collection_started_at"] == (
+        "2026-09-05T12:34:55.123456Z"
+    )
+    assert saved["last_attempt_transaction_snapshot_id"] == "sha256:exact"
+    assert saved["last_attempt_filer_transaction_digest"] == "sha256:filer-exact"
 
 
 def test_row_diff_keeps_null_as_an_explicit_override(monkeypatch, tmp_path) -> None:
@@ -482,6 +1047,13 @@ def test_row_diff_keeps_null_as_an_explicit_override(monkeypatch, tmp_path) -> N
             "complete": True,
             "checked": "2026-08-26",
             "surplus": [],
+            # Historical withdrawn IDs are audit evidence only. process.py
+            # must project the current top-level result, not union history.
+            "usable_history": [{
+                "filer_id": "usable-clean",
+                "complete": False,
+                "surplus": ["historical-withdrawn"],
+            }],
         },
     ]
     (tmp_path / "coverage_diff.json").write_text(json.dumps(rows))
@@ -1074,6 +1646,39 @@ def test_aggregate_evidence_covers_every_filer() -> None:
         ["a", "b"], summary_ts,
         {"a": (True, current), "b": (False, current)},
     ) is False
+
+
+def test_aggregate_exact_evidence_requires_current_snapshot_and_full_range() -> None:
+    summary_ts = datetime.fromisoformat("2026-08-28T12:00:00+00:00").timestamp()
+    exact = {
+        "complete": True,
+        "evidence_version": 2,
+        "collection_started_at": "2026-08-28T12:59:59.000001Z",
+        "checked_at": "2026-08-28T13:00:00.000001Z",
+        "transaction_snapshot_id": "sha256:one",
+        "range_start": "2006-01-01",
+        "range_end": "2026-08-28",
+    }
+
+    assert P._aggregate_row_verdict(
+        ["a"], summary_ts, {"a": (True, exact)},
+        transaction_id="sha256:one",
+    ) is True
+    assert P._aggregate_row_verdict(
+        ["a"], summary_ts,
+        {"a": (True, {**exact, "transaction_snapshot_id": "sha256:old"})},
+        transaction_id="sha256:one",
+    ) is None
+    assert P._aggregate_row_verdict(
+        ["a"], summary_ts,
+        {"a": (True, {**exact, "range_start": "2007-01-01"})},
+        transaction_id="sha256:one",
+    ) is None
+    assert P._aggregate_row_verdict(
+        ["a"], summary_ts,
+        {"a": (True, {**exact, "checked_at": "2026-08-28"})},
+        transaction_id="sha256:one",
+    ) is None
 
 
 def test_withdrawn_evidence_is_unioned_across_every_filer() -> None:

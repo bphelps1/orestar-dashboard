@@ -561,6 +561,49 @@ def test_resolve_unpacks_handoff_without_changing_base_chain(tmp_path) -> None:
 
 
 @pytest.mark.parametrize(
+    ("auto_status", "expected"),
+    [
+        ("blocked", "provenance-blocked"),
+        ("idle", "without a completion claim"),
+    ],
+)
+def test_empty_auto_retrigger_never_claims_discrepancies_complete(
+    tmp_path, auto_status, expected,
+) -> None:
+    block = _run_block("Re-trigger if backfill incomplete")
+    values = {
+        "steps.resolve.outputs.is_auto": "true",
+        "steps.resolve.outputs.resolved": "",
+        "steps.resolve.outputs.identity_mode": "identity",
+        "steps.resolve.outputs.auto_status": auto_status,
+    }
+    block = EXPRESSION.sub(
+        lambda match: values.get(match.group(1), ""),
+        block,
+    )
+
+    result = subprocess.run(
+        ["bash", "-e", "-o", "pipefail", "-c", block],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    assert expected in result.stdout
+    assert "all discrepancies addressed" not in result.stdout.lower()
+
+
+def test_resolve_carries_selector_status_to_retrigger() -> None:
+    resolve = _run_block("Resolve filer IDs (auto mode)")
+    retrigger = _run_block("Re-trigger if backfill incomplete")
+
+    assert "AUTO_STATUS=$(cat /tmp/auto_backfill_status.txt" in resolve
+    assert 'echo "auto_status=$AUTO_STATUS" >> "$GITHUB_OUTPUT"' in resolve
+    assert 'AUTO_STATUS="${{ steps.resolve.outputs.auto_status }}"' in retrigger
+
+
+@pytest.mark.parametrize(
     ("parent_conclusion", "latest_attempt", "expected_status"),
     [
         ("failure", "1", 0),

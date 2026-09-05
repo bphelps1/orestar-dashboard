@@ -7,8 +7,8 @@
 
 set -euo pipefail
 
-if [ "$#" -ne 6 ]; then
-  echo "usage: $0 <retry-index> <ref> <filer-ids> <start-year> <resume-auto> <source-run-id>" >&2
+if [ "$#" -ne 7 ]; then
+  echo "usage: $0 <retry-index> <ref> <filer-ids> <start-year> <end-date> <resume-auto> <source-run-id>" >&2
   exit 2
 fi
 
@@ -16,8 +16,9 @@ RETRY_INDEX=$1
 REF=$2
 FILER_IDS=$3
 START_YEAR=$4
-RESUME_AUTO=$5
-SOURCE_RUN_ID=$6
+END_DATE=$5
+RESUME_AUTO=$6
+SOURCE_RUN_ID=$7
 MAX_RETRIES=2
 COOLDOWN_SECONDS=1200
 
@@ -28,8 +29,13 @@ case "$RETRY_INDEX" in
     ;;
 esac
 
-if [ -z "$REF" ] || [ -z "$FILER_IDS" ] || [ -z "$START_YEAR" ]; then
-  echo "::error::Identity-gate retry requires a ref, filer IDs, and start year."
+if [ -z "$REF" ] || [ -z "$FILER_IDS" ] || [ -z "$START_YEAR" ] || [ -z "$END_DATE" ]; then
+  echo "::error::Identity-gate retry requires a ref, filer IDs, and frozen range."
+  exit 2
+fi
+
+if [[ ! "$END_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+  echo "::error::Invalid identity-gate end date: $END_DATE"
   exit 2
 fi
 
@@ -60,6 +66,7 @@ echo "::warning::Exact verification was inconclusive. Queueing retry $NEXT_RETRY
 bash "$DISPATCH_SCRIPT" coverage-diff.yml --ref "$REF" \
   -f filer_ids="$FILER_IDS" \
   -f start_year="$START_YEAR" \
+  -f end_date="$END_DATE" \
   -f recheck=true \
   -f require_no_missing=true \
   -f resume_auto_backfill="$RESUME_AUTO" \
