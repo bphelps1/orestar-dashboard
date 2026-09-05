@@ -11,17 +11,31 @@ SCRAPER = Path(__file__).parent.parent / "scraper"
 sys.path.insert(0, str(SCRAPER))
 
 from balance_snapshot import (  # noqa: E402
+    CALCULATION_VERSION,
     CAPTURE_KEY,
     COVERAGE_EVIDENCE_VERSION,
+    EMPTY_CASH_SCOPE_DIGEST,
     build_source,
+    cash_scope_digest,
+    cash_scope_digests,
     evidence_is_current,
     make_summary_capture,
     paired_comparison,
+    source_year_transaction_digest,
     transaction_snapshot_id,
 )
 
 
-def _source(snapshot_id="sha256:one", filer_ids=None, cash=125.0, count=3):
+def _source(
+    snapshot_id="sha256:one",
+    filer_ids=None,
+    cash=125.0,
+    count=3,
+    scope_digest="sha256:scope-one",
+    year_digests=None,
+):
+    if year_digests is None:
+        year_digests = {"2026": "sha256:year-2026"}
     return build_source(
         snapshot_id,
         [{
@@ -30,6 +44,8 @@ def _source(snapshot_id="sha256:one", filer_ids=None, cash=125.0, count=3):
             "slug": "committee",
             "cash_on_hand": cash,
             "tran_count": count,
+            "app_scope_transaction_digest": scope_digest,
+            "app_year_transaction_digests": year_digests,
         }],
         created_at="2026-09-04T12:00:00",
     )
@@ -43,6 +59,158 @@ def test_transaction_snapshot_fingerprint_changes_with_shard_bytes(tmp_path):
     assert first == transaction_snapshot_id(tmp_path)
     shard.write_bytes(b"second")
     assert transaction_snapshot_id(tmp_path) != first
+
+
+def test_cash_scope_digest_is_stable_across_row_order_and_representation():
+    first = {
+        "tran_id": "200.0",
+        "original_id": None,
+        "filer_id": "10.0",
+        "tran_date": "09/04/2026",
+        "filed_date": "2026-09-05T00:00:00",
+        "tran_type": " c ",
+        "sub_type": "Cash Contribution",
+        "amount": "$1,000.00",
+        "_undated": False,
+    }
+    second = {
+        "tran_id": "100",
+        "original id": "90.0",
+        "filer id": "10",
+        "tran_date": "2026-09-01",
+        "filed_date": "09/02/2026",
+        "tran_type": "E",
+        "sub_type": "Expenditure",
+        "amount": 25,
+        "_undated": "false",
+    }
+    equivalent_first = {
+        **first,
+        "tran_id": 200,
+        "filer_id": 10,
+        "tran_date": "2026-09-04",
+        "filed_date": "2026-09-05",
+        "tran_type": "C",
+        "sub_type": "Cash Contribution",
+        "amount": 1000,
+        "_undated": 0,
+    }
+    equivalent_second = {
+        **second,
+        "original id": 90,
+        "filer id": "10.0",
+        "tran_date": "09/01/2026",
+        "filed_date": "2026-09-02T12:30:00+00:00",
+        "amount": "25.0",
+    }
+
+    assert cash_scope_digest([first, second]) == cash_scope_digest(
+        [equivalent_second, equivalent_first]
+    )
+
+
+def test_cash_scope_digest_changes_with_cash_relevant_fields():
+    base = {
+        "tran_id": "100",
+        "original_id": "90",
+        "filer_id": "10",
+        "tran_date": "2026-09-01",
+        "filed_date": "2026-09-02",
+        "tran_type": "C",
+        "sub_type": "Cash Contribution",
+        "amount": 25,
+        "_undated": False,
+    }
+    expected = cash_scope_digest([base])
+    for field, changed in (
+        ("tran_id", "101"),
+        ("tran_date", "2026-09-03"),
+        ("tran_type", "E"),
+        ("sub_type", " Cash Contribution "),
+        ("amount", 26),
+    ):
+        assert cash_scope_digest([{**base, field: changed}]) != expected
+
+
+def test_cash_scope_digests_partition_by_effective_year_in_one_pass():
+    historical = {
+        "tran_id": "old",
+        "filer_id": "10",
+        "tran_date": "2006-05-01",
+        "filed_date": "2006-05-02",
+        "tran_type": "C",
+        "sub_type": "Loan Received (Non-Exempt)",
+        "amount": 100,
+        "_undated": False,
+    }
+    current = {
+        "tran_id": "new",
+        "filer_id": "10",
+        "tran_date": None,
+        "filed_date": "2026-09-02",
+        "year": 2026.0,
+        "tran_type": "C",
+        "sub_type": "Cash Contribution",
+        "amount": 25,
+        "_undated": True,
+    }
+
+    full, by_year = cash_scope_digests([historical, current])
+    assert full == cash_scope_digest([current, historical])
+    assert set(by_year) == {"2006", "2026"}
+    assert by_year["2006"] == cash_scope_digest([historical])
+    assert by_year["2026"] == cash_scope_digest([current])
+
+    later_current = {**current, "tran_id": "newer", "amount": 50}
+    later_full, later_by_year = cash_scope_digests(
+        [historical, current, later_current]
+    )
+    assert later_full != full
+    assert later_by_year["2006"] == by_year["2006"]
+    assert later_by_year["2026"] != by_year["2026"]
+
+
+def test_cash_scope_year_digest_includes_certified_absence_state():
+    historical = {
+        "tran_id": "old",
+        "filer_id": "10",
+        "tran_date": "2006-05-01",
+        "filed_date": "2006-05-02",
+        "tran_type": "C",
+        "sub_type": "Cash Contribution",
+        "amount": 100,
+        "_undated": False,
+    }
+    current = {
+        "tran_id": "new",
+        "filer_id": "10",
+        "tran_date": "2026-05-01",
+        "filed_date": "2026-05-02",
+        "tran_type": "C",
+        "sub_type": "Cash Contribution",
+        "amount": 25,
+        "_undated": False,
+    }
+
+    raw_full, raw_years = cash_scope_digests([historical, current])
+    excluded_full, excluded_years = cash_scope_digests(
+        [historical, current],
+        cash_excluded_transaction_ids={"old"},
+    )
+
+    # The raw scope digest remains usable to certify the exact-diff result.
+    assert excluded_full == raw_full
+    # Only the year whose cash treatment changed loses annual provenance.
+    assert excluded_years["2006"] != raw_years["2006"]
+    assert excluded_years["2026"] == raw_years["2026"]
+
+
+def test_source_year_digest_uses_canonical_empty_fallback():
+    source = _source(year_digests={"2006": "sha256:year-2006"})
+    record = source["scopes"]["10"]
+    assert source_year_transaction_digest(record, 2006) == "sha256:year-2006"
+    assert source_year_transaction_digest(record, "2026") == EMPTY_CASH_SCOPE_DIGEST
+    assert source_year_transaction_digest(record, "not-a-year") is None
 
 
 def test_capture_refuses_stale_app_source():
@@ -65,14 +233,54 @@ def test_capture_refuses_old_app_calculation_source():
     assert capture["reason"] == "app_snapshot_calculation_version"
 
 
+def test_capture_refuses_source_scope_without_transaction_digest():
+    source = _source()
+    del source["scopes"]["10"]["app_scope_transaction_digest"]
+    capture = make_summary_capture(
+        "10", 2026, {"ending_cash_balance": 100}, 1000.25,
+        source, "sha256:one",
+    )
+    assert capture["status"] == "unpaired"
+    assert capture["reason"] == "app_snapshot_scope_digest_missing"
+
+
+def test_capture_refuses_source_scope_without_valid_year_digest_map():
+    source = _source()
+    source["scopes"]["10"]["app_year_transaction_digests"] = None
+    capture = make_summary_capture(
+        "10", 2026, {"ending_cash_balance": 100}, 1000.25,
+        source, "sha256:one",
+    )
+    assert capture["status"] == "unpaired"
+    assert capture["reason"] == "app_snapshot_year_digest_map_missing"
+
+
+def test_capture_persists_only_its_annual_digest_not_the_source_map():
+    capture = make_summary_capture(
+        "10", 2026, {"ending_cash_balance": 100}, 1000.25,
+        _source(year_digests={
+            "2025": "sha256:year-2025",
+            "2026": "sha256:year-2026",
+        }),
+        "sha256:one",
+    )
+    assert capture["status"] == "paired"
+    assert capture["app_year_transaction_digest"] == "sha256:year-2026"
+    assert "app_year_transaction_digests" not in capture
+
+
 def test_duplicate_app_scope_is_explicitly_unpairable():
     source = build_source(
         "sha256:one",
         [
             {"filer_ids": ["10"], "name": "First", "slug": "first",
-             "cash_on_hand": 100, "tran_count": 1},
+             "cash_on_hand": 100, "tran_count": 1,
+             "app_scope_transaction_digest": "sha256:first",
+             "app_year_transaction_digests": {"2026": "sha256:first-year"}},
             {"filer_ids": ["10"], "name": "Second", "slug": "second",
-             "cash_on_hand": 900, "tran_count": 9},
+             "cash_on_hand": 900, "tran_count": 9,
+             "app_scope_transaction_digest": "sha256:second",
+             "app_year_transaction_digests": {"2026": "sha256:second-year"}},
         ],
         created_at="2026-09-04T12:00:00+00:00",
     )
@@ -103,6 +311,34 @@ def test_paired_delta_is_immutable_when_app_data_later_changes():
     assert comparison["orestar_cash_on_hand"] == 100.0
     assert comparison["delta_at_capture"] == 25.0
     assert comparison["app_data_changed_since_capture"] is True
+
+
+def test_scope_digest_is_primary_currentness_signal():
+    capture = make_summary_capture(
+        "10", 2026, {"ending_cash_balance": 100}, 1000.25,
+        _source(), "sha256:one",
+    )
+    yearly = {"10": {CAPTURE_KEY: capture}}
+
+    # An unrelated committee can replace the global shard fingerprint without
+    # making this committee's paired account summary stale.
+    current = paired_comparison(
+        ["10"], yearly,
+        current_transaction_id="sha256:global-later",
+        current_scope_digest="sha256:scope-one",
+    )
+    assert current["scope_digest_matches_capture"] is True
+    assert current["app_data_changed_since_capture"] is False
+    assert current["app_scope_transaction_digest"] == "sha256:scope-one"
+    assert current["current_scope_transaction_digest"] == "sha256:scope-one"
+
+    changed = paired_comparison(
+        ["10"], yearly,
+        current_transaction_id="sha256:one",
+        current_scope_digest="sha256:scope-later",
+    )
+    assert changed["scope_digest_matches_capture"] is False
+    assert changed["app_data_changed_since_capture"] is True
 
 
 def test_legacy_summary_is_unknown_not_a_live_discrepancy():
@@ -138,6 +374,27 @@ def test_multi_filer_scope_requires_every_component_on_same_app_snapshot():
 
     second["app_transaction_snapshot_id"] = "sha256:different"
     assert paired_comparison(["10", "20"], yearly)["reason"] == "component_snapshot_mismatch"
+
+
+def test_multi_filer_scope_requires_one_component_scope_digest():
+    source = _source(filer_ids=["10", "20"], cash=500, count=8)
+    first = make_summary_capture(
+        "10", 2026, {"ending_cash_balance": 210}, 1000,
+        source, "sha256:one",
+    )
+    second = make_summary_capture(
+        "20", 2026, {"ending_cash_balance": 275}, 1010,
+        source, "sha256:one",
+    )
+    first["scope_capture_id"] = "10|20@test"
+    second["scope_capture_id"] = "10|20@test"
+    second["app_scope_transaction_digest"] = "sha256:other-scope"
+
+    result = paired_comparison(
+        ["10", "20"],
+        {"10": {CAPTURE_KEY: first}, "20": {CAPTURE_KEY: second}},
+    )
+    assert result == {"status": "unpaired", "reason": "component_snapshot_mismatch"}
 
 
 def test_old_calculation_version_is_not_actionable():
@@ -318,6 +575,26 @@ def test_stale_member_expands_to_complete_multi_filer_scope():
     assert feb._group_ids_by_source_scope(["20"], source) == [["10", "20"]]
 
 
+def test_source_scope_without_digest_is_not_sweep_eligible():
+    import fetch_earliest_balances as feb
+
+    source = _source()
+    source["scopes"]["10"]["app_scope_transaction_digest"] = None
+    assert feb._eligible_source_scopes(source) == {}
+    assert feb._snapshot_source_ready(source, "sha256:one") is False
+
+
+def test_source_scope_without_valid_year_digest_map_is_not_sweep_eligible():
+    import fetch_earliest_balances as feb
+
+    source = _source()
+    source["scopes"]["10"]["app_year_transaction_digests"] = {
+        "2026": " bad-digest "
+    }
+    assert feb._eligible_source_scopes(source) == {}
+    assert feb._snapshot_source_ready(source, "sha256:one") is False
+
+
 def test_overlapping_source_scopes_are_wholly_ineligible():
     import fetch_earliest_balances as feb
 
@@ -326,8 +603,20 @@ def test_overlapping_source_scopes_are_wholly_ineligible():
         "calculation_version": feb.CALCULATION_VERSION,
         "transaction_snapshot_id": "sha256:one",
         "scopes": {
-            "10|20": {"filer_ids": ["10", "20"]},
-            "20|30": {"filer_ids": ["20", "30"]},
+            "10|20": {
+                "filer_ids": ["10", "20"],
+                "app_scope_transaction_digest": "sha256:first",
+                "app_year_transaction_digests": {
+                    "2026": "sha256:first-year",
+                },
+            },
+            "20|30": {
+                "filer_ids": ["20", "30"],
+                "app_scope_transaction_digest": "sha256:second",
+                "app_year_transaction_digests": {
+                    "2026": "sha256:second-year",
+                },
+            },
         },
     }
     assert feb._eligible_source_scopes(source) == {}
@@ -392,6 +681,192 @@ def test_partial_multi_scope_refresh_preserves_last_common_pair():
     assert "comparison_capture_attempt" not in yearly["20"]
 
 
+def test_scope_commit_stamps_every_fresh_year_with_shared_provenance():
+    import fetch_earliest_balances as feb
+
+    source = _source(filer_ids=["10", "20"], cash=500, count=8)
+    first = make_summary_capture(
+        "10", 2026, {"ending_cash_balance": 220}, 4000,
+        source, "sha256:one",
+    )
+    second = make_summary_capture(
+        "20", 2026, {"ending_cash_balance": 280}, 4010,
+        source, "sha256:one",
+    )
+    old_provenance = {
+        "app_year_transaction_digest": "sha256:old-year",
+        "calculation_version": "cash-balance-v1",
+        "scope_capture_id": "10|20@old",
+    }
+    yearly = {
+        "10": {"years": {
+            "2026": {"ending_cash_balance": 220, **old_provenance},
+            "2025": {"ending_cash_balance": 200},
+            "2024": {"ending_cash_balance": 180, **old_provenance},
+        }},
+        "20": {"years": {
+            "2026": {"ending_cash_balance": 280, **old_provenance},
+        }},
+    }
+
+    assert feb._commit_scope_captures(
+        ["10", "20"],
+        {"10": first, "20": second},
+        yearly,
+        {
+            "10": {
+                "2025": "sha256:year-2025",
+                "2026": "sha256:year-2026",
+            },
+            "20": {"2026": "sha256:year-2026"},
+        },
+    ) is True
+
+    capture_id = yearly["10"][CAPTURE_KEY]["scope_capture_id"]
+    assert capture_id == yearly["20"][CAPTURE_KEY]["scope_capture_id"]
+    expected = {
+        "app_year_transaction_digest": "sha256:year-2026",
+        "calculation_version": feb.CALCULATION_VERSION,
+        "scope_capture_id": capture_id,
+    }
+    assert {key: yearly["10"]["years"]["2026"][key] for key in expected} == expected
+    assert {key: yearly["20"]["years"]["2026"][key] for key in expected} == expected
+    expected_2025 = {
+        **expected,
+        "app_year_transaction_digest": "sha256:year-2025",
+    }
+    assert {
+        key: yearly["10"]["years"]["2025"][key] for key in expected_2025
+    } == expected_2025
+    assert {
+        key: yearly["10"]["years"]["2024"][key] for key in old_provenance
+    } == old_provenance
+
+
+def test_scope_commit_stamps_canonical_empty_digest_for_an_empty_app_year():
+    import fetch_earliest_balances as feb
+
+    source = _source(year_digests={})
+    capture = make_summary_capture(
+        "10", 2006, {"ending_cash_balance": 0}, 4000,
+        source, "sha256:one",
+    )
+    yearly = {"10": {"years": {"2006": {"ending_cash_balance": 0}}}}
+
+    assert capture["app_year_transaction_digest"] == EMPTY_CASH_SCOPE_DIGEST
+    assert feb._commit_scope_captures(
+        ["10"], {"10": capture}, yearly,
+        {"10": {"2006": source_year_transaction_digest(
+            source["scopes"]["10"], 2006,
+        )}},
+    ) is True
+    assert (yearly["10"]["years"]["2006"]["app_year_transaction_digest"]
+            == EMPTY_CASH_SCOPE_DIGEST)
+
+
+def test_scope_commit_rejects_invalid_fresh_year_provenance():
+    import fetch_earliest_balances as feb
+
+    source = _source()
+    capture = make_summary_capture(
+        "10", 2026, {"ending_cash_balance": 100}, 4000,
+        source, "sha256:one",
+    )
+    yearly = {
+        "10": {"years": {"2026": {
+            "ending_cash_balance": 100,
+            "app_year_transaction_digest": "sha256:stale",
+            "calculation_version": "cash-balance-v1",
+            "scope_capture_id": "10@old",
+        }}}
+    }
+
+    assert feb._commit_scope_captures(
+        ["10"], {"10": capture}, yearly,
+        {"10": {"2026": None}},
+    ) is False
+    annual = yearly["10"]["years"]["2026"]
+    assert "app_year_transaction_digest" not in annual
+    assert "calculation_version" not in annual
+    assert "scope_capture_id" not in annual
+
+
+def test_partial_scope_keeps_fresh_year_data_but_clears_its_provenance():
+    import fetch_earliest_balances as feb
+
+    source = _source(filer_ids=["10", "20"], cash=500, count=8)
+    old_a = make_summary_capture(
+        "10", 2026, {"ending_cash_balance": 210}, 1000,
+        source, "sha256:one",
+    )
+    old_b = make_summary_capture(
+        "20", 2026, {"ending_cash_balance": 275}, 1010,
+        source, "sha256:one",
+    )
+    old_a["scope_capture_id"] = "10|20@old"
+    old_b["scope_capture_id"] = "10|20@old"
+    stale_provenance = {
+        "app_year_transaction_digest": "sha256:stale",
+        "calculation_version": "cash-balance-v1",
+        "scope_capture_id": "10|20@stale",
+    }
+    yearly = {
+        "10": {
+            CAPTURE_KEY: old_a,
+            "years": {
+                "2026": {
+                    "ending_cash_balance": 220,
+                    "scrape_ts": 2000,
+                    **stale_provenance,
+                },
+                "2025": {"ending_cash_balance": 200, **stale_provenance},
+            },
+        },
+        "20": {CAPTURE_KEY: old_b, "years": {}},
+    }
+    new_a = make_summary_capture(
+        "10", 2026, {"ending_cash_balance": 220}, 2000,
+        source, "sha256:one",
+    )
+
+    assert feb._commit_scope_captures(
+        ["10", "20"], {"10": new_a}, yearly,
+        {"10": {"2026": "sha256:year-2026"}},
+    ) is False
+
+    fresh = yearly["10"]["years"]["2026"]
+    assert fresh["ending_cash_balance"] == 220
+    assert fresh["scrape_ts"] == 2000
+    for key in stale_provenance:
+        assert key not in fresh
+    assert {
+        key: yearly["10"]["years"]["2025"][key]
+        for key in stale_provenance
+    } == stale_provenance
+
+
+def test_scope_capture_commit_rejects_component_digest_mismatch():
+    import fetch_earliest_balances as feb
+
+    source = _source(filer_ids=["10", "20"], cash=500, count=8)
+    first = make_summary_capture(
+        "10", 2026, {"ending_cash_balance": 220}, 4000,
+        source, "sha256:one",
+    )
+    second = make_summary_capture(
+        "20", 2026, {"ending_cash_balance": 280}, 4010,
+        source, "sha256:one",
+    )
+    second["app_scope_transaction_digest"] = "sha256:different"
+    yearly = {}
+
+    assert feb._commit_scope_captures(
+        ["10", "20"], {"10": first, "20": second}, yearly
+    ) is False
+    assert yearly["10"][CAPTURE_KEY]["reason"] == "scope_capture_mismatch"
+    assert yearly["20"][CAPTURE_KEY]["reason"] == "scope_capture_mismatch"
+
+
 def test_recent_old_version_capture_is_still_requeued():
     import fetch_earliest_balances as feb
 
@@ -404,6 +879,184 @@ def test_recent_old_version_capture_is_still_requeued():
         }
     }
     assert feb._current_capture_needs_refresh(entry, cutoff=1000) is True
+
+
+def test_current_capture_is_requeued_when_current_source_scope_changes():
+    import fetch_earliest_balances as feb
+
+    source = _source()
+    capture = make_summary_capture(
+        "10", 2026, {"ending_cash_balance": 100}, 2000,
+        source, "sha256:one",
+    )
+    entry = {CAPTURE_KEY: capture}
+    source_record = source["scopes"]["10"]
+
+    assert feb._current_capture_needs_refresh(
+        entry, cutoff=1000, source_record=source_record
+    ) is False
+    # Callers without a source record retain the timestamp-based legacy check.
+    assert feb._current_capture_needs_refresh(entry, cutoff=1000) is False
+
+    for field, changed in (
+        ("app_scope_transaction_digest", "sha256:scope-later"),
+        ("cash_on_hand", 125.01),
+        ("tran_count", 4),
+    ):
+        assert feb._current_capture_needs_refresh(
+            entry,
+            cutoff=1000,
+            source_record={**source_record, field: changed},
+        ) is True
+
+
+def test_legacy_annual_rows_requeue_only_the_historical_sweep():
+    import fetch_earliest_balances as feb
+
+    source = _source(year_digests={
+        "2025": "sha256:year-2025",
+        "2026": "sha256:year-2026",
+    })
+    capture = make_summary_capture(
+        "10", 2026, {"ending_cash_balance": 100}, 2000,
+        source, "sha256:one",
+    )
+    entry = {
+        CAPTURE_KEY: capture,
+        "ts": 2000,
+        "years": {
+            "2026": {
+                "ending_cash_balance": 100,
+                "app_year_transaction_digest": "sha256:year-2026",
+                "calculation_version": CALCULATION_VERSION,
+                "scope_capture_id": "10@test",
+            },
+            "2025": {"ending_cash_balance": 90},
+        },
+    }
+
+    # A fresh current pair remains satisfied: the current-only sweep cannot
+    # repair the historical row and therefore must not retry it forever.
+    assert feb._current_capture_needs_refresh(
+        entry, cutoff=1000, source_record=source["scopes"]["10"]
+    ) is False
+    # The full historical sweep ignores the entry-level age and backfills 2025.
+    assert feb._historical_year_provenance_needs_refresh(
+        entry, source_record=source["scopes"]["10"]
+    ) is True
+    entry["years"]["2025"].update({
+        "app_year_transaction_digest": "sha256:year-2025",
+        "calculation_version": CALCULATION_VERSION,
+        "scope_capture_id": "10@test",
+    })
+    assert feb._historical_year_provenance_needs_refresh(
+        entry, source_record=source["scopes"]["10"]
+    ) is False
+
+
+def test_historical_provenance_migration_waits_for_a_current_eligible_source():
+    import fetch_earliest_balances as feb
+
+    legacy_entry = {
+        "ts": 2000,
+        "years": {"2025": {"ending_cash_balance": 90}},
+    }
+
+    # With no app source, provenance cannot be repaired. Returning False lets
+    # a fresh historical entry fall out of the next chained batch instead of
+    # selecting and re-scraping it forever. Age, missing-year and incomplete-
+    # opening predicates in main remain separate and can still select it.
+    assert feb._historical_year_provenance_needs_refresh(
+        legacy_entry, source_record=None
+    ) is False
+
+    stale_source = _source(snapshot_id="sha256:old")
+    assert feb._snapshot_source_ready(stale_source, "sha256:current") is False
+    stale_record = (
+        stale_source["scopes"]["10"]
+        if feb._snapshot_source_ready(stale_source, "sha256:current")
+        else None
+    )
+    assert feb._historical_year_provenance_needs_refresh(
+        legacy_entry, source_record=stale_record
+    ) is False
+
+    ineligible_record = dict(_source()["scopes"]["10"])
+    ineligible_record["app_year_transaction_digests"] = None
+    assert feb._historical_year_provenance_needs_refresh(
+        legacy_entry, source_record=ineligible_record
+    ) is False
+
+    # Once a usable source exists, the same legacy row is selected exactly for
+    # the migration it can now complete.
+    current_record = _source(year_digests={
+        "2025": "sha256:year-2025",
+    })["scopes"]["10"]
+    assert feb._historical_year_provenance_needs_refresh(
+        legacy_entry, source_record=current_record
+    ) is True
+
+
+def test_changed_historical_year_digest_requeues_full_sweep():
+    import fetch_earliest_balances as feb
+
+    entry = {
+        "years": {
+            "2006": {
+                "ending_cash_balance": 90,
+                "app_year_transaction_digest": "sha256:year-2006-old",
+                "calculation_version": CALCULATION_VERSION,
+                "scope_capture_id": "10@old-snapshot",
+            },
+            "2007": {
+                "ending_cash_balance": 100,
+                "app_year_transaction_digest": "sha256:year-2007",
+                "calculation_version": CALCULATION_VERSION,
+                "scope_capture_id": "10@old-snapshot",
+            },
+        },
+    }
+    source_record = _source(year_digests={
+        "2006": "sha256:year-2006-new",
+        "2007": "sha256:year-2007",
+    })["scopes"]["10"]
+
+    assert feb._historical_year_provenance_needs_refresh(
+        entry, source_record=source_record
+    ) is True
+
+    entry["years"]["2006"]["app_year_transaction_digest"] = (
+        "sha256:year-2006-new"
+    )
+    assert feb._historical_year_provenance_needs_refresh(
+        entry, source_record=source_record
+    ) is False
+
+
+def test_historical_year_digest_compares_against_empty_source_year():
+    import fetch_earliest_balances as feb
+
+    entry = {
+        "years": {
+            "2006": {
+                "ending_cash_balance": 0,
+                "app_year_transaction_digest": "sha256:previously-nonempty",
+                "calculation_version": CALCULATION_VERSION,
+                "scope_capture_id": "10@old-snapshot",
+            },
+        },
+    }
+    source_record = _source(year_digests={})["scopes"]["10"]
+
+    assert feb._historical_year_provenance_needs_refresh(
+        entry, source_record=source_record
+    ) is True
+    entry["years"]["2006"][
+        "app_year_transaction_digest"
+    ] = EMPTY_CASH_SCOPE_DIGEST
+    assert feb._historical_year_provenance_needs_refresh(
+        entry, source_record=source_record
+    ) is False
 
 
 def test_partial_scope_capture_and_newer_attempt_stay_requeued():
@@ -492,8 +1145,12 @@ def test_empty_or_all_ambiguous_source_cannot_start_current_sweep():
     ambiguous = build_source(
         "sha256:one",
         [
-            {"filer_ids": ["10"], "name": "A", "cash_on_hand": 1},
-            {"filer_ids": ["10"], "name": "B", "cash_on_hand": 2},
+            {"filer_ids": ["10"], "name": "A", "cash_on_hand": 1,
+             "app_scope_transaction_digest": "sha256:first",
+             "app_year_transaction_digests": {"2026": "sha256:first-year"}},
+            {"filer_ids": ["10"], "name": "B", "cash_on_hand": 2,
+             "app_scope_transaction_digest": "sha256:second",
+             "app_year_transaction_digests": {"2026": "sha256:second-year"}},
         ],
         created_at="2026-09-04T12:00:00+00:00",
     )

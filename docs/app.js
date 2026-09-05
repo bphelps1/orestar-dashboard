@@ -780,9 +780,10 @@ function statsFromTimeline(rows, beginningBalances, fullTimeline, cashThroughMon
 
 // ── Account summary tile definitions ─────────────────────────────────────────
 // Historical totals come from held transaction rows. The exact cash lane also
-// uses the first ORESTAR opening balance as its anchor and, when trustworthy,
-// ORESTAR's annual loan treatment. Those differences stay explicit rather than
-// rewriting or hiding the underlying transaction history.
+// uses the first ORESTAR opening balance as its anchor and, when paired to the
+// same transaction scope, ORESTAR's annual loan treatment. Those differences
+// stay explicit rather than rewriting or hiding the underlying transaction
+// history.
 
 const CALC_TILE_META = {
   // ── Cash Balance tiles (COH-contributing) ─────────────────────────────────
@@ -804,7 +805,7 @@ const CALC_TILE_META = {
   },
   loans_received: {
     label: "Loans Received",
-    tip: "<strong>Historical breakout:</strong> Held Loan Received (Non-Exempt) rows. These rows are already included in the contribution total above. When ORESTAR's trustworthy annual loan line differs, Net Cash Flow uses that reported amount and Cash Treatment Adjustment exposes the difference.",
+    tip: "<strong>Historical breakout:</strong> Held Loan Received (Non-Exempt) rows. These rows are already included in the contribution total above. When ORESTAR's annual loan line is paired to this same transaction snapshot and differs, Net Cash Flow uses that reported amount and Cash Treatment Adjustment exposes the difference.",
   },
   cash_expenditures: {
     label: "Cash Expenditures",
@@ -828,14 +829,14 @@ const CALC_TILE_META = {
     label: "Cash Treatment Adjustment",
     coh: true,
     compute: d => d.cash_treatment_adjustment,
-    tip: "<strong>Reconciliation bridge:</strong> The difference between arithmetic over the historical totals above and the exact cash lane. It captures retained rows ORESTAR no longer returns, undated or pre-anchor history, and trustworthy ORESTAR loan treatment.<br><strong>Identity:</strong> Historical movement + this adjustment = Net Cash Flow.",
+    tip: "<strong>Reconciliation bridge:</strong> The difference between arithmetic over the historical totals above and the exact cash lane. It captures retained rows ORESTAR no longer returns, undated or pre-anchor history, and paired ORESTAR loan treatment.<br><strong>Identity:</strong> Historical movement + this adjustment = Net Cash Flow.",
   },
   net_cash_flow: {
     label: "Net Cash Flow",
     coh: true,
     subtotal: true,
     compute: d => d.net_cash_flow,
-    tip: "<strong>Counted:</strong> Exact cash movement after certified non-returning rows, undated or pre-anchor history, loan treatment, and balance adjustments are applied. All held rows remain visible in the historical component totals.<br><strong>Meaning:</strong> How much cash the committee gained or lost during this period.",
+    tip: "<strong>Counted:</strong> Exact cash movement after certified non-returning rows, undated or pre-anchor history, paired loan treatment, and balance adjustments are applied. All held rows remain visible in the historical component totals.<br><strong>Meaning:</strong> How much cash the committee gained or lost during this period.",
   },
   ending_cash_balance: {
     label: "Ending Cash Balance",
@@ -911,7 +912,8 @@ const CALC_GROUPS = [
  * Build a calculated account summary from the filer's transaction data.
  * Historical components come from held row-by-row transactions. Exact cash
  * additionally uses the first ORESTAR beginning balance as its anchor and any
- * trustworthy annual loan treatment, with the bridge exposed in the UI.
+ * annual loan treatment paired to the same transaction scope, with the bridge
+ * exposed in the UI.
  */
 /**
  * Build a calculated account summary, optionally filtered to a single year.
@@ -2326,7 +2328,7 @@ function updateCohIndicator(profile) {
   // Note this is NOT the same as dormant: a dormant committee has ORESTAR
   // carrying a real balance forward while filing nothing, which IS worth a
   // warning. The zero cash balance is the difference.
-  if (profile.closed) {
+  if (profile.closed && pairedSummaryEvidenceIsCurrent(profile)) {
     ind.hidden = false;
     ind.className = "coh-indicator coh-closed";
     ind.textContent = "Closed";
@@ -2505,9 +2507,26 @@ function orestarAbsentNoteText(profile) {
          `figure shown. The record${w.count === 1 ? " is" : "s are"} kept rather than deleted.`;
 }
 
+// Summary-derived loan treatment and closure are safe to present only when the
+// summary was captured against this exact canonical transaction scope. Older
+// profile JSON can still contain metadata from a prior aggregation, so the UI
+// independently fails closed when the pair is stale or unverified.
+function pairedSummaryEvidenceIsCurrent(profile) {
+  const comparison = (profile && profile.orestar_comparison) || {};
+  return comparison.status === "paired"
+    && comparison.scope_digest_matches_capture === true
+    && comparison.orestar_data_changed_since_capture === false
+    && comparison.annual_summary_refresh_needed === false;
+}
+
+function pairedAnnualTreatmentEvidenceIsCurrent(profile) {
+  return !!profile
+    && profile.annual_summary_treatment_basis === "paired_year_digest_v1";
+}
+
 // Why a balance can leave out a transaction the committee plainly filed.
 //
-// Exempt loan principal is held out of cash for years where ORESTAR's own
+// Exempt loan principal is held out of cash for years where ORESTAR's paired
 // statement reports no exempt loans received (see the exempt-loan block in
 // process.py). Committee for SAIF Keeping is the case this exists for:
 // ORESTAR lists a $665,242.33 exempt loan in its transaction record and
@@ -2515,19 +2534,21 @@ function orestarAbsentNoteText(profile) {
 // transaction up is owed a reason it is missing from the total, rather than
 // left to conclude the figure is broken.
 function exemptLoanNoteText(profile) {
+  if (!pairedAnnualTreatmentEvidenceIsCurrent(profile)) return "";
   const ex = (profile && profile.exempt_loans_excluded) || {};
   const years = Object.keys(ex).sort();
   if (!years.length) return "";
   const total = years.reduce((s, y) => s + (Number(ex[y]) || 0), 0);
   const those = years.length === 1 ? "that year" : "those years";
   return `${fmt$(total)} of exempt loan principal (${years.join(", ")}) is not ` +
-         `counted here: ORESTAR's own account summary for ${those} reports no ` +
+         `counted here: ORESTAR's paired account summary for ${those} reports no ` +
          `exempt loans received, so ORESTAR does not treat it as cash either. ` +
          `ORESTAR reported exempt loans inconsistently before about 2013; from ` +
          `2014 on it records them and this balance counts them.`;
 }
 
 function nonexemptLoanNoteText(profile) {
+  if (!pairedAnnualTreatmentEvidenceIsCurrent(profile)) return "";
   const treatment = (profile && profile.nonexempt_loan_cash_treatment) || {};
   const years = Object.keys(treatment).sort().reverse();
   if (!years.length) return "";
@@ -2539,9 +2560,9 @@ function nonexemptLoanNoteText(profile) {
   const more = years.length > 3
     ? `; plus ${years.length - 3} earlier year${years.length - 3 === 1 ? "" : "s"}`
     : "";
-  return `Non-exempt loan cash treatment follows ORESTAR's trustworthy annual ` +
-         `summary (${parts.join("; ")}${more}). The filed loan rows remain visible ` +
-         `in historical totals.`;
+  return `Non-exempt loan cash treatment follows ORESTAR's paired annual ` +
+         `summary for this transaction snapshot (${parts.join("; ")}${more}). ` +
+         `The filed loan rows remain visible in historical totals.`;
 }
 
 function cashTreatmentNoteText(profile) {
@@ -2565,7 +2586,7 @@ function cohIndicatorHTML(profile) {
   // Same rule as updateCohIndicator: a finished committee is labelled, not
   // warned about. Kept in step with that function deliberately — two badges
   // describing the same balance differently is worse than either alone.
-  if (profile.closed) {
+  if (profile.closed && pairedSummaryEvidenceIsCurrent(profile)) {
     const since = profile.closed_since ? ` since ${profile.closed_since}` : "";
     const tip = `ORESTAR reports no activity and a $0.00 balance for this committee${since}.` +
                 (treatmentText ? ` ${treatmentText}` : "");

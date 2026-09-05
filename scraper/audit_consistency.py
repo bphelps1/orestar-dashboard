@@ -50,6 +50,25 @@ def _legacy_cash_net(row: dict) -> float:
     )
 
 
+def current_yearly_discrepancies(detail: dict) -> dict[str, dict]:
+    """Return annual comparisons proven current for this transaction scope.
+
+    Annual ORESTAR pages and the app's transaction rows are independent
+    snapshots.  A cached yearly delta is diagnostic only when aggregation has
+    explicitly verified the annual row's capture provenance against the current
+    scope.  Missing and legacy flags fail closed; truthy stand-ins such as ``1``
+    are not accepted as evidence.
+    """
+    yearly = detail.get("yearly_discrepancies") or {}
+    if not isinstance(yearly, dict):
+        return {}
+    return {
+        str(year): row
+        for year, row in yearly.items()
+        if isinstance(row, dict) and row.get("comparison_current") is True
+    }
+
+
 def audit_filer(slug: str, detail: dict, threshold: float = 0.01) -> list[dict]:
     """Run all consistency checks on a single filer. Returns list of findings."""
     findings = []
@@ -131,16 +150,23 @@ def audit_filer(slug: str, detail: dict, threshold: float = 0.01) -> list[dict]:
                 "severity": "HIGH" if abs(delta) > 1000 else "MEDIUM" if abs(delta) > 10 else "LOW",
             })
 
-    # 5. ORESTAR line-item comparison
-    yearly_disc = detail.get("yearly_discrepancies", {})
+    # 5. ORESTAR annual-flow comparison.  A year-local digest proves that
+    # year's transactions and therefore its line items / movement.  It cannot
+    # prove the rolled opening or ending position: a late row in an earlier
+    # year changes both without changing this year's digest.  Keep those raw
+    # fields in the profile for inspection, but do not diagnose them here.
+    yearly_disc = current_yearly_discrepancies(detail)
     for yr, d in yearly_disc.items():
-        for field, label in [
-            ("delta_contributions", "contributions"),
-            ("delta_expenditures", "expenditures"),
-            ("delta_other_receipts", "other_receipts"),
-            ("delta_other_disbursements", "other_disbursements"),
-            ("delta_begin", "beginning_balance"),
-            ("discrepancy", "ending_balance"),
+        for field, label, our_field, orestar_field in [
+            ("delta_contributions", "contributions",
+             "our_contributions", "orestar_contributions"),
+            ("delta_expenditures", "expenditures",
+             "our_expenditures", "orestar_expenditures"),
+            ("delta_other_receipts", "other_receipts",
+             "our_other_receipts", "orestar_other_receipts"),
+            ("delta_other_disbursements", "other_disbursements",
+             "our_other_disbursements", "orestar_other_disbursements"),
+            ("delta_movement", "movement", "our_net", "orestar_movement"),
         ]:
             delta = d.get(field)
             if delta is not None and abs(delta) > threshold:
@@ -148,8 +174,8 @@ def audit_filer(slug: str, detail: dict, threshold: float = 0.01) -> list[dict]:
                     "filer_slug": slug, "filer_name": name,
                     "check": f"ORESTAR {label}",
                     "year": yr,
-                    "our_value": d.get(f"our_{label.split('_')[0]}", ""),
-                    "expected_value": d.get(f"orestar_{label.split('_')[0]}", ""),
+                    "our_value": d.get(our_field, ""),
+                    "expected_value": d.get(orestar_field, ""),
                     "delta": delta,
                     "severity": "HIGH" if abs(delta) > 1000 else "MEDIUM" if abs(delta) > 10 else "LOW",
                 })

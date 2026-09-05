@@ -14,6 +14,11 @@ ROOT = Path(__file__).parent.parent
 SCRAPER = ROOT / "scraper"
 sys.path.insert(0, str(SCRAPER))
 
+from balance_snapshot import (  # noqa: E402
+    CALCULATION_VERSION,
+    cash_scope_digest,
+)
+
 
 def test_current_only_reads_no_prev_control() -> None:
     import fetch_earliest_balances as balances
@@ -44,14 +49,14 @@ def test_current_only_reads_no_prev_control() -> None:
 def test_weekly_and_monthly_modes_survive_self_retrigger() -> None:
     workflow = (ROOT / ".github/workflows/earliest-balances.yml").read_text()
 
-    assert '- cron: "0 6 * * 0"' in workflow
+    assert '- cron: "0 18 * * 0"' in workflow
     assert '- cron: "0 7 1 * *"' in workflow
 
     # The first batch translates the schedule once, then persists mode and one
     # fixed sweep cutoff through GITHUB_ENV. A self-dispatched child has no
     # event.schedule, so carrying those explicit inputs preserves its mode and
     # prevents late batches from falling on the wrong side of a moving TTL.
-    assert workflow.count('if [ "${{ github.event.schedule }}" = "0 6 * * 0" ]; then') == 1
+    assert workflow.count('if [ "${{ github.event.schedule }}" = "0 18 * * 0" ]; then') == 1
     assert 'echo "current_only=$CURRENT_ONLY" >> "$GITHUB_ENV"' in workflow
     assert 'echo "refresh_before_ts=$REFRESH_BEFORE" >> "$GITHUB_ENV"' in workflow
     assert 'CURRENT_ONLY="${{ env.current_only }}"' in workflow
@@ -97,6 +102,7 @@ def _paired_capture(
     orestar_cash: float,
     scope_ids: list[str] | None = None,
     count: int = 1,
+    scope_digest: str = "sha256:test-scope",
 ) -> dict:
     scope_ids = scope_ids or [fid]
     return {
@@ -110,8 +116,9 @@ def _paired_capture(
         "app_cash_on_hand": app_cash,
         "app_tran_count": count,
         "app_transaction_snapshot_id": "sha256:at-capture",
+        "app_scope_transaction_digest": scope_digest,
         "app_snapshot_created_at": "2026-09-01T00:00:00",
-        "calculation_version": "cash-balance-v1",
+        "calculation_version": CALCULATION_VERSION,
         **({"scope_capture_id": f"{'|'.join(sorted(scope_ids))}@test"}
            if len(scope_ids) > 1 else {}),
     }
@@ -186,8 +193,6 @@ def test_process_flags_only_paired_capture_and_keeps_frozen_delta(
             "ts": 1000.0,
         },
     }
-    (data_dir / "orestar_yearly_summaries.json").write_text(json.dumps(yearly))
-
     df = pd.DataFrame({
         "tran_id": [
             "legacy-row", "paired-old", "paired-new", "stable-pair", "closed-pair",
@@ -223,6 +228,24 @@ def test_process_flags_only_paired_capture_and_keeps_frozen_delta(
         "is_out_of_state": [False] * 9,
         "_undated": [False] * 9,
     })
+    # Scope 20 was captured before its second row arrived. Every other capture
+    # describes the exact canonical row set used by this aggregation.
+    captured_rows = {
+        "20": df[
+            (df["filer"] == "Changed Pair")
+            & (df["tran_id"] == "paired-old")
+        ],
+        "30": df[df["filer"] == "Stable Pair"],
+        "40": df[df["filer"] == "Closed Committee"],
+        "50": df[df["filer"] == "Mixed Closure Scope"],
+        "60": df[df["filer"] == "Mixed Closure Scope"],
+    }
+    for fid, rows_at_capture in captured_rows.items():
+        yearly[fid]["comparison_capture"][
+            "app_scope_transaction_digest"
+        ] = cash_scope_digest(rows_at_capture.to_dict(orient="records"))
+    (data_dir / "orestar_yearly_summaries.json").write_text(json.dumps(yearly))
+
     contributions = df.copy()
     empty = df.iloc[0:0].copy()
 
@@ -540,6 +563,38 @@ def test_multi_id_summary_sum_propagates_unknown_optional_fields() -> None:
     assert process._sum_summary_field([first, second], "ending_cash_balance") == 30.0
     assert process._sum_summary_field([first, second], "loans_received") is None
     assert process._sum_summary_field([first, second], "accounts_payable") is None
+
+
+def test_multi_id_yearly_cash_provenance_must_be_one_atomic_capture() -> None:
+    import process
+
+    first = {
+        **_summary(10.0),
+        "scrape_ts": 1_800_000_000.0,
+        "app_year_transaction_digest": "sha256:year",
+        "calculation_version": CALCULATION_VERSION,
+        "scope_capture_id": "10|20@capture",
+    }
+    second = {
+        **_summary(20.0),
+        "scrape_ts": 1_800_000_001.0,
+        "app_year_transaction_digest": "sha256:year",
+        "calculation_version": CALCULATION_VERSION,
+        "scope_capture_id": "10|20@capture",
+    }
+    [paired] = process._combine_scope_yearly_summaries([
+        {"2026": first}, {"2026": second},
+    ]).values()
+    assert paired["app_year_transaction_digest"] == "sha256:year"
+    assert paired["scope_capture_id"] == "10|20@capture"
+
+    second["scope_capture_id"] = "10|20@different-crawl"
+    [mixed] = process._combine_scope_yearly_summaries([
+        {"2026": first}, {"2026": second},
+    ]).values()
+    assert "app_year_transaction_digest" not in mixed
+    assert "calculation_version" not in mixed
+    assert "scope_capture_id" not in mixed
 
 
 def test_multi_id_year_missing_from_one_component_stays_unknown() -> None:

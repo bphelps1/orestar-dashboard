@@ -42,6 +42,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 import supabase_sync
+from audit_consistency import current_yearly_discrepancies
 
 LABELS = {
     "tran_2006":                     "transaction date in 2006 (current)",
@@ -75,12 +76,14 @@ def main() -> int:
         basis = detail.get("basis_2006") or {}
         if not basis:
             continue
-        y = (detail.get("yearly_discrepancies") or {}).get("2006") or {}
+        # Candidate app bases may be judged only against an annual ORESTAR row
+        # captured for the same transaction scope.  Falling back to a legacy
+        # source-only row made late backfills look like evidence for a different
+        # 2006 accounting rule.
+        y = current_yearly_discrepancies(detail).get("2006") or {}
+        if not y:
+            continue
         mv = y.get("orestar_movement")
-        if mv is None:
-            yr = (detail.get("orestar_yearly") or {}).get("2006") or {}
-            b, e = yr.get("beginning_balance"), yr.get("ending_cash_balance")
-            mv = round(float(e) - float(b), 2) if b is not None and e is not None else None
         if mv is None:
             continue
         diverging = y.get("delta_movement") is not None and abs(y["delta_movement"]) > 0.01

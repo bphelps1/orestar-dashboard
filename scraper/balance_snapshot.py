@@ -8,6 +8,8 @@ This module makes the comparison explicit and immutable:
 
 * ``transaction_snapshot_id`` fingerprints the exact transaction shards used
   by an aggregation.
+* ``cash_scope_digest`` fingerprints just one canonical committee's cash inputs
+  so unrelated transaction updates do not invalidate its paired summary.
 * ``make_summary_capture`` pairs a freshly-read ORESTAR balance with the app
   balance already calculated from that same fingerprint.
 * ``paired_comparison`` combines physical filer IDs only when every component
@@ -24,17 +26,20 @@ import csv
 import gzip
 import hashlib
 import json
+import re
 from datetime import date, datetime, timezone
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 
 FORMAT_VERSION = 2
-CALCULATION_VERSION = "cash-balance-v1"
+CALCULATION_VERSION = "cash-balance-v2"
 SOURCE_FILENAME = "balance_snapshot_source.json"
 CAPTURE_KEY = "comparison_capture"
 COVERAGE_EVIDENCE_VERSION = 2
 FILER_DIGEST_VERSION = "orestar-filer-transaction-v1"
+CASH_SCOPE_DIGEST_VERSION = "orestar-cash-scope-v1"
 
 
 def normalize_filer_id(value: Any) -> str:
@@ -70,6 +75,254 @@ def transaction_snapshot_id(transaction_dir: Path) -> str | None:
                 digest.update(chunk)
         digest.update(b"\0")
     return f"sha256:{digest.hexdigest()}"
+
+
+def _cash_digest_is_null(value: Any) -> bool:
+    """Recognize pandas/numpy nulls without importing either dependency."""
+    if value is None:
+        return True
+    try:
+        unequal = value != value
+        if isinstance(unequal, bool) and unequal:
+            return True
+        # numpy.bool_ is deliberately handled without a numpy import.
+        if type(unequal).__name__ == "bool_" and bool(unequal):
+            return True
+    except (TypeError, ValueError):
+        pass
+    return str(value).strip().lower() in {"", "nan", "none", "nat", "<na>", "null"}
+
+
+def _cash_digest_value(row: Mapping[str, Any], *keys: str) -> Any:
+    """Read equivalent source/internal column names as one logical field."""
+    for key in keys:
+        if key not in row:
+            continue
+        value = row[key]
+        if not _cash_digest_is_null(value):
+            return value
+    return None
+
+
+def _cash_digest_date(value: Any) -> str:
+    if _cash_digest_is_null(value):
+        return ""
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    to_python = getattr(value, "to_pydatetime", None)
+    if callable(to_python):
+        try:
+            converted = to_python()
+            if isinstance(converted, datetime):
+                return converted.date().isoformat()
+        except (TypeError, ValueError, OverflowError):
+            pass
+
+    text = str(value).strip()
+    for fmt in ("%m/%d/%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(text, fmt).date().isoformat()
+        except ValueError:
+            pass
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).date().isoformat()
+    except ValueError:
+        # An invalid date must still affect the digest. Prefixing prevents it
+        # from colliding with a valid canonical date if parsing changes later.
+        return f"invalid:{text}"
+
+
+def _cash_digest_amount(value: Any) -> str:
+    if _cash_digest_is_null(value):
+        return ""
+    text = str(value).strip().replace("$", "").replace(",", "")
+    negative_parentheses = text.startswith("(") and text.endswith(")")
+    if negative_parentheses:
+        text = f"-{text[1:-1]}"
+    try:
+        amount = Decimal(text)
+    except InvalidOperation:
+        return f"invalid:{text}"
+    if not amount.is_finite():
+        return f"invalid:{text}"
+    if amount == 0:
+        return "0"
+    return format(amount.normalize(), "f")
+
+
+def _cash_digest_boolean(value: Any) -> str:
+    if _cash_digest_is_null(value):
+        return ""
+    text = str(value).strip().lower()
+    if text in {"true", "t", "yes", "y", "1", "1.0"}:
+        return "1"
+    if text in {"false", "f", "no", "n", "0", "0.0"}:
+        return "0"
+    return f"invalid:{text}"
+
+
+def _cash_digest_identifier(value: Any) -> str:
+    if _cash_digest_is_null(value):
+        return ""
+    return _normalized_identifier(value)
+
+
+def _cash_digest_effective_year(row: Mapping[str, Any]) -> str:
+    """Return the same effective year used by ``process.py``.
+
+    Aggregated rows normally already carry ``year``.  Keeping a date fallback
+    makes the digest helper usable on source-shaped rows too, and mirrors the
+    transaction-date-then-filed-date rule used by the cash calculation.
+    """
+    explicit = _cash_digest_value(row, "year")
+    if not _cash_digest_is_null(explicit):
+        text = str(explicit).strip()
+        try:
+            numeric = Decimal(text)
+        except InvalidOperation as exc:
+            raise ValueError(f"invalid cash-scope year {text!r}") from exc
+        if not numeric.is_finite() or numeric != numeric.to_integral_value():
+            raise ValueError(f"invalid cash-scope year {text!r}")
+        year = str(int(numeric))
+        if not re.fullmatch(r"\d{4}", year):
+            raise ValueError(f"invalid cash-scope year {text!r}")
+        return year
+
+    for key in ("tran_date", "filed_date"):
+        value = _cash_digest_value(row, key)
+        if _cash_digest_is_null(value):
+            continue
+        normalized = _cash_digest_date(value)
+        if not normalized.startswith("invalid:"):
+            year = normalized[:4]
+            if re.fullmatch(r"\d{4}", year):
+                return year
+    raise ValueError("cash-scope row has no valid effective year")
+
+
+def _digest_canonical_cash_rows(encoded_rows: list[str]) -> str:
+    digest = hashlib.sha256(f"{CASH_SCOPE_DIGEST_VERSION}\0".encode("ascii"))
+    for encoded in sorted(encoded_rows):
+        digest.update(encoded.encode("utf-8"))
+        digest.update(b"\0")
+    return f"sha256:{digest.hexdigest()}"
+
+
+def cash_scope_digests(
+    rows,
+    *,
+    cash_excluded_transaction_ids=(),
+) -> tuple[str, dict[str, str]]:
+    """Fingerprint a canonical scope once, both wholly and by effective year.
+
+    Unlike the global shard fingerprint, this digest remains current when an
+    unrelated committee receives a new transaction. It deliberately includes
+    transaction identity, amendment ownership, dates, classification, amount,
+    and the derived undated flag: every input that can change this scope's cash
+    treatment. Annual digests additionally include the certified ORESTAR-
+    absence state for each held row, because that state removes the row from
+    cash without changing the transaction shards.  The full-scope digest stays
+    a pure row fingerprint: it is the bootstrap used to certify that exact
+    absence evidence in the first place. Row order and equivalent
+    source/internal column names do not affect the result.
+    """
+    excluded_ids = {
+        str(value) for value in (cash_excluded_transaction_ids or ())
+    }
+    canonical_rows: list[str] = []
+    rows_by_year: dict[str, list[str]] = {}
+    for row in rows:
+        if not isinstance(row, Mapping):
+            raise TypeError("cash scope rows must be mappings")
+        tran_type = _cash_digest_value(row, "tran_type")
+        sub_type = _cash_digest_value(row, "sub_type")
+        canonical = [
+            _cash_digest_identifier(_cash_digest_value(row, "tran_id")),
+            _cash_digest_identifier(
+                _cash_digest_value(row, "original_id", "original id")
+            ),
+            _cash_digest_identifier(
+                _cash_digest_value(row, "filer_id", "filer id")
+            ),
+            _cash_digest_date(_cash_digest_value(row, "tran_date")),
+            _cash_digest_date(_cash_digest_value(row, "filed_date")),
+            "" if _cash_digest_is_null(tran_type) else str(tran_type).strip().upper(),
+            # Cash classification compares sub_type exactly. Preserve whitespace
+            # and case so every calculation-visible edit changes the digest.
+            "" if _cash_digest_is_null(sub_type) else str(sub_type),
+            _cash_digest_amount(_cash_digest_value(row, "amount")),
+            _cash_digest_boolean(_cash_digest_value(row, "_undated")),
+        ]
+        encoded = json.dumps(
+            canonical, separators=(",", ":"), ensure_ascii=False,
+        )
+        canonical_rows.append(encoded)
+        # process.py applies certified absence with
+        # ``frame["tran_id"].astype(str).isin(absent_ids)``. Mirror that exact
+        # comparison here; normalizing one side more aggressively would claim
+        # cash changed when the calculation itself did not.  Leave ordinary
+        # rows byte-for-byte compatible with the previous annual digest so
+        # existing evidence is invalidated only where this newly represented
+        # state can actually differ.
+        year_encoded = encoded
+        if str(_cash_digest_value(row, "tran_id")) in excluded_ids:
+            year_encoded = json.dumps(
+                [canonical, "certified_orestar_absent"],
+                separators=(",", ":"),
+                ensure_ascii=False,
+            )
+        rows_by_year.setdefault(_cash_digest_effective_year(row), []).append(
+            year_encoded
+        )
+
+    return (
+        _digest_canonical_cash_rows(canonical_rows),
+        {
+            year: _digest_canonical_cash_rows(year_rows)
+            for year, year_rows in sorted(rows_by_year.items())
+        },
+    )
+
+
+def cash_scope_digest(rows) -> str:
+    """Fingerprint all cash-relevant rows for one canonical committee scope."""
+    return cash_scope_digests(rows)[0]
+
+
+# A source year map records only years containing transactions.  An absent key
+# therefore has one unambiguous meaning: this app snapshot held zero rows in
+# that year.  Persisting the canonical empty digest avoids a 2006-current map
+# full of identical values for every one of thousands of committees.
+EMPTY_CASH_SCOPE_DIGEST = _digest_canonical_cash_rows([])
+
+
+def year_transaction_digest_map_is_valid(value: Any) -> bool:
+    """Whether a compact source year-digest map follows the v2 contract."""
+    return isinstance(value, dict) and all(
+        isinstance(year, str)
+        and re.fullmatch(r"\d{4}", year) is not None
+        and exact_evidence_identifier_is_valid(digest)
+        for year, digest in value.items()
+    )
+
+
+def source_year_transaction_digest(record: Mapping[str, Any], year: Any) -> str | None:
+    """Resolve one source scope's year digest, including the empty-year case."""
+    year_digests = record.get("app_year_transaction_digests")
+    if not year_transaction_digest_map_is_valid(year_digests):
+        return None
+    try:
+        numeric = Decimal(str(year).strip())
+    except InvalidOperation:
+        return None
+    if not numeric.is_finite() or numeric != numeric.to_integral_value():
+        return None
+    year_key = str(int(numeric))
+    if re.fullmatch(r"\d{4}", year_key) is None:
+        return None
+    return year_digests.get(year_key, EMPTY_CASH_SCOPE_DIGEST)
 
 
 def _normalized_identifier(value: Any) -> str:
@@ -394,12 +647,28 @@ def build_source(
         key = scope_key(ids)
         if not key:
             continue
+        scope_digest = raw.get("app_scope_transaction_digest")
+        raw_year_digests = raw.get("app_year_transaction_digests")
+        year_digests = (
+            dict(sorted(raw_year_digests.items()))
+            if year_transaction_digest_map_is_valid(raw_year_digests)
+            else None
+        )
         record = {
             "filer_ids": ids,
             "name": str(raw.get("name") or ""),
             "slug": str(raw.get("slug") or ""),
             "cash_on_hand": round(float(raw.get("cash_on_hand") or 0.0), 2),
             "tran_count": int(raw.get("tran_count") or 0),
+            "app_scope_transaction_digest": (
+                scope_digest
+                if exact_evidence_identifier_is_valid(scope_digest)
+                else None
+            ),
+            # Compact by design: missing year keys mean the app snapshot held
+            # zero transactions in that year and resolve to the canonical empty
+            # digest in ``source_year_transaction_digest``.
+            "app_year_transaction_digests": year_digests,
         }
         previous = records.get(key)
         if previous is None:
@@ -486,6 +755,14 @@ def make_summary_capture(
     key, record = match
     ids = sorted({normalize_filer_id(value) for value in record.get("filer_ids", [])
                   if normalize_filer_id(value)})
+    scope_digest = record.get("app_scope_transaction_digest")
+    if not exact_evidence_identifier_is_valid(scope_digest):
+        capture["reason"] = "app_snapshot_scope_digest_missing"
+        return capture
+    year_digest = source_year_transaction_digest(record, year)
+    if not exact_evidence_identifier_is_valid(year_digest):
+        capture["reason"] = "app_snapshot_year_digest_map_missing"
+        return capture
 
     capture.update({
         "status": "paired",
@@ -493,6 +770,11 @@ def make_summary_capture(
         "app_scope_filer_ids": ids,
         "app_cash_on_hand": round(float(record.get("cash_on_hand") or 0.0), 2),
         "app_tran_count": int(record.get("tran_count") or 0),
+        "app_scope_transaction_digest": scope_digest,
+        # Only this page's year is persisted in the capture.  The full compact
+        # source map stays in balance_snapshot_source.json and is used transiently
+        # while freshly crawled annual rows are staged.
+        "app_year_transaction_digest": year_digest,
         "app_transaction_snapshot_id": current_transaction_id,
         "app_snapshot_created_at": source.get("created_at"),
         "calculation_version": source.get("calculation_version"),
@@ -505,6 +787,7 @@ def paired_comparison(
     yearly_cache: dict,
     *,
     current_transaction_id: str | None = None,
+    current_scope_digest: str | None = None,
 ) -> dict:
     """Return one authoritative comparison for a canonical filer scope.
 
@@ -546,6 +829,12 @@ def paired_comparison(
         for c in captures
     }
     calculation_versions = {str(c.get("calculation_version") or "") for c in captures}
+    scope_digests = {
+        c.get("app_scope_transaction_digest") for c in captures
+        if exact_evidence_identifier_is_valid(
+            c.get("app_scope_transaction_digest")
+        )
+    }
     scope_capture_ids = {str(c.get("scope_capture_id") or "") for c in captures}
     app_balances = {round(float(c.get("app_cash_on_hand") or 0.0), 2) for c in captures}
     app_counts = {int(c.get("app_tran_count") or 0) for c in captures}
@@ -553,6 +842,10 @@ def paired_comparison(
     if (len(transaction_ids) != 1 or "" in transaction_ids
             or scope_keys != {scope} or scope_members != {scope}
             or calculation_versions != {CALCULATION_VERSION}
+            or len(scope_digests) != 1
+            or any(not exact_evidence_identifier_is_valid(
+                c.get("app_scope_transaction_digest")
+            ) for c in captures)
             or (len(ids) > 1
                 and (len(scope_capture_ids) != 1 or "" in scope_capture_ids))
             or len(app_balances) != 1 or len(app_counts) != 1):
@@ -563,6 +856,16 @@ def paired_comparison(
                              for c in captures), 2)
     captured = [float(c.get("captured_at") or 0.0) for c in captures]
     transaction_id = next(iter(transaction_ids))
+    captured_scope_digest = next(iter(scope_digests))
+    scope_digest_matches = bool(
+        exact_evidence_identifier_is_valid(current_scope_digest)
+        and current_scope_digest == captured_scope_digest
+    )
+    app_data_changed = (
+        not scope_digest_matches
+        if current_scope_digest is not None
+        else bool(current_transaction_id and transaction_id != current_transaction_id)
+    )
     return {
         "status": "paired",
         "basis": "paired_collection_snapshot",
@@ -574,9 +877,10 @@ def paired_comparison(
         "app_tran_count": next(iter(app_counts)),
         "app_transaction_snapshot_id": transaction_id,
         "current_transaction_snapshot_id": current_transaction_id,
-        "app_data_changed_since_capture": bool(
-            current_transaction_id and transaction_id != current_transaction_id
-        ),
+        "app_scope_transaction_digest": captured_scope_digest,
+        "current_scope_transaction_digest": current_scope_digest,
+        "scope_digest_matches_capture": scope_digest_matches,
+        "app_data_changed_since_capture": app_data_changed,
         "orestar_data_changed_since_capture": bool(newer_unpaired_attempts),
         "latest_unpaired_capture_at": (
             max(float(a.get("captured_at") or 0) for a in newer_unpaired_attempts)

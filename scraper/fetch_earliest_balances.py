@@ -39,10 +39,13 @@ from balance_snapshot import (
     CAPTURE_KEY,
     FORMAT_VERSION,
     SOURCE_FILENAME,
+    exact_evidence_identifier_is_valid,
     make_summary_capture,
     normalize_filer_id,
     scope_key,
+    source_year_transaction_digest,
     transaction_snapshot_id,
+    year_transaction_digest_map_is_valid,
 )
 
 log = logging.getLogger(__name__)
@@ -449,6 +452,12 @@ def _eligible_source_scopes(source: dict | None) -> dict[str, tuple[str, list[st
             # unique sibling would expand back into an ID make_summary_capture
             # can never pair and the sweep would retry forever.
             if (record.get("status") == "ambiguous"
+                    or not exact_evidence_identifier_is_valid(
+                        record.get("app_scope_transaction_digest")
+                    )
+                    or not year_transaction_digest_map_is_valid(
+                        record.get("app_year_transaction_digests")
+                    )
                     or any(len(occurrences.get(member, [])) != 1
                            for member in members)):
                 continue
@@ -526,7 +535,11 @@ def _begin_or_resume_sweep(
     return cutoff, state
 
 
-def _current_capture_needs_refresh(entry: dict | None, cutoff: float) -> bool:
+def _current_capture_needs_refresh(
+    entry: dict | None,
+    cutoff: float,
+    source_record: dict | None = None,
+) -> bool:
     """Whether a current-page capture can satisfy this sweep generation."""
     capture = (entry or {}).get(CAPTURE_KEY) or {}
     if not capture.get("captured_at"):
@@ -536,11 +549,97 @@ def _current_capture_needs_refresh(entry: dict | None, cutoff: float) -> bool:
         return True
     if capture.get("status") != "paired":
         return True
+    if not exact_evidence_identifier_is_valid(
+        capture.get("app_scope_transaction_digest")
+    ):
+        return True
+    if not exact_evidence_identifier_is_valid(
+        capture.get("app_year_transaction_digest")
+    ):
+        return True
+    if source_record is not None:
+        if not isinstance(source_record, dict):
+            return True
+        source_digest = source_record.get("app_scope_transaction_digest")
+        if (not exact_evidence_identifier_is_valid(source_digest)
+                or source_digest != capture.get("app_scope_transaction_digest")):
+            return True
+        source_year_digest = source_year_transaction_digest(
+            source_record, capture.get("orestar_year")
+        )
+        if (not exact_evidence_identifier_is_valid(source_year_digest)
+                or source_year_digest
+                != capture.get("app_year_transaction_digest")):
+            return True
+        try:
+            source_cash = round(float(source_record["cash_on_hand"]), 2)
+            captured_cash = round(float(capture["app_cash_on_hand"]), 2)
+            source_count = int(source_record["tran_count"])
+            captured_count = int(capture["app_tran_count"])
+        except (KeyError, TypeError, ValueError, OverflowError):
+            return True
+        if source_cash != captured_cash or source_count != captured_count:
+            return True
     attempt = (entry or {}).get("comparison_capture_attempt") or {}
     if (attempt and float(attempt.get("captured_at") or 0.0)
             > float(capture.get("captured_at") or 0.0)):
         return True
     return float(capture.get("captured_at") or 0) < cutoff
+
+
+def _historical_year_provenance_needs_refresh(
+    entry: dict | None,
+    source_record: dict | None = None,
+) -> bool:
+    """Whether any cached annual row lacks current exact app-year provenance.
+
+    Legacy annual rows can be arbitrarily recent while still being unsafe for
+    comparison: their timestamp does not identify the transaction rows they
+    were read against.  Historical sweeps must replace that legacy state even
+    when the ordinary age cutoff would skip it.  Current-only sweeps
+    deliberately do not call this predicate, because refreshing one current
+    page cannot repair older annual rows.  When a current source scope is
+    available, a previously proven row must also match that source year's
+    digest: late-filed historical transactions otherwise leave a recent cache
+    looking current solely because its provenance fields are populated.
+    """
+    # Provenance can only be repaired from a current, eligible app source.
+    # Returning True without one makes a chained historical sweep select the
+    # same legacy rows forever: the crawl can refresh their source values, but
+    # has no digest with which to stamp them.  Ordinary age, missing-cache and
+    # incomplete-opening criteria remain independent callers of this helper.
+    if (
+        not isinstance(source_record, dict)
+        or source_record.get("status") == "ambiguous"
+        or not exact_evidence_identifier_is_valid(
+            source_record.get("app_scope_transaction_digest")
+        )
+        or not year_transaction_digest_map_is_valid(
+            source_record.get("app_year_transaction_digests")
+        )
+    ):
+        return False
+
+    years = (entry or {}).get("years") or {}
+    if not isinstance(years, dict):
+        return True
+    for year, row in years.items():
+        if (
+            not isinstance(row, dict)
+            or not exact_evidence_identifier_is_valid(
+                row.get("app_year_transaction_digest")
+            )
+            or row.get("calculation_version") != CALCULATION_VERSION
+            or not exact_evidence_identifier_is_valid(row.get("scope_capture_id"))
+        ):
+            return True
+        source_digest = source_year_transaction_digest(source_record, year)
+        if (
+            not exact_evidence_identifier_is_valid(source_digest)
+            or source_digest != row.get("app_year_transaction_digest")
+        ):
+            return True
+    return False
 
 
 def _merge_earliest_result(previous: dict | None, attempt: dict) -> dict:
@@ -587,6 +686,7 @@ def _commit_scope_captures(
     filer_ids: list[str],
     staged: dict[str, dict],
     yearly_cache: dict,
+    fresh_year_digests: dict[str, dict[str, str | None]] | None = None,
 ) -> bool:
     """Atomically promote one canonical scope's comparison captures.
 
@@ -603,7 +703,38 @@ def _commit_scope_captures(
                 if normalize_filer_id(fid) and isinstance(value, dict)}
     expected_scope = scope_key(members)
 
-    compatible = bool(members and set(captures) == set(members))
+    # A freshly scraped annual row is useful historical data even when another
+    # physical member of the canonical scope fails. It is not, however, paired
+    # app evidence until the complete scope promotes below. Clear any copied or
+    # stale proof before evaluating the staged captures, then stamp only after
+    # a successful atomic promotion.
+    provenance_keys = (
+        "app_scope_transaction_digest",
+        "app_year_transaction_digest",
+        "calculation_version",
+        "scope_capture_id",
+    )
+    fresh_rows: list[tuple[dict, str | None]] = []
+    fresh_provenance_valid = True
+    for fid in members:
+        entry = yearly_cache.get(fid) or {}
+        years = entry.get("years") or {}
+        for year, year_digest in (fresh_year_digests or {}).get(fid, {}).items():
+            row = years.get(str(year))
+            if not isinstance(row, dict):
+                fresh_provenance_valid = False
+                continue
+            for key in provenance_keys:
+                row.pop(key, None)
+            if not exact_evidence_identifier_is_valid(year_digest):
+                fresh_provenance_valid = False
+            fresh_rows.append((row, year_digest))
+
+    compatible = bool(
+        members
+        and set(captures) == set(members)
+        and fresh_provenance_valid
+    )
     if compatible:
         values = list(captures.values())
         compatible = bool(
@@ -619,6 +750,10 @@ def _commit_scope_captures(
             and len({str(c.get("calculation_version") or "") for c in values}) == 1
             and {str(c.get("calculation_version") or "") for c in values}
                 == {CALCULATION_VERSION}
+            and all(exact_evidence_identifier_is_valid(
+                c.get("app_scope_transaction_digest")
+            ) for c in values)
+            and len({c.get("app_scope_transaction_digest") for c in values}) == 1
             and len({round(float(c.get("app_cash_on_hand") or 0.0), 2)
                      for c in values}) == 1
             and len({int(c.get("app_tran_count") or 0) for c in values}) == 1
@@ -641,6 +776,12 @@ def _commit_scope_captures(
             promoted["scope_capture_id"] = capture_id
             entry[CAPTURE_KEY] = promoted
             entry.pop("comparison_capture_attempt", None)
+        for row, year_digest in fresh_rows:
+            row.update({
+                "app_year_transaction_digest": year_digest,
+                "calculation_version": values[0]["calculation_version"],
+                "scope_capture_id": capture_id,
+            })
         return True
 
     if not captures:
@@ -759,6 +900,11 @@ def main():
         except Exception as exc:
             log.warning("Could not load app balance snapshot source: %s", exc)
     current_transaction_id = transaction_snapshot_id(TRANSACTION_DIR)
+    eligible_source_scopes = _eligible_source_scopes(snapshot_source)
+    source_records_by_filer = {
+        fid: (snapshot_source.get("scopes") or {}).get(key)
+        for fid, (key, _members) in eligible_source_scopes.items()
+    } if snapshot_source else {}
     source_ready = _snapshot_source_ready(snapshot_source, current_transaction_id)
     if not snapshot_source:
         log.warning("No app balance snapshot source; new summaries will be unpaired")
@@ -772,7 +918,7 @@ def main():
     elif snapshot_source.get("transaction_snapshot_id") != current_transaction_id:
         log.warning("App balance snapshot source does not match the transaction shards; "
                     "new summaries will be unpaired")
-    elif not _eligible_source_scopes(snapshot_source):
+    elif not eligible_source_scopes:
         log.warning("App balance snapshot source has no unambiguous filer scopes; "
                     "new summaries will be unpaired")
 
@@ -787,7 +933,7 @@ def main():
         sys.exit(1)
 
     if args.current_only and not args.filer_ids:
-        eligible_ids = set(_eligible_source_scopes(snapshot_source))
+        eligible_ids = set(eligible_source_scopes)
         skipped = len(set(filer_ids) - eligible_ids)
         if skipped:
             log.warning("Skipping %d filer IDs that do not map to exactly one app scope", skipped)
@@ -816,7 +962,11 @@ def main():
     elif args.current_only:
         ids_to_fetch = [
             fid for fid in filer_ids
-            if _current_capture_needs_refresh(yearly_cache.get(fid), cutoff)
+            if (fid not in source_records_by_filer
+                or _current_capture_needs_refresh(
+                    yearly_cache.get(fid), cutoff,
+                    source_record=source_records_by_filer[fid],
+                ))
         ]
     else:
         ids_to_fetch = [
@@ -825,6 +975,20 @@ def main():
             or cache[fid].get("ts", 0) < cutoff
             or fid not in yearly_cache
             or not yearly_cache[fid].get("years")
+            # A legacy row's cache timestamp cannot prove which transaction
+            # year it described. Only a historical crawl can backfill exact
+            # per-year provenance; current-only intentionally ignores these
+            # older rows so the cheap daily/weekly sweep cannot loop on them.
+            or _historical_year_provenance_needs_refresh(
+                yearly_cache.get(fid),
+                # Only a source proven to describe the transaction shards in
+                # this checkout can establish that cached year provenance is
+                # stale.  A historical crawl is allowed to run without such a
+                # source, but must not churn on comparisons it cannot re-pair.
+                source_record=(
+                    source_records_by_filer.get(fid) if source_ready else None
+                ),
+            )
             # An entry that never reached the first statement holds a
             # mid-history balance, not an opening one. Retry those regardless
             # of age — freshness is not what is wrong with them.
@@ -925,6 +1089,7 @@ def main():
                          args.max_minutes, done)
                 break
             staged_captures: dict[str, dict] = {}
+            fresh_year_digests: dict[str, dict[str, str | None]] = {}
             group_results: dict[str, dict | None] = {}
             group_had_data = False
             for fid in group:
@@ -948,6 +1113,14 @@ def main():
                         if isinstance(old_summary, dict):
                             old_summary.setdefault("scrape_ts", previous_ts)
                     entry["years"].update(yearly_data)
+                    source_record = source_records_by_filer.get(fid)
+                    fresh_year_digests[fid] = {
+                        str(year): (
+                            source_year_transaction_digest(source_record, year)
+                            if isinstance(source_record, dict) else None
+                        )
+                        for year in yearly_data
+                    }
                     entry["ts"] = current_capture["captured_at"]
                     staged_captures[fid] = make_summary_capture(
                         fid,
@@ -963,7 +1136,7 @@ def main():
                     time.sleep(FILER_DELAY)
 
             scope_paired = _commit_scope_captures(
-                group, staged_captures, yearly_cache
+                group, staged_captures, yearly_cache, fresh_year_digests
             )
             if args.current_only:
                 if scope_paired:

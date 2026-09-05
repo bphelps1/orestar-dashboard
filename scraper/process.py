@@ -27,8 +27,11 @@ import pandas as pd
 from rapidfuzz import fuzz, process as rfuzz_process
 
 from balance_snapshot import (
+    CALCULATION_VERSION,
+    EMPTY_CASH_SCOPE_DIGEST,
     SOURCE_FILENAME,
     build_source as build_balance_snapshot_source,
+    cash_scope_digests,
     evidence_is_current,
     exact_coverage_result_shape_is_valid,
     exact_evidence_identifier_is_valid,
@@ -434,6 +437,28 @@ def _loan_fields_trustworthy(summary: dict | None, fallback: float = 0.0) -> boo
             return False
     return _summary_scrape_ts(summary, fallback) >= _LOAN_FIELD_TRUSTWORTHY_FROM
 
+
+def _summary_cash_fields_match_year(
+    summary: dict | None,
+    current_year_digest: str | None,
+    comparison_available: bool,
+) -> bool:
+    """Whether one annual row was read against this exact transaction year.
+
+    A current-page capture is profile-wide evidence only for the page it read.
+    Historical annual rows keep independent provenance so a fresh 2026 page
+    cannot bless a cached 2025 loan figure after a late 2025 backfill.  A new
+    2026 filing likewise must not invalidate a proven 2006 treatment.
+    """
+    row = summary or {}
+    return bool(
+        comparison_available
+        and exact_evidence_identifier_is_valid(current_year_digest)
+        and row.get("app_year_transaction_digest") == current_year_digest
+        and row.get("calculation_version") == CALCULATION_VERSION
+        and exact_evidence_identifier_is_valid(row.get("scope_capture_id"))
+    )
+
 _SUMMABLE = ("ending_cash_balance", "beginning_balance", "contributions",
              "expenditures", "other_receipts", "other_disbursements",
              "balance_adjustments", "inkind_contributions",
@@ -521,6 +546,44 @@ def _combine_scope_yearly_summaries(yearlies: list[dict]) -> dict:
                 field_versions.append(0)
         base["summary_field_version"] = max(field_versions)
         base["summary_field_version_min"] = min(field_versions)
+        # Per-year cash provenance is atomic across a canonical multi-ID scope.
+        # A partial crawl may update one physical committee while preserving a
+        # sibling's older row; never let the first row's copied metadata make
+        # that mixed aggregate look paired.
+        year_digests = {
+            row.get("app_year_transaction_digest") for row in rows
+            if exact_evidence_identifier_is_valid(
+                row.get("app_year_transaction_digest")
+            )
+        }
+        calculation_versions = {
+            str(row.get("calculation_version") or "") for row in rows
+        }
+        scope_capture_ids = {
+            row.get("scope_capture_id") for row in rows
+            if exact_evidence_identifier_is_valid(row.get("scope_capture_id"))
+        }
+        provenance_is_common = bool(
+            len(year_digests) == 1
+            and len(calculation_versions) == 1
+            and "" not in calculation_versions
+            and len(scope_capture_ids) == 1
+            and all(exact_evidence_identifier_is_valid(
+                row.get("app_year_transaction_digest")
+            ) and exact_evidence_identifier_is_valid(
+                row.get("scope_capture_id")
+            ) for row in rows)
+        )
+        for key in (
+            "app_year_transaction_digest",
+            "calculation_version",
+            "scope_capture_id",
+        ):
+            base.pop(key, None)
+        if provenance_is_common:
+            base["app_year_transaction_digest"] = next(iter(year_digests))
+            base["calculation_version"] = next(iter(calculation_versions))
+            base["scope_capture_id"] = next(iter(scope_capture_ids))
         combined[year] = base
     return combined
 
@@ -1879,6 +1942,8 @@ def aggregate_filers(
     _name_to_fid: dict[str, str] = {}
     _orestar_data: dict[str, dict] = {}  # canonical name → full summary dict
     _comparison_by_name: dict[str, dict] = {}
+    _current_scope_digests: dict[str, str] = {}
+    _current_year_digests: dict[str, dict[str, str]] = {}
     # Loaded here, ahead of the first use. The balance comparison below now
     # derives from this file, so reading it later left _yearly_summaries
     # unbound and killed the whole run:
@@ -1916,6 +1981,18 @@ def aggregate_filers(
         )
         # Kept for callers that only need a representative id.
         _name_to_fid = {n: ids[-1] for n, ids in _name_to_fids.items()}
+        # A global shard fingerprint proves which complete checkout produced an
+        # aggregate, but it becomes stale for every committee when any one
+        # committee changes.  Bind summary-derived cash treatment to the exact
+        # transaction rows in its canonical scope instead.  This catches
+        # amount/status/date edits as well as added rows, without making an
+        # unrelated daily filing invalidate all weekly summary captures.
+        for name in _name_to_fids:
+            _scope_digest, _year_digests = cash_scope_digests(
+                get_group(all_groups, name).to_dict(orient="records")
+            )
+            _current_scope_digests[name] = _scope_digest
+            _current_year_digests[name] = _year_digests
         # Loaded once here rather than per filer: 7,263 committees would
         # otherwise re-read and re-parse the same file.
         global _ROW_COMPLETE, _ORESTAR_ABSENT
@@ -1946,6 +2023,7 @@ def aggregate_filers(
                 fids,
                 _yearly_summaries,
                 current_transaction_id=_transaction_snapshot_id,
+                current_scope_digest=_current_scope_digests.get(name),
             )
             for name, fids in _name_to_fids.items()
         }
@@ -1968,6 +2046,23 @@ def aggregate_filers(
                 "ORESTAR-absence evidence could not be certified: %s",
                 _evidence_error,
             )
+        # The full-scope digest above must stay independent of certified
+        # absence: it is the immutable row fingerprint used to certify the
+        # exact diff, so making it depend on the verdict would create a cycle.
+        # Annual provenance is different. A certified nonreturning row is
+        # omitted from cash while remaining in the shards, so its year digest
+        # must include that exclusion state. The no-exclusion digests computed
+        # above are already correct; recompute only scopes whose certified
+        # state changes at least one held row.
+        for name, fids in _name_to_fids.items():
+            _absent_ids = _orestar_absent_for_filers(fids)
+            if not _absent_ids:
+                continue
+            _unused_scope_digest, _year_digests = cash_scope_digests(
+                get_group(all_groups, name).to_dict(orient="records"),
+                cash_excluded_transaction_ids=_absent_ids,
+            )
+            _current_year_digests[name] = _year_digests
         # Derived from the yearly summaries rather than scraped again.
         #
         # Two caches were reading the SAME ORESTAR page. scrape_account_summaries
@@ -2125,8 +2220,31 @@ def aggregate_filers(
                 _scope_fids,
                 _yearly_summaries,
                 current_transaction_id=_transaction_snapshot_id,
+                current_scope_digest=_current_scope_digests.get(name),
             )
         )
+        # Parser freshness only says a loan field was read correctly.  It does
+        # not prove that a weekly account summary still describes today's daily
+        # transaction rows.  Any operation that changes cash using annual
+        # summary fields must therefore share this stronger, scope-local gate.
+        _summary_pair_available = bool(
+            _comparison.get("status") == "paired"
+            and not _comparison.get("orestar_data_changed_since_capture")
+        )
+        _summary_scope_current = bool(
+            _summary_pair_available
+            and _comparison.get("scope_digest_matches_capture") is True
+        )
+        _current_year_digests_here = _current_year_digests.get(name, {})
+
+        def _digest_for_year(value) -> str | None:
+            try:
+                year = str(int(value))
+            except (TypeError, ValueError):
+                return None
+            return _current_year_digests_here.get(
+                year, EMPTY_CASH_SCOPE_DIGEST,
+            )
         filer_contrib = get_group(contrib_groups, name)
         filer_inkind  = get_group(inkind_groups,  name)
         filer_expend  = get_group(expend_groups,  name)
@@ -2336,13 +2454,24 @@ def aggregate_filers(
         # reports a partial amount — it is all or nothing.
         _or_for_coh = _dated(filer_or)  # All type OR, minus anything undated
         _exempt_dropped: dict[str, float] = {}
+        _summary_treatment_pending_years: set[str] = set()
         if (not _or_for_coh.empty and "year" in _or_for_coh.columns
                 and "sub_type" in _or_for_coh.columns):
             _uncounted_years: set[int] = set()
-            for _yr_s, _ty in (_name_to_yearly.get(name, {}) or {}).items():
-                if not str(_yr_s).isdigit() or not isinstance(_ty, dict):
-                    continue
-                if not _loan_fields_trustworthy(_ty):
+            _exempt_years = {
+                str(int(year)) for year in _or_for_coh.loc[
+                    _or_for_coh["sub_type"] == "Loan Received (Exempt)",
+                    "year",
+                ].dropna()
+            }
+            for _yr_s in sorted(_exempt_years):
+                _ty = (_name_to_yearly.get(name, {}) or {}).get(_yr_s)
+                if (not _summary_cash_fields_match_year(
+                        _ty,
+                        _digest_for_year(_yr_s),
+                        _summary_pair_available,
+                    ) or not _loan_fields_trustworthy(_ty)):
+                    _summary_treatment_pending_years.add(_yr_s)
                     continue
                 if any(_ty.get(_key) is None for _key in (
                     "loans_received_exempt", "loan_payments_exempt",
@@ -2350,6 +2479,7 @@ def aggregate_filers(
                     # Missing is not a reported zero. Older parsers collapsed
                     # the two and could consequently delete a real exempt-loan
                     # transaction from cash-on-hand.
+                    _summary_treatment_pending_years.add(_yr_s)
                     continue
                 def _amt_of(_k, _row=_ty):
                     return float(_row.get(_k) or 0.0)
@@ -2365,6 +2495,7 @@ def aggregate_filers(
                 _parsed = (abs(_amt_of("beginning_balance")) + abs(_amt_of("ending_cash_balance"))
                            + abs(_amt_of("expenditures")) + abs(_amt_of("other_disbursements")))
                 if _parsed <= 0.0:
+                    _summary_treatment_pending_years.add(_yr_s)
                     continue                      # cannot tell a parsed record from a blank one
                 _uncounted_years.add(int(_yr_s))
             if _uncounted_years:
@@ -2513,10 +2644,11 @@ def aggregate_filers(
         # agrees with our transaction rows 738 times and disagrees 123, almost
         # all of them in 2006 (65, $2,228,906).
         #
-        # Guarded on scrape freshness, because before the #90 parser fix this
-        # field read $0.00 on EVERY record — substituting a false zero would
-        # wipe genuine loans from 33,889 committee-years. Where the summary
-        # predates the fix, our own figure stands.
+        # Guarded on parser freshness and, independently, on an exact paired
+        # scope digest. Before the #90 parser fix this field read $0.00 on every
+        # record; after it, a correctly parsed weekly figure can still be stale
+        # once daily transaction collection advances. In either case our raw
+        # current transaction figure stands.
         _sum_ts = float((orestar_info or {}).get("ts") or 0)
         _our_loans_by_year = {}
         if not _c_for_coh.empty and "year" in _c_for_coh.columns:
@@ -2526,15 +2658,22 @@ def aggregate_filers(
             if not _lr.empty:
                 _our_loans_by_year = _lr.groupby("year")["amount"].sum().to_dict()
         _their_years = _name_to_yearly.get(name, {})
-        for _yr_s in list(yearly_nets):
+        for _yr, _ours_value in _our_loans_by_year.items():
+            _yr_s = str(int(_yr))
             _ty = _their_years.get(_yr_s)
-            if not _ty or not _loan_fields_trustworthy(_ty, _sum_ts):
+            if (not _summary_cash_fields_match_year(
+                    _ty,
+                    _digest_for_year(_yr_s),
+                    _summary_pair_available,
+                ) or not _loan_fields_trustworthy(_ty, _sum_ts)):
+                _summary_treatment_pending_years.add(_yr_s)
                 continue
             _theirs = _ty.get("loans_received")
             if _theirs is None:
+                _summary_treatment_pending_years.add(_yr_s)
                 continue
             try:
-                _ours = float(_our_loans_by_year.get(int(_yr_s), 0.0))
+                _ours = float(_ours_value)
             except (TypeError, ValueError):
                 continue
             _theirs = float(_theirs)
@@ -2743,7 +2882,8 @@ def aggregate_filers(
                 )
                 for _fid in _scope_fids
             ]
-            if (_closures and len(_closures) == len(_scope_fids)
+            if (_summary_scope_current
+                    and _closures and len(_closures) == len(_scope_fids)
                     and all(item[0] for item in _closures)):
                 is_closed = True
                 closed_since = max(int(item[1]) for item in _closures)
@@ -2787,12 +2927,20 @@ def aggregate_filers(
             # is the useful signal; otherwise one filing would label all 7,000
             # paired committees as changed.
             _comparison["app_data_changed_since_capture"] = bool(
-                abs(_comparison["app_balance_change_since_capture"]) > 0.01
+                _comparison.get("scope_digest_matches_capture") is not True
+                or abs(_comparison["app_balance_change_since_capture"]) > 0.01
                 or _comparison["tran_count_change_since_capture"] != 0
+            )
+            _comparison["annual_summary_refresh_needed"] = bool(
+                _summary_treatment_pending_years
+            )
+            _comparison["annual_summary_refresh_years"] = sorted(
+                _summary_treatment_pending_years
             )
             _comparison["actionable"] = bool(
                 not _comparison["app_data_changed_since_capture"]
                 and not _comparison.get("orestar_data_changed_since_capture")
+                and not _summary_treatment_pending_years
                 and not is_closed
             )
             if is_closed:
@@ -2801,10 +2949,13 @@ def aggregate_filers(
                 _comparison["actionability_reason"] = "newer_summary_was_not_paired"
             elif _comparison["app_data_changed_since_capture"]:
                 _comparison["actionability_reason"] = "app_state_changed_since_capture"
+            elif _summary_treatment_pending_years:
+                _comparison["actionability_reason"] = "annual_summary_years_unpaired"
 
-        # Per-year discrepancy tracking: compare our rolling calculation
-        # against ORESTAR's yearly data — both ending balance AND line items
-        # (contributions, expenditures, other receipts, other disbursements).
+        # Per-year comparison context: retain raw rolled balances and line
+        # items, but mark only same-year activity/movement as current when its
+        # annual page shares the exact year digest. Rolled begin/end positions
+        # also depend on every prior year and remain non-diagnostic here.
         orestar_yearly = _name_to_yearly.get(name, {})
         yearly_discrepancies: dict[str, dict] = {}
 
@@ -2836,7 +2987,11 @@ def aggregate_filers(
         _their_yrs_cmp = _name_to_yearly.get(name, {})
         for _y, _amt in (_yearly_loans or {}).items():
             _ty = _their_yrs_cmp.get(str(int(_y)))
-            if (not _ty or _ty.get("loans_received") is None
+            if (not _summary_cash_fields_match_year(
+                    _ty,
+                    _digest_for_year(_y),
+                    _summary_pair_available,
+                ) or _ty.get("loans_received") is None
                     or not _loan_fields_trustworthy(_ty, _sum_ts)):
                 continue
             _amt = float(_amt)
@@ -2860,6 +3015,11 @@ def aggregate_filers(
                     continue
 
                 yr_int = int(yr_s) if yr_s.isdigit() else None
+                _year_pair_current = _summary_cash_fields_match_year(
+                    yr_orestar,
+                    _digest_for_year(yr_s),
+                    _summary_pair_available,
+                )
                 our_begin = beginning_balances.get(yr_s, 0.0)
                 # Contributions on the same basis as the balance and the stat
                 # card: loan principal counted the way ORESTAR counts it.
@@ -3009,10 +3169,14 @@ def aggregate_filers(
                                           if yr_orestar.get("loans_received") is not None else None)
                 loan_gap = (round(our_loans_received - orestar_loans_received, 2)
                             if orestar_loans_received is not None else None)
-                orestar_omits_loans = bool(
-                    loan_gap is not None and abs(loan_gap) > 1.0
-                    and delta_movement is not None
-                    and abs(abs(loan_gap) - abs(delta_movement)) <= max(1.0, abs(loan_gap) * 0.05)
+                orestar_omits_loans = (
+                    bool(
+                        loan_gap is not None and abs(loan_gap) > 1.0
+                        and delta_movement is not None
+                        and abs(abs(loan_gap) - abs(delta_movement))
+                        <= max(1.0, abs(loan_gap) * 0.05)
+                    )
+                    if _year_pair_current else None
                 )
 
                 attribution_artifact = False
@@ -3026,9 +3190,18 @@ def aggregate_filers(
                 # rather than twenty reconciled ones and one outstanding. The
                 # years that agree are the reassurance — they are what says the
                 # calculation is sound where it is not being questioned.
-                deltas = [d for d in [delta_c, delta_e, delta_or, delta_od, delta_end,
-                                      delta_beg, delta_movement] if d is not None]
-                reconciles = not any(abs(d) > 0.01 for d in deltas)
+                # Same-year provenance certifies annual activity, not the
+                # rolled opening/ending position, which also depends on every
+                # prior year and on the separately scraped opening anchor.
+                deltas = [
+                    d for d in (
+                        delta_c, delta_e, delta_or, delta_od, delta_movement,
+                    ) if d is not None
+                ]
+                reconciles = (
+                    not any(abs(d) > 0.01 for d in deltas)
+                    if _year_pair_current else None
+                )
                 # Completeness is PERISHABLE, and this treated it as permanent.
                 #
                 # The survey asks ORESTAR how many records it holds on a given
@@ -3058,21 +3231,23 @@ def aggregate_filers(
                 # same set. One representative committee cannot certify an
                 # aggregate containing several committees.
                 _year_summary_ts = float(yr_orestar.get("scrape_ts") or _sum_ts)
-                _rows_complete_here = _aggregate_row_verdict(
-                    _name_to_fids.get(name, []),
-                    _year_summary_ts,
-                    transaction_id=_transaction_snapshot_id,
+                _rows_complete_here = (
+                    _aggregate_row_verdict(
+                        _name_to_fids.get(name, []),
+                        _year_summary_ts,
+                        transaction_id=_transaction_snapshot_id,
+                    )
+                    if _year_pair_current else None
                 )
-                # A line-item claim also needs a matched app/summary snapshot.
-                # Filing dates cannot prove that match (same-day and backdated
-                # collection are both common), so withdraw the attribution if
-                # this scope has no pair or its calculated state has changed.
-                if (_rows_complete_here
-                        and (_comparison.get("status") != "paired"
-                             or _comparison.get("app_data_changed_since_capture"))):
-                    _rows_complete_here = None
+                # A line-item claim also needs this annual page paired to the
+                # exact rows currently assigned to its year. Filing dates and
+                # a fresh page for some other year cannot prove that match.
                 if True:
                     yearly_discrepancies[yr_s] = {
+                        # Raw source/app values remain useful audit context, but
+                        # no agreement, mismatch, or causal diagnosis is current
+                        # unless this annual page shares the exact year digest.
+                        "comparison_current": _year_pair_current,
                         # True when every line item agrees, so the UI can show
                         # a reconciled year as confirmation rather than styling
                         # it as a small problem.
@@ -3263,7 +3438,11 @@ def aggregate_filers(
                 _ours_tl = _lr_tl.groupby("year")["amount"].sum().to_dict()
         for _y, _ours_amt in _ours_tl.items():
             _ty = _their_years_tl.get(str(int(_y)))
-            if (not _ty or _ty.get("loans_received") is None
+            if (not _summary_cash_fields_match_year(
+                    _ty,
+                    _digest_for_year(_y),
+                    _summary_pair_available,
+                ) or _ty.get("loans_received") is None
                     or not _loan_fields_trustworthy(_ty, _sum_ts)):
                 continue
             _ours_amt = float(_ours_amt)
@@ -3277,8 +3456,8 @@ def aggregate_filers(
                     "orestar_counted": round(_reported_amt, 2),
                 }
 
-        # Allocate trustworthy annual loan totals to their held transaction
-        # months in whole cents. Rounding each proportional share independently
+        # Allocate paired annual loan totals to their held transaction months
+        # in whole cents. Rounding each proportional share independently
         # can miss the annual figure by several cents; putting that remainder
         # into one month can make a tiny positive receipt negative. Hamilton
         # (largest-remainder) apportionment is exact, deterministic and cannot
@@ -3545,23 +3724,13 @@ def aggregate_filers(
                 "scrape_ts": orestar_info.get("ts", 0),
             }
 
-        # Classify the per-year deltas now that the loop above has filled them.
-        _dvals = [round(float(v.get("discrepancy", 0) or 0), 2)
-                  for _, v in sorted(yearly_discrepancies.items())]
-        if len(_dvals) >= 2:
-            if max(_dvals) - min(_dvals) <= 0.01:
-                # Same every year: the years reconcile, the start does not.
-                discrepancy_signature = "opening_balance"
-            else:
-                discrepancy_signature = "missing_transactions"
-                # Name the first year the delta moves — that is where rows went
-                # missing, and it turns "this committee is off by $X" into
-                # somewhere to look.
-                _yrs = sorted(yearly_discrepancies)
-                for _i in range(1, len(_yrs)):
-                    if abs(_dvals[_i] - _dvals[_i - 1]) > 0.01:
-                        discrepancy_first_bad_year = int(_yrs[_i])
-                        break
+        # The legacy signature compared rolled ending balances and called a
+        # changing delta "missing_transactions". A same-year digest can prove
+        # that year's movement and line items, but not its opening position:
+        # a late row in 2025 changes 2026's rolled beginning without changing
+        # the 2026 digest. Keep the raw begin/end fields for inspection, but do
+        # not revive that causal label until those cumulative positions are
+        # themselves captured.
 
         _orestar_absent_summary = {
             "count": len(_orestar_absent_here),
@@ -3638,25 +3807,19 @@ def aggregate_filers(
             # this record lets the UI explain the resulting cash adjustment.
             "nonexempt_loan_cash_treatment":
                 _nonexempt_loan_cash_treatment,
+            # Exact marker for clients reading the two treatment maps above.
+            # Legacy profile JSON lacks it and therefore cannot present a
+            # summary-derived adjustment as current.
+            "annual_summary_treatment_basis": "paired_year_digest_v1",
             "yearly_discrepancies": yearly_discrepancies,
             # Candidate 2006 bases, on the pipeline's own definition, so the
             # rule ORESTAR actually applied can be identified by measurement
             # rather than guessed at a fifth time.
             "basis_2006": basis_2006,
-            # What KIND of problem this committee has, read off the shape of
-            # the per-year deltas rather than their size.
-            #
-            # A discrepancy that is the SAME every year means each year's
-            # activity reconciles and the divergence predates all of them —
-            # the opening balance is wrong. One that CHANGES in a given year
-            # means transactions are missing in that year, and names the year.
-            #
-            # Citizens for Mannix is $299,796.16 adrift in 2006, 2007, 2008,
-            # 2009 and 2010 — identical to the cent. Its 2006+ row count
-            # matches ORESTAR exactly (339), so nothing is missing; it starts
-            # from the wrong place. Across everything flagged, 201 committees
-            # ($2.6M) carry a constant offset against 101 ($1.2M) that vary,
-            # so most of what survived the row recovery was never fetchable.
+            # Deprecated causal labels. They remain in the schema as null until
+            # rolled opening/ending positions are captured too; year-local
+            # provenance alone cannot distinguish an opening error from a late
+            # transaction in any preceding year.
             "discrepancy_signature": discrepancy_signature,
             "discrepancy_first_bad_year": discrepancy_first_bad_year,
             # Surfaced so a reader can see WHY the opening balance was
@@ -3744,6 +3907,8 @@ def aggregate_filers(
                 "slug": slug,
                 "cash_on_hand": cash_on_hand,
                 "tran_count": tran_count,
+                "app_scope_transaction_digest": _current_scope_digests[name],
+                "app_year_transaction_digests": _current_year_digests[name],
             })
 
     # Sort index by total_in descending
@@ -3876,13 +4041,27 @@ def aggregate_filers(
             "closed": bool(_d.get("closed")),
             "closed_since": _d.get("closed_since"),
             "comparison_status": "paired",
+            "app_data_changed_since_capture": bool(
+                _cmp.get("app_data_changed_since_capture")
+            ),
+            "orestar_data_changed_since_capture": bool(
+                _cmp.get("orestar_data_changed_since_capture")
+            ),
+            "annual_summary_refresh_years": _cmp.get(
+                "annual_summary_refresh_years", []
+            ),
         }
         if (_cmp.get("app_data_changed_since_capture")
-                or _cmp.get("orestar_data_changed_since_capture")):
+                or _cmp.get("orestar_data_changed_since_capture")
+                or _cmp.get("annual_summary_refresh_needed")):
             _audit_row["reason"] = (
                 "newer_summary_was_not_paired"
                 if _cmp.get("orestar_data_changed_since_capture")
-                else "app_state_changed_since_capture"
+                else (
+                    "app_state_changed_since_capture"
+                    if _cmp.get("app_data_changed_since_capture")
+                    else "annual_summary_years_unpaired"
+                )
             )
             _refresh_rows.append(_audit_row)
             continue
@@ -3930,8 +4109,12 @@ def aggregate_filers(
         })
 
     _disc_rows.sort(key=lambda r: -abs(r["delta"]))
-    _newer_count = len(_refresh_rows)
-    _newer_amount = round(sum(abs(r["delta"]) for r in _refresh_rows), 2)
+    _newer_app_rows = [
+        row for row in _refresh_rows
+        if row.get("app_data_changed_since_capture")
+    ]
+    _newer_count = len(_newer_app_rows)
+    _newer_amount = round(sum(abs(r["delta"]) for r in _newer_app_rows), 2)
     _write_json("balance_discrepancies.json", {
         # The admin must never treat the pre-pairing live-vs-old-summary blob
         # already in Supabase as current evidence during rollout.  Both fields

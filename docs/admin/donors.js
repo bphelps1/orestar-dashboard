@@ -1243,6 +1243,7 @@ function bdRender() {
       calculation_version_mismatch: "calculation version mismatch",
       capture_version_mismatch: "capture version mismatch",
       summary_scope_incomplete: "ORESTAR summary scope incomplete",
+      annual_summary_years_unpaired: "annual summary years awaiting paired refresh",
     }[r.reason] || String(r.reason || "unpaired capture").replaceAll("_", " ");
     if (r.missing_filer_ids && r.missing_filer_ids.length) {
       reason += `; missing filer ${r.missing_filer_ids.join(", ")}`;
@@ -1250,7 +1251,7 @@ function bdRender() {
     return `<tr>
       <td><a href="../index.html?filer=${encodeURIComponent(r.slug)}" target="_blank">${esc(r.name || r.slug)}</a>
           ${r._bucket === "actionable" ? '<span class="bd-tag">current discrepancy</span>' : ""}
-          ${r._bucket === "refresh" ? '<span class="bd-tag bd-tag-stale" title="The app or ORESTAR side changed after the capture window; refresh before acting on this old difference">needs refresh</span>' : ""}
+          ${r._bucket === "refresh" ? '<span class="bd-tag bd-tag-stale" title="The app state, current ORESTAR summary, or a cash-relevant annual summary still needs a paired refresh before this difference is actionable">needs refresh</span>' : ""}
           ${r._bucket === "nonactionable" ? '<span class="bd-tag" title="A trailing blank account summary suggests this committee closed; keep the captured difference for audit, but do not drive a transaction backfill from it">trailing blank / likely closed</span>' : ""}
           ${unpaired ? `<span class="bd-tag bd-tag-unpaired" title="No trustworthy comparison exists until the ORESTAR value and exact app transaction snapshot are captured together">unpaired / unusable</span><span class="bd-reason">${esc(reason)}</span>` : ""}
           ${r.dormant ? '<span class="bd-tag" title="No transactions in the year ORESTAR reports">dormant</span>' : ""}

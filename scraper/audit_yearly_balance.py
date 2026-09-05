@@ -36,6 +36,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 import supabase_sync
+from audit_consistency import current_yearly_discrepancies
 
 
 def main() -> int:
@@ -68,7 +69,7 @@ def main() -> int:
     for fid, name, detail in rows:
         if isinstance(detail, str):
             detail = json.loads(detail)
-        yd = detail.get("yearly_discrepancies") or {}
+        yd = current_yearly_discrepancies(detail)
         for yr, d in yd.items():
             dm = d.get("delta_movement")
             if dm is None:

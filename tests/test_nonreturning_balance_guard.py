@@ -20,6 +20,9 @@ sys.path.insert(0, str(SCRAPER_DIR))
 import process as P  # noqa: E402
 from audit_consistency import audit_filer  # noqa: E402
 from balance_snapshot import (  # noqa: E402
+    CALCULATION_VERSION,
+    EMPTY_CASH_SCOPE_DIGEST,
+    cash_scope_digests,
     transaction_filer_snapshots,
     transaction_snapshot_id,
 )
@@ -471,6 +474,12 @@ def _aggregate_cash_rows(
     rows: list[dict],
     absent_ids: set[str],
     yearly: dict | None = None,
+    *,
+    paired_summary: bool = False,
+    capture_rows: list[dict] | None = None,
+    captured_app_cash: float | None = None,
+    paired_years: set[str] | None = None,
+    capture_absent_ids: set[str] | None = None,
 ) -> dict:
     import generate_activity_snapshot
 
@@ -479,12 +488,61 @@ def _aggregate_cash_rows(
     transaction_dir = data_dir / "transactions"
     agg_dir.mkdir(parents=True)
     transaction_dir.mkdir()
+    df = pd.DataFrame(rows)
     if yearly is not None:
+        # Summary-derived cash treatment is valid only when the capture names
+        # the exact canonical transaction rows it was read against.
+        if paired_summary:
+            entry = yearly["1"]
+            years = entry.get("years") or {}
+            latest_year = max(years, key=int)
+            latest = years[latest_year]
+            rows_at_capture = capture_rows if capture_rows is not None else rows
+            capture_cash = (
+                float(captured_app_cash)
+                if captured_app_cash is not None
+                else float(latest.get("ending_cash_balance") or 0.0)
+            )
+            scope_digest, year_digests = cash_scope_digests(
+                rows_at_capture,
+                cash_excluded_transaction_ids=(
+                    absent_ids
+                    if capture_absent_ids is None
+                    else capture_absent_ids
+                ),
+            )
+            scope_capture_id = "1@test-capture"
+            entry["comparison_capture"] = {
+                "version": 2,
+                "status": "paired",
+                "captured_at": float(entry.get("ts") or 1_800_000_000.0),
+                "orestar_year": int(latest_year),
+                "orestar_ending_cash_balance": round(
+                    float(latest.get("ending_cash_balance") or 0.0), 2
+                ),
+                "app_scope_key": "1",
+                "app_scope_filer_ids": ["1"],
+                "app_cash_on_hand": round(capture_cash, 2),
+                "app_tran_count": len(rows_at_capture),
+                "app_transaction_snapshot_id": "sha256:at-capture",
+                "app_scope_transaction_digest": scope_digest,
+                "app_snapshot_created_at": "2026-09-01T00:00:00",
+                "calculation_version": CALCULATION_VERSION,
+                "scope_capture_id": scope_capture_id,
+            }
+            years_to_pair = set(years) if paired_years is None else paired_years
+            for year, summary_row in years.items():
+                if year not in years_to_pair:
+                    continue
+                summary_row["app_year_transaction_digest"] = year_digests.get(
+                    year, EMPTY_CASH_SCOPE_DIGEST,
+                )
+                summary_row["calculation_version"] = CALCULATION_VERSION
+                summary_row["scope_capture_id"] = scope_capture_id
         (data_dir / "orestar_yearly_summaries.json").write_text(
             json.dumps(yearly)
         )
 
-    df = pd.DataFrame(rows)
     contributions = df[df["tran_type"] == "C"].copy()
     inkind = contributions.iloc[0:0].copy()
     expenditures = df[df["tran_type"] == "E"].copy()
@@ -588,6 +646,7 @@ def test_absent_other_receipt_stays_filtered_when_exempt_loan_is_removed(
         ],
         {"old-receipt"},
         {"1": {"years": {"2026": summary}, "ts": 1_800_000_000.0}},
+        paired_summary=True,
     )
 
     assert detail["cash_on_hand"] == 0.0
@@ -596,6 +655,77 @@ def test_absent_other_receipt_stays_filtered_when_exempt_loan_is_removed(
     assert detail["total_or"] == 600.0
     assert detail["timeline"][0]["other_receipts"] == 600.0
     assert _timeline_net(detail) == 0.0
+
+
+def test_new_absence_verdict_invalidates_same_year_summary_treatment(
+    tmp_path,
+) -> None:
+    summary = {
+        "beginning_balance": 0.0,
+        "contributions": 0.0,
+        "expenditures": 1.0,
+        "other_receipts": 1.0,
+        "other_disbursements": 0.0,
+        "balance_adjustments": 0.0,
+        "ending_cash_balance": 0.0,
+        "loans_received": 0.0,
+        "loans_received_exempt": 0.0,
+        "loan_payments": 0.0,
+        "loan_payments_exempt": 0.0,
+        "summary_field_version": 2,
+        "scrape_ts": 1_800_000_000.0,
+    }
+    detail = _aggregate_cash_rows(
+        tmp_path,
+        [
+            _cash_row("old-receipt", 100.0, "OR", "Miscellaneous Other Receipt"),
+            _cash_row("exempt-loan", 500.0, "OR", "Loan Received (Exempt)"),
+        ],
+        {"old-receipt"},
+        {"1": {"years": {"2026": summary}, "ts": 1_800_000_000.0}},
+        paired_summary=True,
+        # The paired summary predates the exact diff that certified the held
+        # receipt as absent. Its raw transaction rows are otherwise unchanged.
+        capture_absent_ids=set(),
+    )
+
+    # Certified absence still removes the old receipt, but the now-stale
+    # annual statement cannot also remove an unrelated exempt loan.
+    assert detail["cash_on_hand"] == 500.0
+    assert detail["exempt_loans_excluded"] == {}
+    assert detail["timeline"][0]["cash_balance_net"] == 500.0
+    assert detail["orestar_comparison"]["scope_digest_matches_capture"] is True
+    assert detail["orestar_comparison"]["annual_summary_refresh_needed"] is True
+    assert detail["orestar_comparison"]["annual_summary_refresh_years"] == ["2026"]
+
+
+def test_unpaired_exempt_summary_cannot_remove_current_cash(tmp_path) -> None:
+    summary = {
+        "beginning_balance": 0.0,
+        "contributions": 0.0,
+        "expenditures": 1.0,
+        "other_receipts": 1.0,
+        "other_disbursements": 0.0,
+        "balance_adjustments": 0.0,
+        "ending_cash_balance": 0.0,
+        "loans_received": 0.0,
+        "loans_received_exempt": 0.0,
+        "loan_payments": 0.0,
+        "loan_payments_exempt": 0.0,
+        "summary_field_version": 2,
+        "scrape_ts": 1_800_000_000.0,
+    }
+    detail = _aggregate_cash_rows(
+        tmp_path,
+        [_cash_row("exempt-loan", 500.0, "OR", "Loan Received (Exempt)")],
+        set(),
+        {"1": {"years": {"2026": summary}, "ts": 1_800_000_000.0}},
+    )
+
+    assert detail["cash_on_hand"] == 500.0
+    assert detail["exempt_loans_excluded"] == {}
+    assert detail["timeline"][0]["other_receipts"] == 500.0
+    assert detail["timeline"][0]["cash_balance_net"] == 500.0
 
 
 @pytest.mark.parametrize(
@@ -647,6 +777,7 @@ def test_absent_nonexempt_loan_is_not_subtracted_twice(tmp_path) -> None:
         ],
         {"old-loan"},
         {"1": {"years": {"2026": summary}, "ts": 1_800_000_000.0}},
+        paired_summary=True,
     )
 
     assert detail["cash_on_hand"] == 50.0
@@ -697,6 +828,7 @@ def test_reported_loan_without_held_denominator_is_not_synthesized(
         [_cash_row("cash", 50.0, "C", "Cash Contribution")],
         set(),
         {"1": {"years": {"2026": summary}, "ts": 1_800_000_000.0}},
+        paired_summary=True,
     )
 
     # A summary line is a validation signal, not a transaction. With no held
@@ -706,6 +838,219 @@ def test_reported_loan_without_held_denominator_is_not_synthesized(
     assert sum(row["loans_received"] for row in detail["timeline"]) == 0.0
     assert _timeline_net(detail) == 50.0
     assert detail["yearly_discrepancies"]["2026"]["our_contributions"] == 50.0
+
+
+def test_new_daily_loan_row_blocks_stale_annual_normalization(tmp_path) -> None:
+    captured_loan = _cash_row(
+        "loan-at-summary", 100.0, "C", "Loan Received (Non-Exempt)",
+    )
+    newly_collected = _cash_row(
+        "loan-after-summary", 50.0, "C", "Loan Received (Non-Exempt)",
+    )
+    newly_collected["filed_date"] = pd.Timestamp("2026-02-01")
+    newly_collected["month"] = "2026-02"
+    summary = {
+        "beginning_balance": 0.0,
+        "contributions": 100.0,
+        "expenditures": 0.0,
+        "other_receipts": 0.0,
+        "other_disbursements": 0.0,
+        "balance_adjustments": 0.0,
+        "ending_cash_balance": 100.0,
+        "loans_received": 100.0,
+        "loans_received_exempt": 0.0,
+        "loan_payments": 0.0,
+        "loan_payments_exempt": 0.0,
+        "summary_field_version": 2,
+        "scrape_ts": 1_800_000_000.0,
+    }
+
+    detail = _aggregate_cash_rows(
+        tmp_path,
+        [captured_loan, newly_collected],
+        set(),
+        {"1": {"years": {"2026": summary}, "ts": 1_800_000_000.0}},
+        paired_summary=True,
+        capture_rows=[captured_loan],
+        captured_app_cash=100.0,
+    )
+
+    # History and cash both advance to $150. The stale weekly summary remains
+    # visible as refresh-needed evidence but cannot force current cash to $100.
+    assert detail["cash_on_hand"] == 150.0
+    assert sum(row["loans_received"] for row in detail["timeline"]) == 150.0
+    assert _timeline_net(detail) == 150.0
+    assert detail["nonexempt_loan_cash_treatment"] == {}
+    comparison = detail["orestar_comparison"]
+    assert comparison["status"] == "paired"
+    assert comparison["scope_digest_matches_capture"] is False
+    assert comparison["app_data_changed_since_capture"] is True
+    assert comparison["actionable"] is False
+
+
+def test_current_page_pair_does_not_bless_stale_historical_loan_year(
+    tmp_path,
+) -> None:
+    rows = [
+        _cash_row("historical-loan-a", 100.0, "C", "Loan Received (Non-Exempt)"),
+        _cash_row("historical-loan-b", 50.0, "C", "Loan Received (Non-Exempt)"),
+    ]
+    for row in rows:
+        row["filed_date"] = pd.Timestamp("2025-01-01")
+        row["year"] = 2025
+        row["month"] = "2025-01"
+    stale_2025 = {
+        "beginning_balance": 0.0,
+        "contributions": 100.0,
+        "expenditures": 0.0,
+        "other_receipts": 0.0,
+        "other_disbursements": 0.0,
+        "balance_adjustments": 0.0,
+        "ending_cash_balance": 100.0,
+        "loans_received": 100.0,
+        "loans_received_exempt": 0.0,
+        "loan_payments": 0.0,
+        "loan_payments_exempt": 0.0,
+        "summary_field_version": 2,
+        "scrape_ts": 1_790_000_000.0,
+    }
+    current_2026 = {
+        **stale_2025,
+        "beginning_balance": 150.0,
+        "contributions": 0.0,
+        "ending_cash_balance": 150.0,
+        "loans_received": 0.0,
+        "scrape_ts": 1_800_000_000.0,
+    }
+
+    detail = _aggregate_cash_rows(
+        tmp_path,
+        rows,
+        set(),
+        {"1": {
+            "years": {"2025": stale_2025, "2026": current_2026},
+            "ts": 1_800_000_000.0,
+        }},
+        paired_summary=True,
+        captured_app_cash=150.0,
+        # Weekly current-only collection paired 2026. The cached 2025 page was
+        # never read against this transaction scope.
+        paired_years={"2026"},
+    )
+
+    assert detail["orestar_comparison"]["scope_digest_matches_capture"] is True
+    assert detail["orestar_comparison"]["app_data_changed_since_capture"] is False
+    assert detail["orestar_comparison"]["annual_summary_refresh_needed"] is True
+    assert detail["orestar_comparison"]["annual_summary_refresh_years"] == ["2025"]
+    assert detail["orestar_comparison"]["actionable"] is False
+    assert detail["cash_on_hand"] == 150.0
+    assert _timeline_net(detail) == 150.0
+    assert detail["nonexempt_loan_cash_treatment"] == {}
+    assert detail["yearly_discrepancies"]["2025"]["comparison_current"] is False
+    assert detail["yearly_discrepancies"]["2025"]["reconciles"] is None
+    assert detail["yearly_discrepancies"]["2025"]["orestar_omits_loans"] is None
+    assert detail["discrepancy_signature"] is None
+    assert detail["discrepancy_first_bad_year"] is None
+
+
+def test_new_current_year_row_keeps_paired_historical_loan_treatment(
+    tmp_path,
+) -> None:
+    historical_loan = _cash_row(
+        "loan-2006", 100.0, "C", "Loan Received (Non-Exempt)",
+    )
+    historical_loan["filed_date"] = pd.Timestamp("2006-01-01")
+    historical_loan["year"] = 2006
+    historical_loan["month"] = "2006-01"
+    current_cash = _cash_row("cash-2026", 50.0, "C", "Cash Contribution")
+    summary_2006 = {
+        "beginning_balance": 0.0,
+        "contributions": 0.0,
+        "expenditures": 0.0,
+        "other_receipts": 0.0,
+        "other_disbursements": 0.0,
+        "balance_adjustments": 0.0,
+        "ending_cash_balance": 0.0,
+        "loans_received": 0.0,
+        "loans_received_exempt": 0.0,
+        "loan_payments": 0.0,
+        "loan_payments_exempt": 0.0,
+        "summary_field_version": 2,
+        "scrape_ts": 1_800_000_000.0,
+    }
+
+    detail = _aggregate_cash_rows(
+        tmp_path,
+        [historical_loan, current_cash],
+        set(),
+        {"1": {"years": {"2006": summary_2006}, "ts": 1_800_000_000.0}},
+        paired_summary=True,
+        capture_rows=[historical_loan],
+        captured_app_cash=0.0,
+    )
+
+    # The all-time pair is stale because 2026 changed, but the exact 2006 row
+    # set did not. Keep 2006's paired treatment while counting the new $50.
+    assert detail["orestar_comparison"]["scope_digest_matches_capture"] is False
+    assert detail["cash_on_hand"] == 50.0
+    assert detail["nonexempt_loan_cash_treatment"]["2006"] == {
+        "transaction_total": 100.0,
+        "orestar_counted": 0.0,
+    }
+    assert detail["yearly_discrepancies"]["2006"]["comparison_current"] is True
+    assert detail["yearly_discrepancies"]["2006"]["reconciles"] is True
+
+
+def test_stale_trailing_blank_capture_cannot_keep_reopened_scope_closed(
+    tmp_path,
+) -> None:
+    status_fields = {
+        "beginning_balance": 0.0,
+        "ending_cash_balance": 0.0,
+        "contributions": 0.0,
+        "expenditures": 0.0,
+        "other_receipts": 0.0,
+        "other_disbursements": 0.0,
+        "balance_adjustments": 0.0,
+        "inkind_contributions": 0.0,
+        "inkind_expenditures": 0.0,
+        "loans_received": 0.0,
+        "loans_received_exempt": 0.0,
+        "loan_payments": 0.0,
+        "loan_payments_exempt": 0.0,
+        "accounts_receivable": 0.0,
+        "accounts_payable": 0.0,
+        "total_outstanding_loans": 0.0,
+        "outstanding_personal_expenditures": 0.0,
+        "balance_deficit": 0.0,
+        "summary_field_version": 2,
+        "scrape_ts": 1_800_000_000.0,
+    }
+    active_2025 = {
+        **status_fields,
+        "contributions": 10.0,
+        "expenditures": 10.0,
+    }
+    blank_2026 = dict(status_fields)
+
+    detail = _aggregate_cash_rows(
+        tmp_path,
+        [_cash_row("new-after-closure", 50.0, "C", "Cash Contribution")],
+        set(),
+        {"1": {
+            "years": {"2025": active_2025, "2026": blank_2026},
+            "ts": 1_800_000_000.0,
+        }},
+        paired_summary=True,
+        capture_rows=[],
+        captured_app_cash=0.0,
+    )
+
+    comparison = detail["orestar_comparison"]
+    assert comparison["scope_digest_matches_capture"] is False
+    assert comparison["actionable"] is False
+    assert detail["closed"] is False
+    assert detail["cash_on_hand"] == 50.0
 
 
 @pytest.mark.parametrize(
@@ -754,6 +1099,7 @@ def test_fractional_monthly_loan_scaling_reconciles_to_annual_cash(
         rows,
         set(),
         {"1": {"years": {"2026": summary}, "ts": 1_800_000_000.0}},
+        paired_summary=True,
     )
 
     assert detail["cash_on_hand"] == reported
