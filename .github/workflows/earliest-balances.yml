@@ -183,6 +183,7 @@ jobs:
         run: sudo apt-get install -y xvfb
 
       - name: Scrape account summaries
+        id: scrape
         run: |
           MAX="${{ env.max_filers }}"
           FORCE="${{ env.force }}"
@@ -233,7 +234,9 @@ jobs:
           echo "remaining=$REMAINING" >> "$GITHUB_OUTPUT"
 
       - name: Re-aggregate with updated beginning balances (final batch only)
-        if: always() && steps.orestar_wait.outcome == 'success' && steps.remaining.outputs.remaining == '0'
+        # A breaker exits the scrape nonzero while preserving partial cache
+        # writes. Never let its control signal masquerade as sweep completion.
+        if: always() && steps.orestar_wait.outcome == 'success' && steps.scrape.outcome == 'success' && steps.remaining.outputs.remaining == '0'
         run: |
           echo "All selected account summaries scraped — running full aggregation..."
           python scraper/process.py
