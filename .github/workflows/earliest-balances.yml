@@ -2,8 +2,10 @@ name: Scrape ORESTAR Account Balances
 
 on:
   schedule:
-    # Cheap current-page refresh weekly; full historical Prev crawl monthly.
-    - cron: "0 6 * * 0"
+    # Cheap current-page refresh weekly, after Sunday's daily transaction
+    # aggregation has published the exact app snapshot it must pair against;
+    # full historical Prev crawl monthly.
+    - cron: "0 18 * * 0"
     - cron: "0 7 1 * *"
   workflow_dispatch:
     inputs:
@@ -93,7 +95,7 @@ jobs:
           # Translate a schedule exactly once. If exclusive access times out,
           # the replacement is a workflow_dispatch run and therefore must
           # receive the resolved mode/cutoff explicitly.
-          if [ "${{ github.event.schedule }}" = "0 6 * * 0" ]; then
+          if [ "${{ github.event.schedule }}" = "0 18 * * 0" ]; then
             CURRENT_ONLY=true
             MAX_AGE=7
           elif [ "${{ github.event.schedule }}" = "0 7 1 * *" ]; then
