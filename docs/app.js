@@ -2438,21 +2438,19 @@ function updateCohIndicator(profile) {
              `The balance here is rolled forward from ORESTAR's own transaction record.</div>`;
     })();
 
-    // Rows ORESTAR has withdrawn since we collected them.
+    // Rows a current exact search proves ORESTAR no longer returns.
     //
-    // A filer can withdraw or supersede a filing; ORESTAR stops returning it
-    // and stops counting it. We keep the row — it is real history and belongs
-    // in contributor totals — but the balance follows ORESTAR and leaves it
-    // out. Identified by diffing transaction IDs against ORESTAR, never by
-    // comparing counts, which cannot tell a withdrawn row from a superseded
-    // one we correctly dropped.
-    const withdrawnNote = (() => {
-      const w = profile.orestar_withdrawn;
+    // Absence does not prove whether a filing was withdrawn, superseded, or
+    // changed for another source-side reason. We keep the row as history and
+    // omit it only from the cash balance. The old key remains a read fallback
+    // while previously generated profile files age out.
+    const absentNote = (() => {
+      const w = profile.orestar_absent || profile.orestar_withdrawn;
       if (!w || !w.count) return "";
       return `<div class="disc-note">${w.count} transaction${w.count === 1 ? "" : "s"}` +
              `${w.amount ? ` totalling ${fmt$(Math.abs(w.amount))}` : ""} ` +
              `${w.count === 1 ? "is" : "are"} still listed here but no longer returned by ` +
-             `ORESTAR — withdrawn or superseded filings. ORESTAR does not count ` +
+             `ORESTAR's exact transaction search. ORESTAR does not count ` +
              `${w.count === 1 ? "it" : "them"} toward this balance, so neither does the ` +
              `figure above. The record${w.count === 1 ? " is" : "s are"} kept rather than ` +
              `deleted.</div>`;
@@ -2471,7 +2469,7 @@ function updateCohIndicator(profile) {
       ${loanNote}
       ${itemisedNote}
       ${chainNote}
-      ${withdrawnNote}
+      ${absentNote}
       ${exemptLoanNoteText(profile) ? `<div class="disc-note">${esc(exemptLoanNoteText(profile))}</div>` : ""}
       <div class="disc-ts">App snapshot built: ${formatTimestamp(comparison.app_snapshot_created_at)}<br>ORESTAR summary read: ${formatTimestamp(scrapeTs)}</div>
     `;

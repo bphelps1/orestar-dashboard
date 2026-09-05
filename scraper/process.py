@@ -28,8 +28,14 @@ from balance_snapshot import (
     SOURCE_FILENAME,
     build_source as build_balance_snapshot_source,
     evidence_is_current,
+    exact_coverage_result_shape_is_valid,
+    exact_evidence_identifier_is_valid,
     paired_comparison,
     transaction_snapshot_id,
+)
+from exact_coverage_evidence import (
+    certify_exact_scope_rows,
+    rows_requesting_surplus,
 )
 import orestar_parse
 import supabase_sync
@@ -85,12 +91,15 @@ def _chain_breaks(yearly: dict) -> dict:
 
 
 _ROW_COMPLETE: dict = {}
-_WITHDRAWN: dict = {}
+_ORESTAR_ABSENT: dict = {}
 
 
-def _withdrawn_for_filers(filer_ids, evidence: dict | None = None) -> set[str]:
-    """Union row-level withdrawn IDs across one canonical aggregate."""
-    source = _WITHDRAWN if evidence is None else evidence
+def _orestar_absent_for_filers(
+    filer_ids,
+    evidence: dict | None = None,
+) -> set[str]:
+    """Union certified ORESTAR-nonreturning IDs for a canonical aggregate."""
+    source = _ORESTAR_ABSENT if evidence is None else evidence
     out: set[str] = set()
     for fid in filer_ids or []:
         out.update(source.get(str(fid)) or set())
@@ -152,12 +161,14 @@ def _aggregate_row_verdict(
     return True if all(current) else None
 
 
-def _row_diff() -> tuple[dict, dict]:
+def _row_diff() -> tuple[dict, list[dict]]:
     """The row-level diff, when one has been run.
 
-    Returns ({filer_id: (complete, evidence_row)},
-    {filer_id: {withdrawn ids}}). Keeping the full timestamped row avoids
-    reducing same-day ordering to an unknowable date comparison.
+    Returns ({filer_id: (complete, evidence_row)}, raw evidence rows). Keeping
+    the full timestamped observations avoids reducing same-day ordering to an
+    unknowable date comparison. Raw surplus values are deliberately not
+    projected here: they require paired-snapshot and current-shard
+    certification before they may affect cash.
 
     diff_coverage.py compares tran_id SETS rather than counts, which is the
     only thing that can settle completeness here: ORESTAR's search returns
@@ -173,24 +184,126 @@ def _row_diff() -> tuple[dict, dict]:
     """
     path = DATA_DIR / "coverage_diff.json"
     if not path.exists():
-        return {}, {}
+        return {}, []
     try:
-        complete, withdrawn = {}, {}
-        for e in json.loads(path.read_text()):
+        rows = json.loads(path.read_text())
+        if not isinstance(rows, list):
+            return {}, []
+        complete = {}
+        for e in rows:
+            if not isinstance(e, dict) or "filer_id" not in e:
+                continue
             fid = str(e["filer_id"])
             # Presence matters. `complete: null` is an explicit refusal from
             # the identity diff and must override the count survey with
             # unknown; omitting it here silently falls back to the very
             # count-only evidence this file says is not authoritative.
             if "complete" in e:
-                verdict = None if e["complete"] is None else bool(e["complete"])
+                verdict = e["complete"] if type(e["complete"]) is bool else None
+                if (e.get("evidence_version") is not None
+                        and not exact_coverage_result_shape_is_valid(e)):
+                    verdict = None
                 complete[fid] = (verdict, e)
-            ids = {str(i) for i in (e.get("surplus") or [])}
-            if ids:
-                withdrawn[fid] = ids
-        return complete, withdrawn
+        return complete, rows
     except Exception:
-        return {}, {}
+        return {}, []
+
+
+def _paired_evidence_requirements(
+    name_to_fids: dict[str, list[str]],
+    comparisons: dict[str, dict],
+) -> tuple[dict[str, dict], set[str]]:
+    """Build unique physical-scope requirements for exact evidence.
+
+    A physical filer claimed by multiple canonical aggregates, a duplicate
+    aggregate, or a captured scope that differs from the current one is
+    ambiguous.  The entire affected scope is refused rather than partially
+    suppressing its cash rows.
+    """
+    scopes: dict[tuple[str, ...], dict] = {}
+    ownership: dict[str, set[tuple[str, ...]]] = defaultdict(set)
+    invalid_members: set[str] = set()
+
+    for name, raw_ids in name_to_fids.items():
+        ids = sorted({str(fid).strip() for fid in raw_ids if str(fid).strip()})
+        comparison = comparisons.get(name) or {}
+        if comparison.get("status") != "paired":
+            continue
+        captured_values = comparison.get("filer_ids")
+        captured_ids = sorted({
+            str(fid).strip() for fid in captured_values if str(fid).strip()
+        }) if isinstance(captured_values, list) else []
+        if (not ids or captured_ids != ids
+                or any(not exact_evidence_identifier_is_valid(fid) for fid in ids)):
+            invalid_members.update(ids)
+            invalid_members.update(captured_ids)
+            continue
+        fingerprint = comparison.get("app_transaction_snapshot_id")
+        try:
+            captured_at = float(comparison["captured_at"])
+            capture_day = datetime.fromtimestamp(
+                captured_at, tz=timezone.utc,
+            ).date().isoformat()
+        except (KeyError, TypeError, ValueError, OverflowError):
+            invalid_members.update(ids)
+            continue
+        if (not exact_evidence_identifier_is_valid(fingerprint)
+                or comparison.get("orestar_data_changed_since_capture")):
+            invalid_members.update(ids)
+            continue
+
+        key = tuple(ids)
+        requirement = {
+            "captured_at": captured_at,
+            "capture_day": capture_day,
+            "transaction_snapshot_id": fingerprint,
+            "scope_ids": ids,
+        }
+        if key in scopes:
+            requirement["ambiguous"] = True
+        scopes[key] = requirement
+        for fid in ids:
+            ownership[fid].add(key)
+
+    ambiguous_members = set(invalid_members)
+    for fid, keys in ownership.items():
+        if len(keys) > 1 or any(scopes[key].get("ambiguous") for key in keys):
+            for key in keys:
+                ambiguous_members.update(key)
+
+    requirements = {
+        fid: scopes[next(iter(keys))]
+        for fid, keys in ownership.items()
+        if len(keys) == 1 and fid not in ambiguous_members
+    }
+    return requirements, ambiguous_members
+
+
+def _certified_orestar_absent(
+    diff_rows,
+    name_to_fids: dict[str, list[str]],
+    comparisons: dict[str, dict],
+    transaction_dir: Path,
+) -> tuple[dict[str, set[str]], set[str], str | None]:
+    """Certify balance-only omissions without deleting stored rows."""
+    requirements, ambiguous = _paired_evidence_requirements(
+        name_to_fids, comparisons,
+    )
+    candidates = rows_requesting_surplus(diff_rows)
+    certified, blocked, error = certify_exact_scope_rows(
+        diff_rows,
+        requirements,
+        candidates,
+        transaction_dir,
+        ambiguous_members=ambiguous,
+        require_no_missing=True,
+    )
+    absent = {
+        fid: set(row.get("surplus") or [])
+        for fid, row in certified.items()
+        if row.get("surplus")
+    }
+    return absent, blocked, error
 
 
 def _row_completeness() -> dict:
@@ -227,8 +340,9 @@ def _row_completeness() -> dict:
             #
             # Plumbers & Steamfitters PAC is the live case — 11,766 held
             # against ORESTAR's 11,750, sixteen surplus rows worth $32,284.04,
-            # every one of them a withdrawn filing our append-only pipeline
-            # never removed. Its re-survey recorded missing=0, which would have
+            # every one of them absent from the current ORESTAR result while
+            # still held by our append-only pipeline. Its re-survey recorded
+            # missing=0, which would have
             # certified it complete and published a note blaming ORESTAR for a
             # difference that is ours.
             #
@@ -1722,6 +1836,7 @@ def aggregate_filers(
     _name_to_fids: dict[str, list[str]] = {}
     _name_to_fid: dict[str, str] = {}
     _orestar_data: dict[str, dict] = {}  # canonical name → full summary dict
+    _comparison_by_name: dict[str, dict] = {}
     # Loaded here, ahead of the first use. The balance comparison below now
     # derives from this file, so reading it later left _yearly_summaries
     # unbound and killed the whole run:
@@ -1761,23 +1876,56 @@ def aggregate_filers(
         _name_to_fid = {n: ids[-1] for n, ids in _name_to_fids.items()}
         # Loaded once here rather than per filer: 7,263 committees would
         # otherwise re-read and re-parse the same file.
-        global _ROW_COMPLETE, _WITHDRAWN
+        global _ROW_COMPLETE, _ORESTAR_ABSENT
         _ROW_COMPLETE = _row_completeness()
         # The row diff wins wherever it exists. It is expensive — it pages
         # entire result sets where the survey spends one search — so it covers
         # only committees someone chose to run it on, and the count survey
         # still answers for the rest.
-        _diff_complete, _WITHDRAWN = _row_diff()
+        _diff_complete, _diff_rows = _row_diff()
         if _diff_complete:
             _ROW_COMPLETE.update(_diff_complete)
             _diff_usable = sum(v[0] is not None for v in _diff_complete.values())
             log.info("row-level diff available for %d committees (%d usable, %d "
-                     "explicitly unknown; authoritative over the count survey); "
-                     "%d hold withdrawn rows", len(_diff_complete), _diff_usable,
-                     len(_diff_complete) - _diff_usable, len(_WITHDRAWN))
+                     "explicitly unknown; authoritative over the count survey)",
+                     len(_diff_complete), _diff_usable,
+                     len(_diff_complete) - _diff_usable)
         log.info("row-completeness known for %d committees (from the coverage survey)",
                  len(_ROW_COMPLETE))
         unique_fids = sorted({f for ids in _name_to_fids.values() for f in ids})
+
+        # Cash omission uses the same exact-evidence gate as automatic missing-
+        # row remediation.  A legacy/top-level surplus is only an audit clue;
+        # every member of the current canonical scope needs a common precise
+        # lane anchored to its paired account-summary snapshot, and its
+        # deterministic per-filer digest must still match the shards on disk.
+        _comparison_by_name = {
+            name: paired_comparison(
+                fids,
+                _yearly_summaries,
+                current_transaction_id=_transaction_snapshot_id,
+            )
+            for name, fids in _name_to_fids.items()
+        }
+        _surplus_candidates = rows_requesting_surplus(_diff_rows)
+        _ORESTAR_ABSENT, _blocked_absent, _evidence_error = (
+            _certified_orestar_absent(
+                _diff_rows, _name_to_fids, _comparison_by_name, TRANS_DIR,
+            )
+        )
+        if _surplus_candidates:
+            log.info(
+                "Exact ORESTAR-absence evidence certified for %d physical "
+                "filers (%d rows); %d physical filers refused",
+                len(_ORESTAR_ABSENT),
+                sum(len(ids) for ids in _ORESTAR_ABSENT.values()),
+                len(_blocked_absent),
+            )
+        if _evidence_error:
+            log.warning(
+                "ORESTAR-absence evidence could not be certified: %s",
+                _evidence_error,
+            )
         # Derived from the yearly summaries rather than scraped again.
         #
         # Two caches were reading the SAME ORESTAR page. scrape_account_summaries
@@ -1924,6 +2072,15 @@ def aggregate_filers(
 
     for name in all_filer_names:
         slug = filer_slugs[name]
+        _scope_fids = _name_to_fids.get(name, [])
+        _comparison = dict(
+            _comparison_by_name.get(name)
+            or paired_comparison(
+                _scope_fids,
+                _yearly_summaries,
+                current_transaction_id=_transaction_snapshot_id,
+            )
+        )
         filer_contrib = get_group(contrib_groups, name)
         filer_inkind  = get_group(inkind_groups,  name)
         filer_expend  = get_group(expend_groups,  name)
@@ -2026,41 +2183,49 @@ def aggregate_filers(
         # a transaction it cannot date, so the balance excludes it too. Applied
         # to the cash frames only — the rows stay in contributor totals, donor
         # aggregates and transaction listings, where they are perfectly valid.
-        # Rows ORESTAR has WITHDRAWN, held out of the balance but not deleted.
+        # Rows ORESTAR no longer returns, held out of the balance but not
+        # deleted. Exact absence does not prove whether ORESTAR withdrew a
+        # filing, superseded it, or changed some other source-side state.
         #
-        # A filer can withdraw or supersede a filing; ORESTAR then stops
-        # returning it, and nothing in this pipeline ever removes it. Our store
+        # ORESTAR can stop returning a filing, and nothing in this pipeline ever
+        # removes it. Our store
         # only drifts upward, invisibly, until something forces it into view —
         # Plumbers & Steamfitters PAC carried 16 such rows worth $32,284.04 and
         # surveyed as "missing: 0", because a count cannot see them.
         #
-        # ORESTAR does not count these, so the balance must not either. The
+        # The paired, current exact search proves ORESTAR did not count these at
+        # the comparison snapshot, so the balance must not either. The
         # rows themselves stay: they are real history, they belong in
         # contributor totals, donor aggregates and transaction listings, and
         # deleting on the strength of a scraper's output is a far riskier
         # operation than declining to add a number up. Same treatment the
         # undated rows get above, and for the same reason.
         #
-        # Only from diff_coverage.py, never from a count. Identity is the only
-        # evidence precise enough to name a row as withdrawn.
+        # Only from fully certified diff_coverage.py evidence, never from a
+        # count. Identity is the only evidence precise enough to name a row as
+        # nonreturning.
         # Aggregation is by canonical name, and one name can span several filer
         # IDs. Union the row-level evidence across the same set of committees;
         # consulting one representative ID can leave another committee's known
-        # withdrawn rows in the combined balance.
-        _withdrawn_here = _withdrawn_for_filers(_name_to_fids.get(name, []))
+        # nonreturning rows in the combined balance. Certification is atomic:
+        # no member contributes IDs unless every member shared one valid lane.
+        _orestar_absent_here = _orestar_absent_for_filers(_scope_fids)
 
         def _dated(_f):
             if _f is None or _f.empty:
                 return _f
             if "_undated" in _f.columns:
                 _f = _f[~_f["_undated"].fillna(False)]
-            if _withdrawn_here and not _f.empty and "tran_id" in _f.columns:
-                _f = _f[~_f["tran_id"].astype(str).isin(_withdrawn_here)]
+            if (_orestar_absent_here and not _f.empty
+                    and "tran_id" in _f.columns):
+                _f = _f[
+                    ~_f["tran_id"].astype(str).isin(_orestar_absent_here)
+                ]
             return _f
         _c_for_coh = _dated(_c_for_coh)
         _e_for_coh = _dated(_e_for_coh)
         # Disbursements and balance adjustments go through the same filter.
-        # Today every withdrawn row found is a type-C contribution, so these
+        # Today every known nonreturning row is a type-C contribution, so these
         # are guards rather than corrections — but a filter covering three of
         # five cash frames is the #99 bug waiting to happen again, where a
         # correction reached some consumers and not the rest.
@@ -2422,8 +2587,6 @@ def aggregate_filers(
         # declared here so the record above always has a value.
         discrepancy_signature = None
         discrepancy_first_bad_year = None
-        _scope_fids = _name_to_fids.get(name, [])
-
         # Compare against ORESTAR-reported ending balance for validation.
         #
         # This is a CHECK, never an input: cash_on_hand above is calculated
@@ -2537,11 +2700,6 @@ def aggregate_filers(
         # alongside the ORESTAR page.  Reconstructing a past app state from
         # filed_date is impossible: late historical backfills and same-day
         # filings both carry dates unrelated to when we collected them.
-        _comparison = paired_comparison(
-            _scope_fids,
-            _yearly_summaries,
-            current_transaction_id=_transaction_snapshot_id,
-        )
         if _comparison.get("status") == "paired":
             _comparison["current_app_cash_on_hand"] = cash_on_hand
             _comparison["app_balance_change_since_capture"] = round(
@@ -3123,6 +3281,17 @@ def aggregate_filers(
                         discrepancy_first_bad_year = int(_yrs[_i])
                         break
 
+        _orestar_absent_summary = {
+            "count": len(_orestar_absent_here),
+            "amount": round(float(
+                filer_all.loc[
+                    filer_all["tran_id"].astype(str).isin(_orestar_absent_here),
+                    "amount",
+                ].sum()
+            ) if (_orestar_absent_here and not filer_all.empty
+                  and "tran_id" in filer_all.columns) else 0.0, 2),
+        } if _orestar_absent_here else {}
+
         detail = {
             "name": name, "slug": slug,
             "filer_ids": _scope_fids,
@@ -3168,17 +3337,13 @@ def aggregate_filers(
             # balance forward from transactions and that arithmetic is sound.
             # Recording it is what lets the site say so.
             "orestar_chain_breaks": _chain_breaks(_name_to_yearly.get(name, {})),
-            # Rows ORESTAR has withdrawn, kept in the dataset but out of the
-            # balance. Surfaced so a reader who finds one in the transaction
-            # list is told why it is not in the total, rather than concluding
-            # the arithmetic is broken.
-            "orestar_withdrawn": {
-                "count": len(_withdrawn_here),
-                "amount": round(float(
-                    filer_all.loc[filer_all["tran_id"].astype(str).isin(_withdrawn_here),
-                                  "amount"].sum()) if (_withdrawn_here and not filer_all.empty
-                                                       and "tran_id" in filer_all.columns) else 0.0, 2),
-            } if _withdrawn_here else {},
+            # Rows a current, paired exact search proves ORESTAR no longer
+            # returns. They remain in transaction history but are omitted from
+            # cash-only frames. Absence alone does not establish disposition.
+            "orestar_absent": _orestar_absent_summary,
+            # Deprecated schema alias for already-deployed clients. New code
+            # and copy use the disposition-neutral key above.
+            "orestar_withdrawn": _orestar_absent_summary,
             # Exempt loan principal held out of cash because ORESTAR's own
             # statement records no receipts at all in those years. Carried per
             # year so the site can say WHY a figure omits a transaction the

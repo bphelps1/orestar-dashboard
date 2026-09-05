@@ -1024,7 +1024,9 @@ def test_record_failure_persists_exact_attempt_provenance() -> None:
     assert saved["last_attempt_filer_transaction_digest"] == "sha256:filer-exact"
 
 
-def test_row_diff_keeps_null_as_an_explicit_override(monkeypatch, tmp_path) -> None:
+def test_row_diff_keeps_null_and_does_not_authorize_legacy_surplus(
+    monkeypatch, tmp_path,
+) -> None:
     rows = [
         {
             "filer_id": "failed-with-date",
@@ -1059,13 +1061,19 @@ def test_row_diff_keeps_null_as_an_explicit_override(monkeypatch, tmp_path) -> N
     (tmp_path / "coverage_diff.json").write_text(json.dumps(rows))
     monkeypatch.setattr(P, "DATA_DIR", tmp_path)
 
-    complete, withdrawn = P._row_diff()
+    complete, evidence_rows = P._row_diff()
 
     assert complete["failed-with-date"] == (None, rows[0])
     assert complete["failed-without-date"] == (None, rows[1])
     assert complete["usable-surplus"] == (False, rows[2])
     assert complete["usable-clean"] == (True, rows[3])
-    assert withdrawn == {"usable-surplus": {"11", "12"}}
+    # Loading evidence does not project a legacy surplus directly into the
+    # balance-only omission map. Certification happens later against the
+    # paired snapshot and current per-filer shard digest.
+    assert evidence_rows == rows
+    assert P._orestar_absent_for_filers(
+        ["usable-surplus"], evidence={},
+    ) == set()
 
 
 def _page_text(start: int, count: int) -> str:
@@ -1681,7 +1689,9 @@ def test_aggregate_exact_evidence_requires_current_snapshot_and_full_range() -> 
     ) is None
 
 
-def test_withdrawn_evidence_is_unioned_across_every_filer() -> None:
+def test_certified_absence_is_unioned_across_every_filer() -> None:
     evidence = {"a": {"1", "2"}, "b": {"2", "3"}}
 
-    assert P._withdrawn_for_filers(["a", "b"], evidence) == {"1", "2", "3"}
+    assert P._orestar_absent_for_filers(["a", "b"], evidence) == {
+        "1", "2", "3",
+    }
