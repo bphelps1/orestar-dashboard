@@ -40,7 +40,59 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:50:37.644525Z",
+  "checked_at": "2026-09-06T12:50:45.483954Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:0fea626f1755018d7a4c2d9f11a400bb5bdc8726c561f684635f5003e7d54c29",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "5528",
+    "name": "Oregon Working Families Party",
+    "orestar": 3364,
+    "held": 3395,
+    "complete": false,
+    "surplus": [
+     "5758726",
+     "5758731",
+     "5758733",
+     "5758734",
+     "5758735",
+     "5758736",
+     "5758737",
+     "5758738",
+     "5758739",
+     "5758740",
+     "5758741",
+     "5758742",
+     "5758743",
+     "5758744",
+     "5758745",
+     "5758746",
+     "5758747",
+     "5758749",
+     "5758751",
+     "5758752",
+     "5758753",
+     "5758754",
+     "5758755",
+     "5758756",
+     "5758757",
+     "5758758",
+     "5758763",
+     "5758764",
+     "5758766",
+     "5758772",
+     "5767716"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "319",
@@ -71,7 +123,47 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-04"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:47:14.855634Z",
+  "checked_at": "2026-09-06T12:47:24.422020Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:d8e698364ded3b20467c9ba4fb153312d50ce2d0b87286c05f1a9a262f5b09bb",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "319",
+    "name": "Josephine County Republican Central Committee",
+    "orestar": 4833,
+    "held": 4852,
+    "complete": false,
+    "surplus": [
+     "5513778",
+     "5513782",
+     "5513789",
+     "5513815",
+     "5515010",
+     "5515047",
+     "5524678",
+     "5524681",
+     "5558437",
+     "5578139",
+     "5596105",
+     "5601549",
+     "5601560",
+     "5627393",
+     "5636376",
+     "5636493",
+     "5636494",
+     "5636495",
+     "5641095"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-04"
+   }
+  ]
  },
  {
   "filer_id": "324",
@@ -177,14 +269,45 @@
   ],
   "superseded": [],
   "evidence_version": 2,
-  "checked": "2026-09-05",
-  "collection_started_at": "2026-09-05T14:33:56.788805Z",
-  "checked_at": "2026-09-05T14:34:02.919204Z",
-  "transaction_snapshot_id": "sha256:6b1c6fad78db19e54536ca47e53f3bc48641cd7bbcb910815931f26e09eac833",
-  "filer_transaction_digest": "sha256:32a5a673e62e20824064a47f3fbf8deab471830e18ec40a33fa3aa7dd8693bb1",
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:50:16.738359Z",
+  "checked_at": "2026-09-06T12:50:22.847184Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:e689a6d562739688e3eba8d289047d8f1eb7917b3259929ce272066b053a8de9",
   "range_start": "2006-01-01",
-  "range_end": "2026-09-05",
+  "range_end": "2026-09-06",
   "usable_history": [
+   {
+    "filer_id": "298",
+    "name": "Columbia County Republican Central Committee",
+    "orestar": 1845,
+    "held": 1854,
+    "complete": false,
+    "surplus": [
+     "3827263",
+     "3834498",
+     "3834505",
+     "4044492",
+     "4201901",
+     "4354315",
+     "4554590",
+     "4765395",
+     "4781290",
+     "4952014"
+    ],
+    "missing": [
+     "5781270"
+    ],
+    "superseded": [],
+    "evidence_version": 2,
+    "checked": "2026-09-05",
+    "collection_started_at": "2026-09-05T14:33:56.788805Z",
+    "checked_at": "2026-09-05T14:34:02.919204Z",
+    "transaction_snapshot_id": "sha256:6b1c6fad78db19e54536ca47e53f3bc48641cd7bbcb910815931f26e09eac833",
+    "filer_transaction_digest": "sha256:32a5a673e62e20824064a47f3fbf8deab471830e18ec40a33fa3aa7dd8693bb1",
+    "range_start": "2006-01-01",
+    "range_end": "2026-09-05"
+   },
    {
     "filer_id": "298",
     "name": "Columbia County Republican Central Committee",
@@ -230,7 +353,37 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:48:11.577721Z",
+  "checked_at": "2026-09-06T12:48:16.225849Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:43748b7225fac89f26c47cf5be94313198cec7ac3c3e26d719f9e54e9dfa9b3c",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "24661",
+    "name": "Tom Sollitt for Portland City Council District 3",
+    "orestar": 80,
+    "held": 89,
+    "complete": false,
+    "surplus": [
+     "5547211",
+     "5636308",
+     "5636311",
+     "5636313",
+     "5636316",
+     "5636318",
+     "5636320",
+     "5636323",
+     "5664495"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "20136",
@@ -250,7 +403,36 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-04"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:46:18.961330Z",
+  "checked_at": "2026-09-06T12:46:25.561829Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:654f1100e2096ef1eb096d80bce7006e33a82843c38acbf31e9270356d3ffcee",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "20136",
+    "name": "Kate Lieber for State Senate",
+    "orestar": 1923,
+    "held": 1931,
+    "complete": false,
+    "surplus": [
+     "4702577",
+     "4739056",
+     "4758706",
+     "4891884",
+     "4959896",
+     "4959897",
+     "5128260",
+     "5431064"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-04"
+   }
+  ]
  },
  {
   "filer_id": "21770",
@@ -315,7 +497,34 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:49:28.097947Z",
+  "checked_at": "2026-09-06T12:49:33.116238Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:3598f677c93bf21ab2151eec4ff391769a6ec5bbc33d70fa36174e65b2a265e6",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "317",
+    "name": "Jefferson County Republican Party",
+    "orestar": 748,
+    "held": 754,
+    "complete": false,
+    "surplus": [
+     "4084714",
+     "4095537",
+     "4150011",
+     "4162179",
+     "4193892",
+     "4200306"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "24622",
@@ -333,7 +542,34 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:48:20.866194Z",
+  "checked_at": "2026-09-06T12:48:25.522350Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:c20fe18fba56121ab7d782d4c0b8b0b836619ac4026d40a3f901ddcae8c07aa6",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "24622",
+    "name": "Friends of Troy Cribbins",
+    "orestar": 119,
+    "held": 125,
+    "complete": false,
+    "surplus": [
+     "5516785",
+     "5557396",
+     "5557408",
+     "5557410",
+     "5557411",
+     "5557412"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "20709",
@@ -395,13 +631,39 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-04"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:46:52.783529Z",
+  "checked_at": "2026-09-06T12:46:59.819415Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:9f5187c1147eddd51def7cda461f864ed67fed8ccaf26f64837dc5bab6759a7b",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "15132",
+    "name": "Friends of Sharon Meieran",
+    "orestar": 2652,
+    "held": 2657,
+    "complete": false,
+    "surplus": [
+     "5712562",
+     "5716380",
+     "5725282",
+     "5725285",
+     "5743646"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-04"
+   }
+  ]
  },
  {
   "filer_id": "24681",
   "name": "Friends for Neyssa-sary Change",
   "orestar": 371,
-  "held": 376,
+  "held": 375,
   "complete": false,
   "surplus": [
    "5556849",
@@ -410,9 +672,37 @@
    "5619017",
    "5626526"
   ],
-  "missing": [],
+  "missing": [
+   "5673102"
+  ],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:49:07.953960Z",
+  "checked_at": "2026-09-06T12:49:12.760761Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:d568f82ac7301b37df6e3726677e00445e542b5c7f23888a4fc0d69c2bb9829c",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "24681",
+    "name": "Friends for Neyssa-sary Change",
+    "orestar": 371,
+    "held": 376,
+    "complete": false,
+    "surplus": [
+     "5556849",
+     "5619008",
+     "5619010",
+     "5619017",
+     "5626526"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "22134",
@@ -429,7 +719,33 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:47:33.887445Z",
+  "checked_at": "2026-09-06T12:47:38.420621Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:d5d63cd3207eff07e9d911586af5499bf272ea72ef5227c9369def79c66ba38d",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "22134",
+    "name": "Rick Gray for the House",
+    "orestar": 22,
+    "held": 27,
+    "complete": false,
+    "surplus": [
+     "4120090",
+     "4120165",
+     "4147195",
+     "4181521",
+     "4198004"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "24362",
@@ -634,7 +950,7 @@
  {
   "filer_id": "351",
   "name": "Yamhill County Republican Party",
-  "orestar": 1494,
+  "orestar": 1496,
   "held": 1498,
   "complete": false,
   "surplus": [
@@ -643,9 +959,37 @@
    "5648946",
    "5648947"
   ],
-  "missing": [],
+  "missing": [
+   "5795195",
+   "5795196"
+  ],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:49:59.459016Z",
+  "checked_at": "2026-09-06T12:50:05.142622Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:5a8ec0428d0157ae50b9f04a2b8e800047eb7f96171a730d42dafcb611c07df1",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "351",
+    "name": "Yamhill County Republican Party",
+    "orestar": 1494,
+    "held": 1498,
+    "complete": false,
+    "surplus": [
+     "5648944",
+     "5648945",
+     "5648946",
+     "5648947"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "2434",
@@ -661,7 +1005,32 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:47:42.994445Z",
+  "checked_at": "2026-09-06T12:47:48.734864Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:b06a819d701cdccac03cfa5dfc94756d8c3f29577538a2683a829396cfac84ad",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "2434",
+    "name": "Fifth Congressional District Republican Party",
+    "orestar": 42,
+    "held": 46,
+    "complete": false,
+    "surplus": [
+     "5787899",
+     "5787911",
+     "5787913",
+     "5787914"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "23208",
@@ -676,7 +1045,31 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-04"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:46:25.570969Z",
+  "checked_at": "2026-09-06T12:46:32.561603Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:b5ad434c2d3951ae0ee60fac16789f635e52494443460ba8da2bc50814b6cea2",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "23208",
+    "name": "Teacher Tiffany for the People",
+    "orestar": 2190,
+    "held": 2193,
+    "complete": false,
+    "surplus": [
+     "5585599",
+     "5622811",
+     "5659034"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-04"
+   }
+  ]
  },
  {
   "filer_id": "24710",
@@ -691,7 +1084,31 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:48:53.627678Z",
+  "checked_at": "2026-09-06T12:48:58.310007Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:715faa2b06b6eef8c55d0512cf8d779017a90a4757a5d74bbb76cdb5010a2a16",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "24710",
+    "name": "Joanna Robinson for Oregon",
+    "orestar": 299,
+    "held": 302,
+    "complete": false,
+    "surplus": [
+     "5564577",
+     "5564579",
+     "5564580"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "24826",
@@ -940,7 +1357,31 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:50:10.862982Z",
+  "checked_at": "2026-09-06T12:50:16.728885Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:a34609398cdccb17c2a38d93668577075f3f2f21a5c6959752a142b15bcaa836",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "19778",
+    "name": "Ricki for Oregon",
+    "orestar": 1650,
+    "held": 1653,
+    "complete": false,
+    "surplus": [
+     "5514605",
+     "5514606",
+     "5744757"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "313",
@@ -979,7 +1420,31 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:47:48.744990Z",
+  "checked_at": "2026-09-06T12:47:53.259173Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:6d984292aa2929d22ad663e58f22df995c3c56a1d789392b1fd3bf3890c82648",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "24571",
+    "name": "Julie for County Commissioner",
+    "orestar": 65,
+    "held": 68,
+    "complete": false,
+    "surplus": [
+     "5541373",
+     "5699123",
+     "5699125"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "306",
@@ -1164,7 +1629,30 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:49:41.238648Z",
+  "checked_at": "2026-09-06T12:49:48.261504Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:536c19b51f700c9000d967430f6bac2ebe6290a0828d23cc0f13100c843e7321",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "5041",
+    "name": "Crook County Democratic Central Committee",
+    "orestar": 1008,
+    "held": 1010,
+    "complete": false,
+    "surplus": [
+     "5685298",
+     "5738730"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "16986",
@@ -1467,7 +1955,30 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:48:16.234656Z",
+  "checked_at": "2026-09-06T12:48:20.856761Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:f6a4126d49591968fe13839ee6a8f881c91f07b3cdc721e076b095c51016dde6",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "24020",
+    "name": "We The People",
+    "orestar": 120,
+    "held": 122,
+    "complete": false,
+    "surplus": [
+     "5379122",
+     "5767225"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "24427",
@@ -1481,7 +1992,30 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:48:30.161592Z",
+  "checked_at": "2026-09-06T12:48:34.740613Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:0b91ee648ffe767c674a26e81a5ffddf407a3a7251e9f4c4336804ef56f62146",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "24427",
+    "name": "Let Us Paddle PAC",
+    "orestar": 160,
+    "held": 162,
+    "complete": false,
+    "surplus": [
+     "5589183",
+     "5589185"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "21358",
@@ -1536,7 +2070,30 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:48:44.006116Z",
+  "checked_at": "2026-09-06T12:48:48.860236Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:8fd19e472487803fe7183fe19678256f5527dc157081f1a011f811b7996e3466",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "22909",
+    "name": "Friends of Chet Wamboldt",
+    "orestar": 284,
+    "held": 286,
+    "complete": false,
+    "surplus": [
+     "5584619",
+     "5599995"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "20790",
@@ -1587,7 +2144,30 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:49:03.172353Z",
+  "checked_at": "2026-09-06T12:49:07.944508Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:ef536aac6ed802d9e2559dc9e317bcc35ddbddf35eff21d20c60913df73f1a7e",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "15409",
+    "name": "Elect Kelley Minty",
+    "orestar": 356,
+    "held": 358,
+    "complete": false,
+    "surplus": [
+     "5601825",
+     "5631688"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "24457",
@@ -1638,7 +2218,30 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:49:22.963541Z",
+  "checked_at": "2026-09-06T12:49:28.088579Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:878f29795593606b68701c75f2fbc5aa79807e77515619014349588c8b462088",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "20203",
+    "name": "Vanessa Nordyke for Mayor",
+    "orestar": 702,
+    "held": 704,
+    "complete": false,
+    "surplus": [
+     "5539120",
+     "5539121"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "22066",
@@ -1689,7 +2292,30 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:49:48.269962Z",
+  "checked_at": "2026-09-06T12:49:53.717913Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:74b7ec8a9c771aedaa3ac2025a393be8c82fa78f0eda619c917ae21223ab55c6",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "21883",
+    "name": "Tammy for Oregon",
+    "orestar": 1131,
+    "held": 1133,
+    "complete": false,
+    "surplus": [
+     "5558952",
+     "5673034"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "23028",
@@ -1786,13 +2412,22 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "checked": "2026-09-05",
+  "last_attempt": "2026-09-06",
+  "last_attempt_collection_started_at": "2026-09-06T12:50:55.552813Z",
+  "last_attempt_at": "2026-09-06T12:51:19.207262Z",
+  "last_attempt_transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "last_attempt_filer_transaction_digest": "sha256:6bd8a63b809fa8e1ad7904c553798bcb6a2e5b94cb59a3faff9a1a936314c87d",
+  "last_attempt_range_start": "2006-01-01",
+  "last_attempt_range_end": "2026-09-06",
+  "last_failure": "unusable_window",
+  "failure_count": 1
  },
  {
   "filer_id": "266",
   "name": "Oregon Truck PAC",
-  "orestar": 4950,
-  "held": 4952,
+  "orestar": 4952,
+  "held": 4954,
   "complete": false,
   "surplus": [
    "5662208",
@@ -1800,7 +2435,30 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-04"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:47:24.430185Z",
+  "checked_at": "2026-09-06T12:47:33.879385Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:0a05992ab7f76a77b34d1c040bc81d5b0a5441fb271eff06b08529216c759b97",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "266",
+    "name": "Oregon Truck PAC",
+    "orestar": 4950,
+    "held": 4952,
+    "complete": false,
+    "surplus": [
+     "5662208",
+     "5662209"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-04"
+   }
+  ]
  },
  {
   "filer_id": "1524",
@@ -1828,7 +2486,30 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:50:22.857630Z",
+  "checked_at": "2026-09-06T12:50:30.415613Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:9f8d4a35abef696874bb2f9ccae59983a169da0b4acc97e373dd3c95b012a667",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "20344",
+    "name": "Dan Ryan for Portland",
+    "orestar": 2295,
+    "held": 2297,
+    "complete": false,
+    "surplus": [
+     "5769109",
+     "5769110"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "21437",
@@ -1986,7 +2667,29 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:48:34.749665Z",
+  "checked_at": "2026-09-06T12:48:39.466221Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:793913afd8ade11b89aa44a629aaae2f17d0fee71686c2fd0371b13791b14df4",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "24572",
+    "name": "Friends of Rachel Philip",
+    "orestar": 180,
+    "held": 181,
+    "complete": false,
+    "surplus": [
+     "5648743"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "16508",
@@ -2117,7 +2820,29 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:48:48.869192Z",
+  "checked_at": "2026-09-06T12:48:53.618429Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:11c100b116d7cc28b51cda605dc0fa482c948b844134e79a8822e99c652703c1",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "24816",
+    "name": "Bassett for Oregon",
+    "orestar": 288,
+    "held": 289,
+    "complete": false,
+    "surplus": [
+     "5726250"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "5067",
@@ -2395,15 +3120,37 @@
  {
   "filer_id": "51",
   "name": "Credit Union Legislative Action Fund",
-  "orestar": 3071,
-  "held": 3072,
+  "orestar": 3074,
+  "held": 3075,
   "complete": false,
   "surplus": [
    "5661401"
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-04"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:46:59.828712Z",
+  "checked_at": "2026-09-06T12:47:07.135889Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:9b05428fef3a6e9e43efaec59574e3c179e0b50031ca7140297442ef1ebee902",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "51",
+    "name": "Credit Union Legislative Action Fund",
+    "orestar": 3071,
+    "held": 3072,
+    "complete": false,
+    "surplus": [
+     "5661401"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-04"
+   }
+  ]
  },
  {
   "filer_id": "300",
@@ -2801,7 +3548,29 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:47:53.268118Z",
+  "checked_at": "2026-09-06T12:47:57.816690Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:3de41c4a42da45184223d2bd35b4ae558c554b49a51c67af8b6b5542ce5836e2",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "17370",
+    "name": "Youth Activities and Academics Levy",
+    "orestar": 72,
+    "held": 73,
+    "complete": false,
+    "surplus": [
+     "5643671"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "24509",
@@ -2884,7 +3653,29 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:47:57.825749Z",
+  "checked_at": "2026-09-06T12:48:05.020749Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:ae31301e2720e0e651bf43457c6adacc93c3728932435134b9f6ca3e758ea46b",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "24621",
+    "name": "Cory Miller for Commissioner",
+    "orestar": 78,
+    "held": 79,
+    "complete": false,
+    "surplus": [
+     "5699986"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "24973",
@@ -2967,7 +3758,29 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:48:25.531303Z",
+  "checked_at": "2026-09-06T12:48:30.152643Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:5bc1a077dcb595f5978f0f5b0f84e65beb6a735582696de261e28317729e3416",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "24888",
+    "name": "Friends of Bri Williams",
+    "orestar": 133,
+    "held": 134,
+    "complete": false,
+    "surplus": [
+     "5703440"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "18748",
@@ -3050,7 +3863,29 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:48:39.475400Z",
+  "checked_at": "2026-09-06T12:48:43.997154Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:86103dc69360321b974d2c0554de8d999bff34837ee0d3ebe8c8e228b7e8c014",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "21842",
+    "name": "Rachel for Oregon",
+    "orestar": 208,
+    "held": 209,
+    "complete": false,
+    "surplus": [
+     "5661968"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "18844",
@@ -3195,15 +4030,37 @@
  {
   "filer_id": "5667",
   "name": "Rogue Valley Association of Realtors Political Action Committee",
-  "orestar": 6271,
-  "held": 6272,
+  "orestar": 6279,
+  "held": 6280,
   "complete": false,
   "surplus": [
    "5384098"
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-08-29"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:45:50.800027Z",
+  "checked_at": "2026-09-06T12:46:12.606581Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:f59ec54a9b8a501ab63b6c1573de47e21946345883c7e5179c208210b0fd105b",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "5667",
+    "name": "Rogue Valley Association of Realtors Political Action Committee",
+    "orestar": 6271,
+    "held": 6272,
+    "complete": false,
+    "surplus": [
+     "5384098"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-08-29"
+   }
+  ]
  },
  {
   "filer_id": "4583",
@@ -3216,7 +4073,29 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:48:58.319618Z",
+  "checked_at": "2026-09-06T12:49:03.162782Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:ce25be21836f18d800bb70a4880231f96a3f65278ca191ef09957cda789c4204",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "4583",
+    "name": "Umatilla County Democratic Central Committee",
+    "orestar": 308,
+    "held": 309,
+    "complete": false,
+    "surplus": [
+     "5576470"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "24679",
@@ -3458,7 +4337,29 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:49:17.769568Z",
+  "checked_at": "2026-09-06T12:49:22.954001Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:d2c152eb077f23c0e7539ad4427547713473862679dddd44fb5234a088ed1547",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "14651",
+    "name": "Friends of Steve Callaway",
+    "orestar": 677,
+    "held": 678,
+    "complete": false,
+    "surplus": [
+     "5643112"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "22133",
@@ -3580,7 +4481,29 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:49:33.124878Z",
+  "checked_at": "2026-09-06T12:49:41.229144Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:9b6dffacca11fccfb864d154bfffb0d8ec401a8faa1ead9a8fcd04e05a96f9f0",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "17995",
+    "name": "Elect Zach Hudson",
+    "orestar": 1004,
+    "held": 1005,
+    "complete": false,
+    "surplus": [
+     "5716529"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "18462",
@@ -3628,7 +4551,29 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:49:53.727020Z",
+  "checked_at": "2026-09-06T12:49:59.449930Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:665dfd9fe2552a8853ff35962f53c2d308a7087ed502c6d500e97362a6018c1e",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "17945",
+    "name": "Charles Gallia for Oregon",
+    "orestar": 1263,
+    "held": 1264,
+    "complete": false,
+    "surplus": [
+     "5634271"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "21678",
@@ -3810,15 +4755,45 @@
  {
   "filer_id": "17240",
   "name": "Progressive Salem",
-  "orestar": 1535,
+  "orestar": 1542,
   "held": 1536,
   "complete": false,
   "surplus": [
    "5327047"
   ],
-  "missing": [],
+  "missing": [
+   "5795128",
+   "5795131",
+   "5795133",
+   "5795135",
+   "5795138",
+   "5795141",
+   "5795142"
+  ],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:50:05.150794Z",
+  "checked_at": "2026-09-06T12:50:10.853603Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:455b7de99ccc0f212c4a5faad74b9ead35ee8a989f91ab8ea5240058ed247b0c",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "17240",
+    "name": "Progressive Salem",
+    "orestar": 1535,
+    "held": 1536,
+    "complete": false,
+    "surplus": [
+     "5327047"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "20290",
@@ -3866,7 +4841,29 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-04"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:46:12.614413Z",
+  "checked_at": "2026-09-06T12:46:18.952460Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:1740f550e6c9f912a02fe919a4e0c39cf1f8612a872a64eab6b9da4cf6666707",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "20610",
+    "name": "Team Broadman",
+    "orestar": 1912,
+    "held": 1913,
+    "complete": false,
+    "surplus": [
+     "5669041"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-04"
+   }
+  ]
  },
  {
   "filer_id": "350",
@@ -3962,10 +4959,29 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-04",
-  "last_attempt": "2026-09-05",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:46:32.570368Z",
+  "checked_at": "2026-09-06T12:46:39.104461Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:12678773509a48f2e3c50c71df05df88f2b8f47b3561cd2791b5886f56870444",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "23434",
+    "name": "Yes On IP28",
+    "orestar": 2322,
+    "held": 2323,
+    "complete": false,
+    "surplus": [
+     "5684546"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-04"
+   }
+  ]
  },
  {
   "filer_id": "16623",
@@ -4013,10 +5029,29 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-04",
-  "last_attempt": "2026-09-05",
-  "last_failure": "unusable_window",
-  "failure_count": 1
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:46:39.113004Z",
+  "checked_at": "2026-09-06T12:46:45.874563Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:b334332aa64d18eb536e58cbb136b2a2d5d1f1064576bb575a3f215f9a97a778",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "302",
+    "name": "Curry County Democratic Central Committee",
+    "orestar": 2480,
+    "held": 2481,
+    "complete": false,
+    "surplus": [
+     "5687761"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-04"
+   }
+  ]
  },
  {
   "filer_id": "326",
@@ -4029,7 +5064,29 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-04"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:46:45.881891Z",
+  "checked_at": "2026-09-06T12:46:52.774412Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:f3ea412e09f869c8de4914bd3c218a420b79b279add24f6c338b74316de1a485",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "326",
+    "name": "Lincoln County Democratic Central Committee",
+    "orestar": 2588,
+    "held": 2589,
+    "complete": false,
+    "surplus": [
+     "5708101"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-04"
+   }
+  ]
  },
  {
   "filer_id": "17892",
@@ -4042,7 +5099,29 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:50:30.424942Z",
+  "checked_at": "2026-09-06T12:50:37.634990Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:569f9490e24653305f77473159945ef793dd9a4799666c84295caefc8a82bbb7",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "17892",
+    "name": "Werner for Oregon",
+    "orestar": 2979,
+    "held": 2980,
+    "complete": false,
+    "surplus": [
+     "5635154"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "16719",
@@ -4068,7 +5147,29 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-04"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:47:07.144289Z",
+  "checked_at": "2026-09-06T12:47:14.848141Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:f6c275518a7006d6a3aa28469df27c38059a5f88af51a65a5896e66553f0930d",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "15984",
+    "name": "Friends of Jeff Helfrich",
+    "orestar": 3408,
+    "held": 3409,
+    "complete": false,
+    "surplus": [
+     "5539307"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-04"
+   }
+  ]
  },
  {
   "filer_id": "5785",
@@ -4212,7 +5313,29 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:48:05.030526Z",
+  "checked_at": "2026-09-06T12:48:11.569113Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:71893cbd4d37626b5dab04ebb8ac55574ef4fa5c8d11ce457732d118691ce7e7",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "21044",
+    "name": "Deschutes Citizens for law and order",
+    "orestar": 82,
+    "held": 83,
+    "complete": false,
+    "surplus": [
+     "5784525"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "325",
@@ -4238,7 +5361,29 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:47:38.429773Z",
+  "checked_at": "2026-09-06T12:47:42.985506Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:55d1af61c9012cea6f6b4c1b71091a96d5c535ea661477eb476b212f1de3e490",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "24943",
+    "name": "Friends of Ann Walker",
+    "orestar": 41,
+    "held": 42,
+    "complete": false,
+    "surplus": [
+     "5780664"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "25049",
@@ -4267,14 +5412,36 @@
   ],
   "superseded": [],
   "evidence_version": 2,
-  "checked": "2026-09-05",
-  "collection_started_at": "2026-09-05T14:34:02.926008Z",
-  "checked_at": "2026-09-05T14:34:07.918722Z",
-  "transaction_snapshot_id": "sha256:6b1c6fad78db19e54536ca47e53f3bc48641cd7bbcb910815931f26e09eac833",
-  "filer_transaction_digest": "sha256:379f4797bdd95eadbe870ebc335e1ea718b45122c8fc694bcb68fab95a99dc9c",
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:49:12.770038Z",
+  "checked_at": "2026-09-06T12:49:17.759968Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:b6d6d3534d0f3f298f79cf9c87e0f2de3a3eb1269496ebf85209d36abaa50bc4",
   "range_start": "2006-01-01",
-  "range_end": "2026-09-05",
+  "range_end": "2026-09-06",
   "usable_history": [
+   {
+    "filer_id": "12708",
+    "name": "Union County Republican Central Committee",
+    "orestar": 597,
+    "held": 597,
+    "complete": false,
+    "surplus": [
+     "5505376"
+    ],
+    "missing": [
+     "1325118"
+    ],
+    "superseded": [],
+    "evidence_version": 2,
+    "checked": "2026-09-05",
+    "collection_started_at": "2026-09-05T14:34:02.926008Z",
+    "checked_at": "2026-09-05T14:34:07.918722Z",
+    "transaction_snapshot_id": "sha256:6b1c6fad78db19e54536ca47e53f3bc48641cd7bbcb910815931f26e09eac833",
+    "filer_transaction_digest": "sha256:379f4797bdd95eadbe870ebc335e1ea718b45122c8fc694bcb68fab95a99dc9c",
+    "range_start": "2006-01-01",
+    "range_end": "2026-09-05"
+   },
    {
     "filer_id": "12708",
     "name": "Union County Republican Central Committee",
@@ -4303,7 +5470,29 @@
   ],
   "missing": [],
   "superseded": [],
-  "checked": "2026-09-05"
+  "evidence_version": 2,
+  "checked": "2026-09-06",
+  "collection_started_at": "2026-09-06T12:50:45.492914Z",
+  "checked_at": "2026-09-06T12:50:55.543704Z",
+  "transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "filer_transaction_digest": "sha256:8a9fc85d70db9c8608fc0e54f1263d8e06beddf9df602c32c4ae964ec587d2d1",
+  "range_start": "2006-01-01",
+  "range_end": "2026-09-06",
+  "usable_history": [
+   {
+    "filer_id": "15109",
+    "name": "Novick for Portland",
+    "orestar": 3728,
+    "held": 3729,
+    "complete": false,
+    "surplus": [
+     "5760215"
+    ],
+    "missing": [],
+    "superseded": [],
+    "checked": "2026-09-05"
+   }
+  ]
  },
  {
   "filer_id": "11",
@@ -10354,9 +11543,15 @@
   "missing": [],
   "superseded": [],
   "checked": "2026-09-03",
-  "last_attempt": "2026-09-05",
+  "last_attempt": "2026-09-06",
   "last_failure": "unusable_window",
-  "failure_count": 1
+  "failure_count": 2,
+  "last_attempt_collection_started_at": "2026-09-06T12:51:27.236620Z",
+  "last_attempt_at": "2026-09-06T12:51:50.938562Z",
+  "last_attempt_transaction_snapshot_id": "sha256:7513b0885bc4650e83027458ae1d6f2f2a80b124ddd9fe1a78cf57b55c72cb9e",
+  "last_attempt_filer_transaction_digest": "sha256:605a88f0bc9bd8c68e984d2c82a9843f33e92b6fb9a61c519a09149af315ef65",
+  "last_attempt_range_start": "2006-01-01",
+  "last_attempt_range_end": "2026-09-06"
  },
  {
   "filer_id": "7405",
